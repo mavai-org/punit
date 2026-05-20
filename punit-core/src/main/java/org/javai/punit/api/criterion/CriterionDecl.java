@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.javai.outcome.Outcome;
 import org.javai.punit.api.Postcondition;
@@ -217,6 +218,62 @@ public final class CriterionDecl<O> implements Decl<O> {
      */
     public CriterionDecl<O> atPower(double power) {
         return new CriterionDecl<>(posture.withPower(power), postconditions, name);
+    }
+
+    /**
+     * Judge the contract's output against the sample's known-expected
+     * value via a {@link ValueMatcher}. Returns a terminal
+     * {@link MatchingDecl} that carries the matcher and offers only
+     * {@link MatchingDecl#name(String) .name(...)} for further
+     * configuration.
+     *
+     * <p>The sampling's input type must implement
+     * {@link org.javai.punit.api.Expected Expected&lt;OT&gt;} — the
+     * framework reads {@code input.expected()} once per sample and
+     * routes the result alongside the contract's produced value to
+     * the matcher. The requirement is enforced at sampling-construction
+     * time; a sampling whose input type does not implement
+     * {@code Expected} but is paired with a criteria carrying
+     * {@code .matchedBy(...)} fails fast with a clear message.
+     *
+     * <p>{@code Supplier} rather than a direct {@link ValueMatcher}
+     * lets matchers carry per-sampling state if needed. In the common
+     * stateless case the call is {@code MyMatcher::new}.
+     *
+     * <p>A matching criterion is purposefully equivalence-only:
+     * {@code .matchedBy} may not follow any {@code .where} /
+     * {@code .satisfies} on the same decl, and {@link MatchingDecl}
+     * does not offer further postcondition chaining. To pair an
+     * equivalence check with an intrinsic check (e.g. non-blank
+     * output), declare two criteria via
+     * {@link Criteria#of(Decl[])}.
+     *
+     * @throws IllegalStateException if any {@code .where} /
+     *         {@code .satisfies} postcondition has already been added
+     *         to this decl
+     */
+    public MatchingDecl<O> matchedBy(Supplier<? extends ValueMatcher<O>> matcher) {
+        Objects.requireNonNull(matcher, "matcher");
+        if (!postconditions.isEmpty()) {
+            throw new IllegalStateException(
+                    ".matchedBy(...) cannot follow .where/.satisfies on the same"
+                            + " criterion decl: a matching criterion is purposefully"
+                            + " equivalence-only. Either drop the postconditions, or"
+                            + " split into two criteria via Criteria.of(...).");
+        }
+        return new MatchingDecl<>(posture, matcher, name);
+    }
+
+    /**
+     * Shorthand for {@code .matchedBy(ValueMatcher::equality)} — the
+     * common case where the actual output is expected to be
+     * {@link java.util.Objects#equals(Object, Object) Objects.equals}
+     * to the sample's expected output. See
+     * {@link ValueMatcher#equality()} for the matcher's behaviour and
+     * the failure name / message it emits on mismatch.
+     */
+    public MatchingDecl<O> matchedByEquality() {
+        return matchedBy(ValueMatcher::equality);
     }
 
     /**

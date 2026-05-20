@@ -1,5 +1,7 @@
 package org.javai.punit.api.criterion;
 
+import java.util.Optional;
+
 /**
  * A named, contract-level partition of the functional dimension. A
  * criterion is a unit that judges a single sample's produced value
@@ -68,6 +70,51 @@ public interface Criterion<O> {
      * @return the criterion's per-sample evaluation record
      */
     CriterionSampleResult evaluate(O value);
+
+    /**
+     * Evaluate this criterion against one sample's produced value
+     * with an optional known-expected value of the same type
+     * supplied alongside.
+     *
+     * <p>The expected value is present when the sampling's input
+     * type implements {@link org.javai.punit.api.Expected} and the
+     * criterion carries at least one reference-matching postcondition
+     * (declared via {@code .matchedBy(...)} or
+     * {@code .matchedByEquality()}). Criteria with no matching
+     * postcondition ignore the expected value.
+     *
+     * <p>The default implementation delegates to {@link #evaluate(Object)}
+     * and ignores the expected value — appropriate for hand-rolled
+     * implementations that do not use the matching postcondition
+     * shape. The factory-produced implementations override to route
+     * the expected value into {@link org.javai.punit.api.Postcondition.Matching}
+     * variants in their chain.
+     *
+     * @param value    the contract's produced output for this sample
+     * @param expected the sample's known-correct output, present iff
+     *                 the input implements {@link org.javai.punit.api.Expected}
+     * @return the criterion's per-sample evaluation record
+     */
+    default CriterionSampleResult evaluate(O value, Optional<O> expected) {
+        return evaluate(value);
+    }
+
+    /**
+     * Whether this criterion needs the sample's known-expected value
+     * to evaluate. Returns {@code true} when the criterion carries at
+     * least one {@link org.javai.punit.api.Postcondition.Matching}
+     * postcondition; {@code false} otherwise.
+     *
+     * <p>The framework's sample-dispatch path uses this to fail fast,
+     * at the first sample, when criteria declare {@code .matchedBy(...)}
+     * but the sampling's input type does not implement
+     * {@link org.javai.punit.api.Expected}. Hand-rolled
+     * {@link Criterion} implementations that do not use the matching
+     * postcondition shape leave this at its default of {@code false}.
+     */
+    default boolean requiresExpected() {
+        return false;
+    }
 
     /**
      * The criterion's run-time commitment — what counts as acceptable,

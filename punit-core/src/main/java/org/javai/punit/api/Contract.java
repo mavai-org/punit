@@ -3,6 +3,7 @@ package org.javai.punit.api;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.javai.outcome.Outcome;
 import org.javai.outcome.Outcome.Ok;
@@ -227,8 +228,12 @@ public interface Contract<I, O> {
         Duration duration = Duration.ofNanos(System.nanoTime() - start);
         long sampleTokens = Math.max(0L, tracker.totalTokens() - startTokens);
 
+        Optional<O> expected = expectedFrom(input);
+        if (expected.isEmpty()) {
+            requireMatchingCompatible(input);
+        }
         ClauseEvaluation clauseEvaluation = result instanceof Ok<O> ok
-                ? evaluateClauses(ok.value())
+                ? evaluateClauses(ok.value(), expected)
                 : ClauseEvaluation.empty();   // postcondition evaluation skipped on apply-level failure
 
         return new ServiceContractOutcome<>(
@@ -240,7 +245,43 @@ public interface Contract<I, O> {
                 clauseEvaluation.criterionSampleResults());
     }
 
-    private ClauseEvaluation evaluateClauses(O value) {
+    /**
+     * Read the sample's known-expected output if the input declares
+     * one via {@link Expected}. The unchecked cast on the return value
+     * relies on the author having parameterised {@code Expected<OT>}
+     * with the contract's output type {@code O}; a mismatch would
+     * surface as a {@link ClassCastException} at the matcher call site.
+     */
+    @SuppressWarnings("unchecked")
+    private Optional<O> expectedFrom(I input) {
+        if (input instanceof Expected<?> e) {
+            return Optional.ofNullable((O) e.expected());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Fail fast at the first sample when a criterion declares a
+     * matching postcondition (via {@code .matchedBy(...)} or
+     * {@code .matchedByEquality()}) but the sampling's input type
+     * does not implement {@link Expected}.
+     */
+    private void requireMatchingCompatible(I input) {
+        for (Criterion<O> criterion : effectiveCriteria()) {
+            if (criterion.requiresExpected()) {
+                throw new IllegalStateException(
+                        "Criterion '" + criterion.id() + "' declares .matchedBy(...), "
+                                + "which requires the sampling's input type to implement "
+                                + "org.javai.punit.api.Expected. The current input is of "
+                                + "type " + input.getClass().getName() + ", which does "
+                                + "not implement Expected. Either implement Expected<...> "
+                                + "on that input type, or replace .matchedBy(...) with "
+                                + ".satisfies(...) on the criterion.");
+            }
+        }
+    }
+
+    private ClauseEvaluation evaluateClauses(O value, Optional<O> expected) {
         // Walk criteria via per-sample evaluate(value). For each criterion
         // we get a three-valued CriterionSampleResult; the verdict path
         // (which consumes a flat List<PostconditionResult>) is fed the
@@ -257,7 +298,7 @@ public interface Contract<I, O> {
         List<PostconditionResult> flat = new ArrayList<>();
         List<CriterionSampleResult> perCriterion = new ArrayList<>();
         for (Criterion<O> criterion : effectiveCriteria()) {
-            CriterionSampleResult result = criterion.evaluate(value);
+            CriterionSampleResult result = criterion.evaluate(value, expected);
             perCriterion.add(result);
             switch (result.outcome()) {
                 case PASS, FAIL -> flat.addAll(result.postconditionResults());
