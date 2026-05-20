@@ -2,8 +2,6 @@
 
 *Probabilistic testing for systems characterised by uncertainty.*
 
-All attribution licensing is ARL.
-
 ---
 
 ## Table of Contents
