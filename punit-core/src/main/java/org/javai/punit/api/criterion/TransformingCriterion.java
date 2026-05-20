@@ -2,6 +2,7 @@ package org.javai.punit.api.criterion;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 import org.javai.outcome.Outcome;
@@ -78,7 +79,7 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
         }
         return switch (derived) {
             case Outcome.Ok<D> ok ->
-                    DirectCriterion.evaluateChain(id, postconditions, ok.value());
+                    DirectCriterion.evaluateChain(id, postconditions, ok.value(), Optional.empty());
             case Outcome.Fail<D> f ->
                     CriterionSampleResult.inconclusive(id, f);
         };

@@ -3,6 +3,7 @@ package org.javai.punit.api.criterion;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.javai.punit.api.Postcondition;
 import org.javai.punit.api.PostconditionResult;
@@ -51,7 +52,22 @@ final class DirectCriterion<O> implements Criterion<O> {
 
     @Override
     public CriterionSampleResult evaluate(O value) {
-        return evaluateChain(id, postconditions, value);
+        return evaluateChain(id, postconditions, value, Optional.empty());
+    }
+
+    @Override
+    public CriterionSampleResult evaluate(O value, Optional<O> expected) {
+        return evaluateChain(id, postconditions, value, expected);
+    }
+
+    @Override
+    public boolean requiresExpected() {
+        for (Postcondition<O> p : postconditions) {
+            if (p instanceof Postcondition.Matching<O>) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -63,13 +79,30 @@ final class DirectCriterion<O> implements Criterion<O> {
      * postcondition is evaluated and its result preserved on the
      * record, so a downstream consumer can see the full diagnostic
      * picture for the sample.
+     *
+     * <p>{@link Postcondition.Matching} variants in the chain route
+     * through {@link Postcondition.Matching#match(Object, Object)}
+     * with the supplied expected value. A matching postcondition
+     * without an expected value (caller passed {@link Optional#empty()})
+     * is an engine-side defect and surfaces as an
+     * {@link IllegalStateException}.
      */
     static <T> CriterionSampleResult evaluateChain(
-            String id, List<Postcondition<T>> chain, T value) {
+            String id, List<Postcondition<T>> chain, T value, Optional<T> expected) {
         List<PostconditionResult> results = new ArrayList<>();
         boolean anyFailed = false;
         for (Postcondition<T> p : chain) {
-            List<PostconditionResult> pResults = p.evaluateAll(value);
+            List<PostconditionResult> pResults = switch (p) {
+                case Postcondition.Leaf<T> leaf -> leaf.evaluateAll(value);
+                case Postcondition.Matching<T> m -> List.of(m.match(
+                        expected.orElseThrow(() -> new IllegalStateException(
+                                "criterion '" + id + "' has matching postcondition '"
+                                        + m.description() + "' but no expected value was "
+                                        + "supplied; the sampling-construction guard "
+                                        + "should have caught this — the sampling's input "
+                                        + "type must implement org.javai.punit.api.Expected.")),
+                        value));
+            };
             results.addAll(pResults);
             for (PostconditionResult r : pResults) {
                 if (r.failed()) {

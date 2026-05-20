@@ -26,7 +26,7 @@ import java.util.Optional;
  * @param <O> the contract's per-sample output value type
  */
 public sealed interface Decl<O> extends Criteria<O>
-        permits CriterionDecl, TransformingDecl {
+        permits CriterionDecl, TransformingDecl, MatchingDecl {
 
     /**
      * The criterion's name as declared via {@code .name(String)}, or
