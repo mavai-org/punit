@@ -27,9 +27,9 @@ final class ContractualDeclImpl implements ContractualDecl {
     }
 
     @Override
-    public <O> CriterionDecl<O> zeroTolerance() {
+    public <O> CriterionDecl<O> zeroFailures() {
         return new CriterionDecl<>(
-                CriterionPosture.zeroTolerance(ThresholdOrigin.UNSPECIFIED),
+                CriterionPosture.zeroFailures(ThresholdOrigin.UNSPECIFIED),
                 List.of());
     }
 

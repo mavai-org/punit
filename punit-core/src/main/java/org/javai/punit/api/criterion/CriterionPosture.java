@@ -14,7 +14,7 @@ import org.javai.punit.api.ThresholdOrigin;
  * acceptable, optionally how confidently to evaluate it. Authored on
  * the criterion via the {@link Criteria#meeting()} /
  * {@link Criteria#empirical()} factories with the kind selectors
- * ({@code .passRate}, {@code .zeroTolerance}, {@code .atMost});
+ * ({@code .passRate}, {@code .zeroFailures}, {@code .atMost});
  * consumed by the framework's evaluation path when it computes a
  * per-criterion verdict from the run's sample counts.
  *
@@ -31,15 +31,15 @@ import org.javai.punit.api.ThresholdOrigin;
  *       {@code .empirical()}. The threshold is derived from the
  *       baseline at evaluate time; the {@code origin} is
  *       {@link ThresholdOrigin#EMPIRICAL}.</li>
- *   <li>{@link Kind#ZERO_TOLERANCE} — explicit zero-tolerance via
- *       {@code .zeroTolerance(origin)}. Threshold is implicitly 1.0;
+ *   <li>{@link Kind#ZERO_FAILURES} — explicit zero-failures via
+ *       {@code .zeroFailures(origin)}. Threshold is implicitly 1.0;
  *       the run classifies SMOKE per the methodology rule
- *       (zero-tolerance is not statistically verifiable).
+ *       (zero-failures is not statistically verifiable).
  *       Composition with {@code .atConfidence(...)} is rejected at
  *       build time.</li>
- *   <li>{@link Kind#IMPLICIT_ZERO_TOLERANCE} — no posture method
+ *   <li>{@link Kind#IMPLICIT_ZERO_FAILURES} — no posture method
  *       called on the criterion declaration. Equivalent in every
- *       respect to {@code .zeroTolerance(POLICY)} once the implicit
+ *       respect to {@code .zeroFailures(POLICY)} once the implicit
  *       default is active (directive step 3).</li>
  * </ul>
  *
@@ -54,10 +54,10 @@ public final class CriterionPosture {
         STATISTICAL_CONTRACTUAL,
         /** {@code .empirical()} — threshold derived from baseline. */
         STATISTICAL_EMPIRICAL,
-        /** {@code .zeroTolerance(origin)} — explicit binary commitment. */
-        ZERO_TOLERANCE,
-        /** No posture method called — implicit zero-tolerance (step 3 default). */
-        IMPLICIT_ZERO_TOLERANCE,
+        /** {@code .zeroFailures(origin)} — explicit binary commitment. */
+        ZERO_FAILURES,
+        /** No posture method called — implicit zero-failures (step 3 default). */
+        IMPLICIT_ZERO_FAILURES,
         /**
          * Latency, empirical: per-percentile thresholds derived from the
          * resolved baseline at evaluate time. Authored via
@@ -76,7 +76,7 @@ public final class CriterionPosture {
     }
 
     private static final CriterionPosture IMPLICIT =
-            new CriterionPosture(Kind.IMPLICIT_ZERO_TOLERANCE,
+            new CriterionPosture(Kind.IMPLICIT_ZERO_FAILURES,
                     OptionalDouble.empty(),
                     Optional.empty(),
                     OptionalDouble.empty(),
@@ -117,7 +117,7 @@ public final class CriterionPosture {
         this.latencySpec = latencySpec;
     }
 
-    /** The implicit-zero-tolerance posture — the default for any criterion that declared no posture method. */
+    /** The implicit-zero-failures posture — the default for any criterion that declared no posture method. */
     public static CriterionPosture implicit() {
         return IMPLICIT;
     }
@@ -157,14 +157,14 @@ public final class CriterionPosture {
                 Optional.empty());
     }
 
-    /** Explicit zero-tolerance: {@code .zeroTolerance(origin)}. */
-    public static CriterionPosture zeroTolerance(ThresholdOrigin origin) {
+    /** Explicit zero-failures: {@code .zeroFailures(origin)}. */
+    public static CriterionPosture zeroFailures(ThresholdOrigin origin) {
         Objects.requireNonNull(origin, "origin");
         if (origin == ThresholdOrigin.EMPIRICAL) {
             throw new IllegalArgumentException(
-                    "zeroTolerance(EMPIRICAL) is contradictory — zero-tolerance is a binary commitment, not an empirical one");
+                    "zeroFailures(EMPIRICAL) is contradictory — zero-failures is a binary commitment, not an empirical one");
         }
-        return new CriterionPosture(Kind.ZERO_TOLERANCE,
+        return new CriterionPosture(Kind.ZERO_FAILURES,
                 OptionalDouble.of(1.0),
                 Optional.of(origin),
                 OptionalDouble.empty(),
@@ -239,7 +239,7 @@ public final class CriterionPosture {
 
     /**
      * Returns a copy of this posture with the given confidence floor.
-     * Rejects composition with zero-tolerance (explicit or implicit)
+     * Rejects composition with zero-failures (explicit or implicit)
      * — the statistical math is undefined at the threshold boundary.
      * Rejects composition with {@code .meeting(...)} — threshold-first
      * is deterministic and accepts no rigour adjuncts.
@@ -298,7 +298,7 @@ public final class CriterionPosture {
      * authority alongside the verdict.
      *
      * <p>Composes with every posture kind, including implicit
-     * zero-tolerance; the ref is informational, not part of the
+     * zero-failures; the ref is informational, not part of the
      * commitment's math.
      */
     public CriterionPosture withContractRef(String ref) {
@@ -350,8 +350,8 @@ public final class CriterionPosture {
 
     private void rejectRigourAdjunct(String methodName) {
         switch (kind) {
-            case ZERO_TOLERANCE, IMPLICIT_ZERO_TOLERANCE -> throw new IllegalStateException(
-                    "." + methodName + "(...) cannot compose with zero-tolerance — "
+            case ZERO_FAILURES, IMPLICIT_ZERO_FAILURES -> throw new IllegalStateException(
+                    "." + methodName + "(...) cannot compose with zero-failures — "
                             + "statistical math is undefined at the threshold boundary");
             case STATISTICAL_CONTRACTUAL -> throw new IllegalStateException(
                     "." + methodName + "(...) cannot compose with .meeting(...) — "
@@ -396,7 +396,7 @@ public final class CriterionPosture {
         return kind;
     }
 
-    /** The contractual target rate when present (statistical-contractual + zero-tolerance), empty otherwise. */
+    /** The contractual target rate when present (statistical-contractual + zero-failures), empty otherwise. */
     public OptionalDouble threshold() {
         return threshold;
     }
@@ -457,9 +457,9 @@ public final class CriterionPosture {
         return kind == Kind.LATENCY_EMPIRICAL || kind == Kind.LATENCY_CONTRACTUAL;
     }
 
-    /** Whether this posture asks for a binary evaluation (zero-tolerance, explicit or implicit). */
-    public boolean isZeroTolerance() {
-        return kind == Kind.ZERO_TOLERANCE || kind == Kind.IMPLICIT_ZERO_TOLERANCE;
+    /** Whether this posture asks for a binary evaluation (zero-failures, explicit or implicit). */
+    public boolean isZeroFailures() {
+        return kind == Kind.ZERO_FAILURES || kind == Kind.IMPLICIT_ZERO_FAILURES;
     }
 
     /**

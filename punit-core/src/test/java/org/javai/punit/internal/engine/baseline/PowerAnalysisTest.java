@@ -23,7 +23,6 @@ import org.javai.punit.api.covariate.Covariate;
 import org.javai.punit.api.covariate.CovariateProfile;
 import org.javai.punit.api.spec.BaselineStatistics;
 import org.javai.punit.api.spec.Experiment;
-import org.javai.punit.api.spec.PassRateStatistics;
 import org.javai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +41,7 @@ class PowerAnalysisTest {
             return Outcome.ok(input);
         }
         @Override public Criteria<String> criteria() {
-            return meeting().<String>zeroTolerance();
+            return meeting().<String>zeroFailures();
         }
 
         @Override public String id() { return USE_CASE_ID; }
@@ -274,7 +273,7 @@ class PowerAnalysisTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<String> criteria() {
-                return meeting().<String>zeroTolerance();
+                return meeting().<String>zeroFailures();
             }
 
             @Override public String id() { return COVARIATE_USE_CASE_ID; }

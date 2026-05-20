@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import org.javai.outcome.Outcome;
 import org.javai.punit.api.TestIntent;
@@ -46,7 +45,7 @@ class EngineIntegrationTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }
@@ -232,7 +231,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(0);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -266,7 +265,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(0);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -308,7 +307,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(input.length());
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -343,7 +342,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(input.length());
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -377,7 +376,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(input.length());
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -439,7 +438,7 @@ class EngineIntegrationTest {
                 return Outcome.ok(0);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
         };
         Sampling<LlmFactors, String, Integer> sampling = Sampling
@@ -491,7 +490,7 @@ class EngineIntegrationTest {
             throw new IllegalStateException("simulated defect — this should abort the run");
         }
         @Override public Criteria<Boolean> criteria() {
-            return meeting().<Boolean>zeroTolerance();
+            return meeting().<Boolean>zeroFailures();
         }
     }
 }

@@ -80,7 +80,7 @@ class ContractLatencyEndToEndIntegrationTest {
         // microbench latency, so observed p95 will be below it.
         writeLatencyBaseline(baselineDir, Duration.ofMinutes(1), 1000);
 
-        Criteria<Integer> criteria = Criteria.meeting().<Integer>zeroTolerance();
+        Criteria<Integer> criteria = Criteria.meeting().<Integer>zeroFailures();
         LatencyCriterion latency = Criteria.empirical().atMost(PercentileKey.P95);
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(criteria, latency, 20), FACTORS)
@@ -105,7 +105,7 @@ class ContractLatencyEndToEndIntegrationTest {
     @Test
     @DisplayName("Contract.latency() contractual ceiling → contractual latency PASSes when observed below ceiling")
     void contractualLatencyOnContract(@TempDir Path baselineDir) throws IOException {
-        Criteria<Integer> criteria = Criteria.meeting().<Integer>zeroTolerance();
+        Criteria<Integer> criteria = Criteria.meeting().<Integer>zeroFailures();
         LatencyCriterion latency = Criteria.meeting()
                 .atMost(PercentileKey.P95, Duration.ofMillis(500))
                 .contractRef(ThresholdOrigin.SLA, "test-contract-ref");
@@ -178,7 +178,7 @@ class ContractLatencyEndToEndIntegrationTest {
             @Override public String id() { return USE_CASE_ID; }
             @Override public Outcome<Integer> invoke(Integer i, TokenTracker t) { return Outcome.ok(i); }
             @Override public Criteria<Integer> criteria() {
-                return Criteria.meeting().<Integer>zeroTolerance();
+                return Criteria.meeting().<Integer>zeroFailures();
             }
             @Override public LatencyCriterion latency() {
                 return Criteria.empirical().atMost(PercentileKey.P95);

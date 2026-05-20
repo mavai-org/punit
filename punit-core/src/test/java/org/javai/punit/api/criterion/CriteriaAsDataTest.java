@@ -174,7 +174,7 @@ class CriteriaAsDataTest {
         Criteria<String> c = of(
                 meeting().<String>passRate(0.99).name("a"),
                 meeting().<String>passRate(0.95).name("b"),
-                meeting().<String>zeroTolerance().name("c"));
+                meeting().<String>zeroFailures().name("c"));
 
         assertThat(c.asList()).hasSize(3);
         assertThat(c.asList().get(0).id()).isEqualTo("a");

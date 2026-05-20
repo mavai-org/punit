@@ -29,7 +29,7 @@ class SampleClassificationTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     };
@@ -96,7 +96,7 @@ class SampleClassificationTest {
             ServiceContract<Factors, String, Integer> bounded = new ServiceContract<>() {
                 @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) { return Outcome.ok(0); }
                 @Override public Criteria<Integer> criteria() {
-                    return meeting().<Integer>zeroTolerance();
+                    return meeting().<Integer>zeroFailures();
                 }
 
                 @Override public Optional<Duration> maxLatency() {
@@ -120,7 +120,7 @@ class SampleClassificationTest {
             ServiceContract<Factors, String, Integer> bounded = new ServiceContract<>() {
                 @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) { return Outcome.ok(0); }
                 @Override public Criteria<Integer> criteria() {
-                    return meeting().<Integer>zeroTolerance();
+                    return meeting().<Integer>zeroFailures();
                 }
 
                 @Override public Optional<Duration> maxLatency() {

@@ -83,7 +83,7 @@ class BaselineEmitterTest {
     private static final ServiceContract<NoFactors, Integer, String> EVENS_PASS = new ServiceContract<>() {
         @Override public String id() { return "EvensPassServiceContract"; }
         @Override public Criteria<String> criteria() {
-            return meeting().<String>zeroTolerance()
+            return meeting().<String>zeroFailures()
                     .satisfies("non-blank", s -> s.isBlank()
                             ? Outcome.fail("blank", "value was blank")
                             : Outcome.ok(null));

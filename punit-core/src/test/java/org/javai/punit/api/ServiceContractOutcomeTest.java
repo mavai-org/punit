@@ -22,7 +22,7 @@ class ServiceContractOutcomeTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
 

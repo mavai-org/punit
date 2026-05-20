@@ -27,7 +27,7 @@ class SamplingTest {
             return Outcome.ok(input);
         }
         @Override public Criteria<String> criteria() {
-            return meeting().<String>zeroTolerance();
+            return meeting().<String>zeroFailures();
         }
 
 

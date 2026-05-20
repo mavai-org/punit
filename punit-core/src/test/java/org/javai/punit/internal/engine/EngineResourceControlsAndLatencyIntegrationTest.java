@@ -56,7 +56,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
             return Outcome.ok(input);
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }
@@ -77,7 +77,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
             return Outcome.ok(input);
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }
@@ -120,7 +120,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -152,7 +152,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -206,7 +206,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
             @Override public Pacing pacing() {
@@ -238,7 +238,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
             @Override public Pacing pacing() {
@@ -279,7 +279,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.ok(input);
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -308,7 +308,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 throw new IllegalStateException("never mind the exception policy, this is a defect");
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -335,7 +335,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
                 return Outcome.fail("scripted", "boom");
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
 
         };
@@ -391,7 +391,7 @@ class EngineResourceControlsAndLatencyIntegrationTest {
         // 50ms sleeps, assert p50 ≤ 10ms.
         ServiceContract<Factors, Integer, Boolean> slow = new ServiceContract<>() {
             @Override public Criteria<Boolean> criteria() {
-                return meeting().<Boolean>zeroTolerance();
+                return meeting().<Boolean>zeroFailures();
             }
             @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
                 sleep(50);

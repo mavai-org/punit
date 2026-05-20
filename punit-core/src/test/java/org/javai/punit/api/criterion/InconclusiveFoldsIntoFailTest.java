@@ -6,7 +6,6 @@ import org.javai.outcome.Outcome;
 import org.javai.punit.api.Contract;
 import org.javai.punit.api.PostconditionResult;
 import org.javai.punit.api.ServiceContractOutcome;
-import org.javai.punit.api.ThresholdOrigin;
 import org.javai.punit.api.TokenTracker;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +26,7 @@ class InconclusiveFoldsIntoFailTest {
 
         @Override
         public Criteria<String> criteria() {
-            return Criteria.meeting().<String>zeroTolerance()
+            return Criteria.meeting().<String>zeroFailures()
                     .transforming(s -> {
                         try {
                             return Outcome.ok(Integer.parseInt(s));

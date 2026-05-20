@@ -12,7 +12,6 @@ import org.javai.outcome.Outcome;
 import org.javai.punit.api.Sampling;
 import org.javai.punit.api.TokenTracker;
 import org.javai.punit.api.ServiceContract;
-import org.javai.punit.api.ThresholdOrigin;
 import org.javai.punit.api.criterion.Criteria;
 import static org.javai.punit.api.criterion.Criteria.meeting;
 import org.javai.punit.api.spec.Experiment;
@@ -42,7 +41,7 @@ class OptimizeOutputWriterTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }
@@ -143,10 +142,10 @@ class OptimizeOutputWriterTest {
             @Override public String id() { return "two-criterion-contract"; }
             @Override public Criteria<String> criteria() {
                 return Criteria.of(
-                        meeting().<String>zeroTolerance()
+                        meeting().<String>zeroFailures()
                                 .name("always-passes")
                                 .satisfies("passes", v -> Outcome.ok()),
-                        meeting().<String>zeroTolerance()
+                        meeting().<String>zeroFailures()
                                 .name("starts-with-a")
                                 .satisfies("first-char-a", v ->
                                         v.startsWith("a")

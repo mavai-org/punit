@@ -42,7 +42,7 @@ class ExploreOutputWriterTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }
@@ -240,7 +240,7 @@ class ExploreOutputWriterTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     }

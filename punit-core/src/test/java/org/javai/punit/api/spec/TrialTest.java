@@ -7,7 +7,6 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 
 import org.javai.outcome.Outcome;
 import org.javai.punit.api.Contract;
@@ -27,7 +26,7 @@ class TrialTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
 

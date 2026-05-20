@@ -37,7 +37,7 @@ class PassRateTest {
             return Outcome.ok("ok");
         }
         @Override public Criteria<String> criteria() {
-            return meeting().<String>zeroTolerance();
+            return meeting().<String>zeroFailures();
         }
 
     };

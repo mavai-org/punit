@@ -19,7 +19,7 @@ import org.javai.punit.api.PercentileKey;
  * <ul>
  *   <li>{@link #passRate(double)} → {@link CriterionDecl} —
  *       statistical pass-rate criterion at the supplied rate.</li>
- *   <li>{@link #zeroTolerance()} → {@link CriterionDecl} — explicit
+ *   <li>{@link #zeroFailures()} → {@link CriterionDecl} — explicit
  *       any-failure-fails commitment.</li>
  *   <li>{@link #atMost(PercentileKey, Duration)} →
  *       {@link LatencyCriterion} — contractual latency criterion
@@ -30,7 +30,7 @@ import org.javai.punit.api.PercentileKey;
  *
  * <p>The interface itself is non-generic; the type parameter
  * {@code <O>} enters the chain at the kind-selector method that
- * needs it ({@code passRate}, {@code zeroTolerance}). The latency
+ * needs it ({@code passRate}, {@code zeroFailures}). The latency
  * kind selector has no type parameter — latency criteria care about
  * durations, not per-sample outcome values.
  *
@@ -48,10 +48,10 @@ public interface ContractualDecl {
     <O> CriterionDecl<O> passRate(double rate);
 
     /**
-     * Explicit zero-tolerance criterion. Any failed sample fails
+     * Explicit zero-failures criterion. Any failed sample fails
      * the criterion.
      */
-    <O> CriterionDecl<O> zeroTolerance();
+    <O> CriterionDecl<O> zeroFailures();
 
     /**
      * Contractual latency ceiling at the asserted percentile.

@@ -98,7 +98,7 @@ class PostconditionFailureHistogramTest {
         ServiceContract<Factors, Integer, Integer> noClauses = new ServiceContract<>() {
             @Override public Outcome<Integer> invoke(Integer i, TokenTracker t) { return Outcome.ok(i); }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance();
+                return meeting().<Integer>zeroFailures();
             }
         };
         Sampling<Factors, Integer, Integer> sampling = Sampling
@@ -123,7 +123,7 @@ class PostconditionFailureHistogramTest {
                 return Outcome.fail("upstream-error", "always fails at apply");
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance()
+                return meeting().<Integer>zeroFailures()
                         .satisfies("would-have-checked", v -> Outcome.ok());
             }
         };
@@ -215,7 +215,7 @@ class PostconditionFailureHistogramTest {
             return Outcome.ok(input);
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance()
+            return meeting().<Integer>zeroFailures()
                     .satisfies("alwaysFails", v -> Outcome.fail("alwaysFails", "input " + v));
         }
     }

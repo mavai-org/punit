@@ -58,7 +58,7 @@ class SerialSampleExecutorProgressTest {
                     : Outcome.fail("odd", "input was " + input);
         }
         @Override public Criteria<String> criteria() {
-            return meeting().<String>zeroTolerance();
+            return meeting().<String>zeroFailures();
         }
 
     }
@@ -105,7 +105,7 @@ class SerialSampleExecutorProgressTest {
                 throw new RuntimeException("synthetic defect");
             }
             @Override public Criteria<String> criteria() {
-                return meeting().<String>zeroTolerance();
+                return meeting().<String>zeroFailures();
             }
 
         };
@@ -132,7 +132,7 @@ class SerialSampleExecutorProgressTest {
                 return Outcome.ok("pass");
             }
             @Override public Criteria<String> criteria() {
-                return meeting().<String>zeroTolerance();
+                return meeting().<String>zeroFailures();
             }
 
         };

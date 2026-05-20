@@ -20,7 +20,6 @@ import org.javai.punit.api.spec.BaselineStatistics;
 import org.javai.punit.api.spec.CriterionResult;
 import org.javai.punit.api.spec.EvaluationContext;
 import org.javai.punit.api.spec.LatencyStatistics;
-import org.javai.punit.api.spec.PassRateStatistics;
 import org.javai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.javai.punit.api.PercentileKey;
 import org.javai.punit.api.spec.PercentileLatency;
@@ -46,7 +45,7 @@ class CriterionResultDetailTest {
             return Outcome.ok(0);
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance();
+            return meeting().<Integer>zeroFailures();
         }
 
     };

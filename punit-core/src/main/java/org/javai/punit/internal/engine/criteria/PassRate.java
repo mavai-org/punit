@@ -69,7 +69,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     private static final double DEFAULT_CONFIDENCE = 0.95;
     private static final ThresholdDeriver DERIVER = new ThresholdDeriver();
 
-    private enum Mode { CONTRACTUAL, EMPIRICAL_DEFAULT, EMPIRICAL_PINNED, ZERO_TOLERANCE }
+    private enum Mode { CONTRACTUAL, EMPIRICAL_DEFAULT, EMPIRICAL_PINNED, ZERO_FAILURES }
 
     private final Mode mode;
     private final double threshold;
@@ -117,7 +117,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     }
 
     /**
-     * Zero-tolerance pass-rate criterion: any sample failure fails the
+     * zero-failures pass-rate criterion: any sample failure fails the
      * criterion. Carries no statistical threshold; its
      * {@link #contractualTarget()} and {@link #earlyTerminationPassRate()}
      * return empty so the framework does not try to underwrite or
@@ -125,17 +125,17 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
      *
      * <p>Used by {@link #fromPosture(org.javai.punit.api.criterion.CriterionPosture)}
      * to auto-inject an evaluator for contracts whose criteria declared
-     * a {@code .zeroTolerance(...)} posture or no posture at all (the
-     * implicit zero-tolerance default).
+     * a {@code .zeroFailures(...)} posture or no posture at all (the
+     * implicit zero-failures default).
      */
-    static <OT> PassRate<OT> forZeroTolerance(ThresholdOrigin origin) {
+    static <OT> PassRate<OT> forZeroFailures(ThresholdOrigin origin) {
         Objects.requireNonNull(origin, "origin");
         if (origin == ThresholdOrigin.EMPIRICAL) {
             throw new IllegalArgumentException(
-                    "forZeroTolerance(EMPIRICAL) is contradictory — zero-tolerance is a binary commitment");
+                    "forZeroFailures(EMPIRICAL) is contradictory — zero-failures is a binary commitment");
         }
         return new PassRate<>(
-                Mode.ZERO_TOLERANCE, 1.0, origin, DEFAULT_CONFIDENCE, null);
+                Mode.ZERO_FAILURES, 1.0, origin, DEFAULT_CONFIDENCE, null);
     }
 
     /**
@@ -150,8 +150,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
      *   <li>{@code STATISTICAL_EMPIRICAL} → {@link #empirical()}</li>
      * </ul>
      *
-     * <p>{@code ZERO_TOLERANCE} and {@code IMPLICIT_ZERO_TOLERANCE}
-     * postures map to a {@link #forZeroTolerance(ThresholdOrigin)}
+     * <p>{@code ZERO_FAILURES} and {@code IMPLICIT_ZERO_FAILURES}
+     * postures map to a {@link #forZeroFailures(ThresholdOrigin)}
      * pass-rate that fails on any sample failure. The implicit
      * default uses {@link ThresholdOrigin#POLICY} as its origin per
      * methodology.
@@ -176,11 +176,11 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                         ? base.atConfidence(posture.confidenceFloor().getAsDouble())
                         : base);
             }
-            case ZERO_TOLERANCE -> Optional.of(PassRate.<OT>forZeroTolerance(
+            case ZERO_FAILURES -> Optional.of(PassRate.<OT>forZeroFailures(
                     posture.origin().orElseThrow(() -> new IllegalStateException(
-                            "ZERO_TOLERANCE posture without origin"))));
-            case IMPLICIT_ZERO_TOLERANCE -> Optional.of(
-                    PassRate.<OT>forZeroTolerance(ThresholdOrigin.POLICY));
+                            "ZERO_FAILURES posture without origin"))));
+            case IMPLICIT_ZERO_FAILURES -> Optional.of(
+                    PassRate.<OT>forZeroFailures(ThresholdOrigin.POLICY));
             case LATENCY_EMPIRICAL, LATENCY_CONTRACTUAL -> Optional.empty();
         };
     }
@@ -261,7 +261,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
 
     @Override
     public Map<String, Object> empiricalDetail() {
-        if (mode == Mode.CONTRACTUAL || mode == Mode.ZERO_TOLERANCE) {
+        if (mode == Mode.CONTRACTUAL || mode == Mode.ZERO_FAILURES) {
             return Map.of();
         }
         return Map.of("confidence", confidence);
@@ -364,8 +364,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
 
             // Resolve the criterion's posture (commitment) — read from
             // the contract's per-criterion declaration. STATISTICAL_CONTRACTUAL
-            // and ZERO_TOLERANCE shortcut the legacy threshold-on-PassRate
-            // path; STATISTICAL_EMPIRICAL and IMPLICIT_ZERO_TOLERANCE
+            // and ZERO_FAILURES shortcut the legacy threshold-on-PassRate
+            // path; STATISTICAL_EMPIRICAL and IMPLICIT_ZERO_FAILURES
             // delegate to the existing logic so step 1 preserves
             // legacy behaviour for un-postured criteria.
             CriterionPosture posture = ctx.criterionPostures().getOrDefault(
@@ -386,7 +386,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             }
 
             // Posture-driven shortcut: STATISTICAL_CONTRACTUAL and
-            // ZERO_TOLERANCE skip the legacy mode handling and use the
+            // ZERO_FAILURES skip the legacy mode handling and use the
             // criterion's own commitment directly.
             if (posture.kind() == CriterionPosture.Kind.STATISTICAL_CONTRACTUAL) {
                 double pThreshold = posture.threshold().getAsDouble();
@@ -401,18 +401,18 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                         counts.criterionId(), observed, pThreshold, pOrigin, criterionTotal, pv));
                 continue;
             }
-            // Zero-tolerance fires when the contract committed explicitly
-            // (posture == ZERO_TOLERANCE) or when the criterion was
-            // auto-injected for an implicit-zero-tolerance posture (mode
-            // == ZERO_TOLERANCE). A bare default IMPLICIT_ZERO_TOLERANCE
+            // zero-failures fires when the contract committed explicitly
+            // (posture == ZERO_FAILURES) or when the criterion was
+            // auto-injected for an implicit-zero-failures posture (mode
+            // == ZERO_FAILURES). A bare default IMPLICIT_ZERO_FAILURES
             // posture without a matching auto-injected PassRate is not
             // enough — that combination arises in hand-built test fixtures
             // that use PassRate.meeting/empirical and expect their own
             // mode to drive evaluation.
-            if (posture.kind() == CriterionPosture.Kind.ZERO_TOLERANCE
-                    || mode == Mode.ZERO_TOLERANCE) {
+            if (posture.kind() == CriterionPosture.Kind.ZERO_FAILURES
+                    || mode == Mode.ZERO_FAILURES) {
                 // Binary semantics: any failed sample fails the criterion.
-                // Implicit zero-tolerance defaults origin to POLICY.
+                // Implicit zero-failures defaults origin to POLICY.
                 ThresholdOrigin ztOrigin = posture.origin().orElse(ThresholdOrigin.POLICY);
                 thresholdsByCriterion.put(counts.criterionId(), 1.0);
                 Verdict pv;
@@ -425,7 +425,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                 }
                 perCriterionVerdicts.add(pv);
                 perCriterionExplanations.add(String.format(
-                        "%s: zero-tolerance (origin=%s); failures=%d, inconclusive=%d over %d samples → %s",
+                        "%s: zero-failures (origin=%s); failures=%d, inconclusive=%d over %d samples → %s",
                         counts.criterionId(),
                         ztOrigin,
                         counts.fail(), counts.inconclusive(), criterionTotal, pv));

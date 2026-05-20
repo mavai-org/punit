@@ -24,7 +24,7 @@ import org.javai.punit.api.criterion.CriterionPosture;
  *       commitment (e.g. {@code STATISTICAL_CONTRACTUAL} or
  *       {@code STATISTICAL_EMPIRICAL}) produces a non-empty
  *       result.</li>
- *   <li>A non-statistical posture (zero-tolerance, explicit or
+ *   <li>A non-statistical posture (zero-failures, explicit or
  *       implicit) returns {@link Optional#empty()} — those criteria
  *       are evaluated by a different path (the SMOKE classifier wired
  *       in step 2 of the contract-thresholds directive).</li>

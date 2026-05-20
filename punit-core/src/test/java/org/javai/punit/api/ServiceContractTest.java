@@ -17,7 +17,7 @@ class ServiceContractTest {
             return Outcome.ok(input.length());
         }
         @Override public Criteria<Integer> criteria() {
-            return meeting().<Integer>zeroTolerance().satisfies("ok", v -> Outcome.ok());
+            return meeting().<Integer>zeroFailures().satisfies("ok", v -> Outcome.ok());
         }
     }
 

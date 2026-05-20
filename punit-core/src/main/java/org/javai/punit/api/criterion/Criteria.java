@@ -74,7 +74,7 @@ public sealed interface Criteria<O>
      * when no criteria are declared via the value-form. The
      * framework's lowering treats this as "no explicit criteria;
      * fall back to the postcondition-derived K=1 default with
-     * implicit zero-tolerance" — same as the empty value-form case
+     * implicit zero-failures" — same as the empty value-form case
      * today.
      */
     static <O> Criteria<O> empty() {
@@ -129,7 +129,7 @@ public sealed interface Criteria<O>
     /**
      * Open a contractual-mode kind-selector chain. The author calls
      * one of the kind-selector methods on the returned
-     * {@link ContractualDecl} to declare a pass-rate, zero-tolerance,
+     * {@link ContractualDecl} to declare a pass-rate, zero-failures,
      * or latency criterion.
      *
      * <p>Origin defaults to
@@ -139,7 +139,7 @@ public sealed interface Criteria<O>
      *
      * <p>The factory is non-generic — the type parameter
      * {@code <O>} enters the chain at the kind-selector step
-     * ({@code .passRate(...)}, {@code .zeroTolerance()}), or not at
+     * ({@code .passRate(...)}, {@code .zeroFailures()}), or not at
      * all in the latency case. Witness placement at the call site:
      *
      * <pre>{@code
@@ -152,7 +152,7 @@ public sealed interface Criteria<O>
      * @Override public Criteria<Response> criteria() {
      *     return of(
      *         meeting().<Response>passRate(0.99).name("body").where(...),
-     *         meeting().<Response>zeroTolerance().name("pii").where(...));
+     *         meeting().<Response>zeroFailures().name("pii").where(...));
      * }
      *
      * // Latency — no witness anywhere; .atMost(...) returns

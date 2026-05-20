@@ -214,7 +214,7 @@ class LatencyEverywhereIntegrationTest {
                 return Outcome.ok(input.length());
             }
             @Override public Criteria<Integer> criteria() {
-                return meeting().<Integer>zeroTolerance()
+                return meeting().<Integer>zeroFailures()
                         .satisfies("never satisfies", n -> Outcome.fail("nope", "always fails"));
             }
         };

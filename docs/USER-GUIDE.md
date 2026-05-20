@@ -1726,7 +1726,7 @@ once per run; participates in baseline matching.
 **Criterion.** A statistical test the framework runs against a sample
 summary. Pass-rate and latency are the built-in kinds. Authored via
 `meeting()` (contractual) or `empirical()` (baseline-derived) followed
-by a kind-selector (`.passRate(rate)`, `.zeroTolerance()`,
+by a kind-selector (`.passRate(rate)`, `.zeroFailures()`,
 `.atMost(percentile, duration)`).
 
 **Early termination.** A probabilistic test whose contract declares a

@@ -19,7 +19,7 @@ import org.javai.punit.api.PercentileKey;
  *       baseline at the configured confidence.</li>
  * </ul>
  *
- * <p>No {@code zeroTolerance()} method — zero-tolerance is
+ * <p>No {@code zeroFailures()} method — zero-failures is
  * intrinsically contractual (the threshold is exactly 1.0, with no
  * baseline to derive from).
  *

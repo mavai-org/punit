@@ -120,7 +120,7 @@ public interface Criterion<O> {
      * The criterion's run-time commitment — what counts as acceptable,
      * and optionally how confidently to evaluate it. Authored via the
      * {@link Criteria#meeting()} / {@link Criteria#empirical()} factories
-     * with the kind selectors ({@code .passRate}, {@code .zeroTolerance},
+     * with the kind selectors ({@code .passRate}, {@code .zeroFailures},
      * {@code .atMost}); read by the framework's evaluation path when it
      * computes the per-criterion verdict from the run's sample counts.
      *

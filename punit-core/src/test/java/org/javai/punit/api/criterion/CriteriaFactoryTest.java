@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
  * Exercises the value-form authoring surface — the no-arg
  * {@link Criteria#meeting()} / {@link Criteria#empirical()} factories
  * and the kind-selector first chain methods
- * ({@code .passRate}, {@code .zeroTolerance}, {@code .atMost}).
+ * ({@code .passRate}, {@code .zeroFailures}, {@code .atMost}).
  */
 @DisplayName("Criteria.meeting() / Criteria.empirical() — value-form factories")
 class CriteriaFactoryTest {
@@ -42,11 +42,11 @@ class CriteriaFactoryTest {
         }
 
         @Test
-        @DisplayName("meeting().zeroTolerance() yields a ZERO_TOLERANCE decl at UNSPECIFIED origin")
-        void zeroToleranceShape() {
-            CriterionDecl<String> decl = meeting().zeroTolerance();
+        @DisplayName("meeting().zeroFailures() yields a ZERO_FAILURES decl at UNSPECIFIED origin")
+        void zeroFailuresShape() {
+            CriterionDecl<String> decl = meeting().zeroFailures();
 
-            assertThat(decl.posture().kind()).isEqualTo(CriterionPosture.Kind.ZERO_TOLERANCE);
+            assertThat(decl.posture().kind()).isEqualTo(CriterionPosture.Kind.ZERO_FAILURES);
             assertThat(decl.posture().origin()).hasValue(UNSPECIFIED);
         }
 
@@ -62,9 +62,9 @@ class CriteriaFactoryTest {
         }
 
         @Test
-        @DisplayName(".contractRef(SLA, ref) on zero-tolerance carries origin + ref through")
-        void zeroToleranceContractRef() {
-            CriterionDecl<String> decl = meeting().<String>zeroTolerance()
+        @DisplayName(".contractRef(SLA, ref) on zero-failures carries origin + ref through")
+        void zeroFailuresContractRef() {
+            CriterionDecl<String> decl = meeting().<String>zeroFailures()
                     .contractRef(POLICY, "Security Policy §1.2")
                     .where("no-secret-key", v -> !v.contains("AKIA"));
 
