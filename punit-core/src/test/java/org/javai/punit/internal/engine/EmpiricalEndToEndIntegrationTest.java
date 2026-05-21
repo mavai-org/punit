@@ -224,6 +224,60 @@ class EmpiricalEndToEndIntegrationTest {
     }
 
     @Test
+    @DisplayName("under the fail-on-expired policy, an expired baseline fails the verdict "
+            + "even when the statistics would pass — a stale baseline can't underwrite a PASS")
+    void expiredBaselineFailsVerdictUnderFailPolicy(@TempDir Path baselineDir)
+            throws IOException {
+        writeBaselineWithWindow(baselineDir, 0.80, 1000, 30,
+                Instant.now().minus(Duration.ofDays(400)));
+
+        String previous = System.getProperty("punit.expiration.policy");
+        System.setProperty("punit.expiration.policy", "FAIL");
+        try {
+            var engine = new Engine(new YamlBaselineProvider(baselineDir));
+            var result = (ProbabilisticTestResult) engine.run(empiricalTest(sampling(20)));
+
+            assertThat(result.verdict())
+                    .as("FAIL policy must force an expired baseline's verdict to FAIL")
+                    .isEqualTo(Verdict.FAIL);
+            assertThat(result.warnings())
+                    .anyMatch(w -> w.contains("expired") && w.contains(USE_CASE_ID));
+            assertThat(result.warnings())
+                    .anyMatch(w -> w.contains("policy=FAIL"));
+        } finally {
+            restoreProperty("punit.expiration.policy", previous);
+        }
+    }
+
+    @Test
+    @DisplayName("under the fail-on-expired policy, a baseline within its window is unaffected — "
+            + "still PASS, no expiration caveat")
+    void freshBaselineUnaffectedUnderFailPolicy(@TempDir Path baselineDir) throws IOException {
+        writeBaselineWithWindow(baselineDir, 0.80, 1000, 30, Instant.now());
+
+        String previous = System.getProperty("punit.expiration.policy");
+        System.setProperty("punit.expiration.policy", "FAIL");
+        try {
+            var engine = new Engine(new YamlBaselineProvider(baselineDir));
+            var result = (ProbabilisticTestResult) engine.run(empiricalTest(sampling(20)));
+
+            assertThat(result.verdict()).isEqualTo(Verdict.PASS);
+            assertThat(result.warnings())
+                    .noneMatch(w -> w.contains("expired") || w.contains("policy=FAIL"));
+        } finally {
+            restoreProperty("punit.expiration.policy", previous);
+        }
+    }
+
+    private static void restoreProperty(String key, String previous) {
+        if (previous == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, previous);
+        }
+    }
+
+    @Test
     @DisplayName("the empty provider returns Optional.empty for any query")
     void baselineProviderEmptyContract() {
         var resolved = BaselineProvider.EMPTY.baselineFor(

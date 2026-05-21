@@ -207,6 +207,10 @@ public final class ProbabilisticTest implements Spec {
             // that resolves for the same (serviceContractId, factorsFingerprint)
             // tuple sees the same baseline file, so first-non-empty wins.
             Optional<String> baselineFilename = Optional.empty();
+            // True when any resolved baseline has passed its validity
+            // window. Drives the fail-on-expired policy below; the
+            // human caveat is already in `warnings` via lookup notes.
+            boolean anyBaselineExpired = false;
             for (Registered<OT> entry : registered) {
                 BaselineLookupCapture capture = new BaselineLookupCapture();
                 CriterionResult result = evaluate(
@@ -220,6 +224,7 @@ public final class ProbabilisticTest implements Spec {
                 if (baselineFilename.isEmpty() && capture.sourceFile.isPresent()) {
                     baselineFilename = capture.sourceFile;
                 }
+                anyBaselineExpired |= capture.expired;
             }
 
             EngineRunSummary engineSummary = buildEngineSummary(s, evaluated, baselineFilename);
@@ -250,6 +255,20 @@ public final class ProbabilisticTest implements Spec {
                     ? evaluated
                     : substituteFunctionalVerdict(evaluated, perCriterionEvaluation.compositeVerdict());
             Verdict authoritative = Verdict.compose(compositeAdjusted);
+            // Fail-on-expired policy: an expired baseline always carries
+            // a caveat (already in `warnings` via lookup notes); under
+            // the FAIL policy it additionally forces the verdict to FAIL,
+            // dominating the statistical determination — a stale baseline
+            // makes the empirical comparison untrustworthy, so a PASS
+            // against it must not stand. Default (WARN) leaves the
+            // statistical verdict intact.
+            if (anyBaselineExpired
+                    && ExpiredBaselinePolicy.fromEnvironment() == ExpiredBaselinePolicy.FAIL) {
+                warnings.add("expiration policy=FAIL: verdict failed because the resolved "
+                        + "baseline has expired (see the baseline-expiry caveat above) — "
+                        + "re-run the MEASURE experiment to refresh it");
+                authoritative = Verdict.FAIL;
+            }
             // contractRef now lives on the criterion's posture. Surface
             // the first non-empty ref at the result level (the legacy
             // top-level field) — multi-criterion contracts whose
@@ -352,6 +371,7 @@ public final class ProbabilisticTest implements Spec {
             CovariateProfile profile =
                     CovariateProfile.empty();
             Optional<String> sourceFile = Optional.empty();
+            boolean expired = false;
         }
 
         private boolean anyEmpiricalCriterion() {
@@ -385,6 +405,7 @@ public final class ProbabilisticTest implements Spec {
                 warnings.addAll(lookup.notes());
                 capture.profile = lookup.baselineProfile();
                 capture.sourceFile = lookup.sourceFile();
+                capture.expired = lookup.expired();
             } else {
                 resolved = Optional.empty();
             }
