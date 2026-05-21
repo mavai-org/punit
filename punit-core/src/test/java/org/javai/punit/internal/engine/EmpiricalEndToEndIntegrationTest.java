@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
@@ -12,6 +13,7 @@ import org.javai.punit.api.FactorBundle;
 import org.javai.punit.api.Sampling;
 import org.javai.punit.api.TokenTracker;
 import org.javai.punit.api.ServiceContract;
+import org.javai.punit.api.covariate.CovariateProfile;
 import static org.javai.punit.api.criterion.Criteria.empirical;
 
 import org.javai.punit.api.criterion.Criteria;
@@ -25,6 +27,7 @@ import org.javai.punit.api.spec.Verdict;
 import org.javai.punit.internal.engine.baseline.BaselineRecord;
 import org.javai.punit.internal.engine.baseline.BaselineWriter;
 import org.javai.punit.internal.engine.baseline.FactorsFingerprint;
+import org.javai.punit.internal.engine.baseline.LatencyIndicator;
 import org.javai.punit.internal.engine.baseline.YamlBaselineProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -160,6 +163,64 @@ class EmpiricalEndToEndIntegrationTest {
         assertThat(result.criterionResults().get(0).result().explanation())
                 .contains("inputs identity")
                 .contains("re-run the baseline measure");
+    }
+
+    /**
+     * Writes a baseline with a validity window, measured at
+     * {@code generatedAt}. Recorded inputs identity matches
+     * {@link #sampling(int)} so the empirical comparison proceeds.
+     */
+    private static void writeBaselineWithWindow(
+            Path baselineDir, double passRate, int sampleCount,
+            int expiresInDays, Instant generatedAt) throws IOException {
+        String fingerprint = FactorsFingerprint.of(FactorBundle.of(FACTORS));
+        BaselineRecord record = new BaselineRecord(
+                USE_CASE_ID, "measureBaseline", fingerprint,
+                sampling(1).inputsIdentity(), sampleCount, generatedAt,
+                Map.<String, BaselineStatistics>of(
+                        "bernoulli-pass-rate",
+                        PerCriterionPassRateStatistics.of("contract", passRate, sampleCount)),
+                CovariateProfile.empty(), LatencyIndicator.empty(), expiresInDays);
+        new BaselineWriter().write(record, baselineDir);
+    }
+
+    @Test
+    @DisplayName("an expired baseline surfaces an expiration caveat on the verdict's warnings "
+            + "without dismissing the PASS — the reader is told to pay attention, not to "
+            + "discard the result")
+    void expiredBaselineSurfacesCaveatButKeepsVerdict(@TempDir Path baselineDir)
+            throws IOException {
+        // Measured 400 days ago with a 30-day validity window → long expired.
+        writeBaselineWithWindow(baselineDir, 0.80, 1000, 30,
+                Instant.now().minus(Duration.ofDays(400)));
+
+        var engine = new Engine(new YamlBaselineProvider(baselineDir));
+        var result = (ProbabilisticTestResult) engine.run(empiricalTest(sampling(20)));
+
+        // The expiration is a CAVEAT, not a dismissal: an always-passing test
+        // against a baseline at p = 0.80 still PASSES.
+        assertThat(result.verdict()).isEqualTo(Verdict.PASS);
+
+        // …and the verdict carries the expiration as a warning the reader must heed,
+        // naming the baseline and that it has expired.
+        assertThat(result.warnings())
+                .as("an expired baseline must surface as a verdict caveat the reader can act on")
+                .anyMatch(w -> w.contains("expired") && w.contains(USE_CASE_ID));
+    }
+
+    @Test
+    @DisplayName("a baseline comfortably within its validity window surfaces no expiration caveat")
+    void freshBaselineSurfacesNoCaveat(@TempDir Path baselineDir) throws IOException {
+        // Measured just now with a 30-day window → far from expiry.
+        writeBaselineWithWindow(baselineDir, 0.80, 1000, 30, Instant.now());
+
+        var engine = new Engine(new YamlBaselineProvider(baselineDir));
+        var result = (ProbabilisticTestResult) engine.run(empiricalTest(sampling(20)));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.PASS);
+        assertThat(result.warnings())
+                .as("a baseline well within its window must not raise an expiration caveat")
+                .noneMatch(w -> w.contains("expired") || w.contains("expires"));
     }
 
     @Test

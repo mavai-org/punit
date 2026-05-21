@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +20,8 @@ import org.javai.punit.api.spec.BaselineStatistics;
 import org.javai.punit.api.spec.PassRateStatistics;
 import org.javai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.javai.punit.api.spec.ProbabilisticTestResult;
+import org.javai.punit.verdict.ExpirationPolicy;
+import org.javai.punit.verdict.ExpirationStatus;
 
 /**
  * Exact-match baseline resolver. Looks up a baseline by
@@ -161,8 +164,9 @@ public final class BaselineResolver {
         // Surface the integrity warning (if any) for the *selected*
         // candidate only — warnings about candidates that didn't
         // influence the verdict would be noise.
-        List<String> notes = withIntegrityWarning(
-                report.notes(), enumerated, selected.get());
+        List<String> notes = withExpirationWarning(
+                withIntegrityWarning(report.notes(), enumerated, selected.get()),
+                selected.get());
         CovariateProfile baselineProfile = selected.get().covariateProfile();
         BaselineStatistics entry = selected.get().statisticsByCriterionName().get(criterionName);
         if (entry == null) {
@@ -208,6 +212,50 @@ public final class BaselineResolver {
         }
         return new BaselineLookup<>(
                 Optional.of(statisticsType.cast(entry)), baselineProfile, notes, sourceFile);
+    }
+
+    /**
+     * Append a baseline-expiration note when the selected baseline
+     * carries a validity window that is approaching or past its end.
+     * The note rides the lookup's notes channel, which the spec layer
+     * surfaces as a verdict warning. No-op when the baseline declared
+     * no window or is comfortably within it.
+     */
+    private static List<String> withExpirationWarning(
+            List<String> notes, BaselineRecord selected) {
+        if (selected.expiresInDays() <= 0) {
+            return notes;
+        }
+        ExpirationStatus status = new ExpirationPolicy(
+                selected.expiresInDays(), selected.generatedAt())
+                .evaluateAt(Instant.now());
+        if (!status.requiresWarning()) {
+            return notes;
+        }
+        List<String> combined = new ArrayList<>(notes.size() + 1);
+        combined.addAll(notes);
+        combined.add(expirationNote(selected, status));
+        return combined;
+    }
+
+    private static String expirationNote(BaselineRecord selected, ExpirationStatus status) {
+        String base = "baseline '" + selected.filename() + "' (measured "
+                + selected.generatedAt() + ", validity " + selected.expiresInDays()
+                + " days)";
+        return switch (status) {
+            case ExpirationStatus.Expired e -> base + " has expired "
+                    + e.expiredAgo().toDays() + " day(s) ago — re-run the MEASURE "
+                    + "experiment to refresh it";
+            case ExpirationStatus.ExpiringImminently s -> base + " expires imminently ("
+                    + s.remaining().toDays() + " day(s) remaining) — plan to re-run the "
+                    + "MEASURE experiment";
+            case ExpirationStatus.ExpiringSoon s -> base + " expires soon ("
+                    + s.remaining().toDays() + " day(s) remaining) — consider re-running "
+                    + "the MEASURE experiment";
+            // requiresWarning() gates the call, so Valid / NoExpiration are unreachable;
+            // fall back to the base description rather than throwing.
+            default -> base;
+        };
     }
 
     private static List<String> withIntegrityWarning(
