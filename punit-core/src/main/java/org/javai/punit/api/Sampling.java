@@ -165,6 +165,35 @@ public final class Sampling<FT, IT, OT> {
         return of(serviceContractFactory, samples, List.of(inputs));
     }
 
+    /**
+     * Factor-less form for an inline (anonymous) service contract — the
+     * contract instance is supplied directly rather than through a
+     * factory, since an inline contract takes no factors. Yields a
+     * {@code Sampling<NoFactors, IT, OT>}; pair with
+     * {@code PUnit.testing(sampling)}.
+     */
+    public static <IT, OT> Sampling<NoFactors, IT, OT> of(
+            ServiceContract<NoFactors, IT, OT> contract,
+            int samples,
+            List<IT> inputs) {
+        Objects.requireNonNull(contract, "contract");
+        return Sampling.<NoFactors, IT, OT>builder()
+                .serviceContractFactory(nf -> contract)
+                .inputs(inputs)
+                .samples(samples)
+                .build();
+    }
+
+    /** Varargs form of {@link #of(ServiceContract, int, List)}. */
+    @SafeVarargs
+    public static <IT, OT> Sampling<NoFactors, IT, OT> of(
+            ServiceContract<NoFactors, IT, OT> contract,
+            int samples,
+            IT... inputs) {
+        Objects.requireNonNull(inputs, "inputs");
+        return of(contract, samples, List.of(inputs));
+    }
+
     public Function<FT, ServiceContract<FT, IT, OT>> serviceContractFactory() {
         return serviceContractFactory;
     }
