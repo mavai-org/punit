@@ -2,6 +2,7 @@ package org.javai.punit.internal.engine.baseline;
 
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_COVARIATES;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_CRITERIA;
+import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_EXPIRES_IN_DAYS;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_FACTORS_FINGERPRINT;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_GENERATED_AT;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_INPUTS_IDENTITY;
@@ -122,6 +123,12 @@ public final class BaselineReader {
         String inputsIdentity = requireString(root, FIELD_INPUTS_IDENTITY);
         int sampleCount = requireInt(root, FIELD_SAMPLE_COUNT);
         Instant generatedAt = requireInstant(root, FIELD_GENERATED_AT);
+        // Expiration: optional. Absent → 0 (no expiration).
+        // expiresInDays is authoritative; the emitted expiresAt is a
+        // derived convenience and is not read back here.
+        int expiresInDays = root.containsKey(FIELD_EXPIRES_IN_DAYS)
+                ? requireInt(root, FIELD_EXPIRES_IN_DAYS)
+                : 0;
 
         Map<String, Object> statsMap = requireMap(root, FIELD_STATISTICS);
         Map<String, BaselineStatistics> entries = new LinkedHashMap<>();
@@ -148,7 +155,7 @@ public final class BaselineReader {
         return new BaselineRecord(
                 serviceContractId, methodName, factorsFingerprint,
                 inputsIdentity, sampleCount, generatedAt, entries, profile,
-                latencyIndicator);
+                latencyIndicator, expiresInDays);
     }
 
     /**

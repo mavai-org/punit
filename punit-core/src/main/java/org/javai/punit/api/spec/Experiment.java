@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.function.Function;
 
@@ -144,6 +145,20 @@ public final class Experiment implements Spec {
     public Kind kind() { return kind; }
     public String experimentId() { return internal.experimentId(); }
     public int samples() { return internal.samples(); }
+
+    /**
+     * The baseline validity window in days, when the measure declared
+     * one via {@code .expiresInDays(n)}. Empty for explore and
+     * optimize, and for measures that declared no expiration (or
+     * declared {@code 0}). Consumed by the baseline emitter so the
+     * window is persisted into the baseline spec.
+     */
+    public OptionalInt expiresInDays() {
+        if (internal instanceof MeasureInternal<?, ?, ?> m) {
+            return m.expiresInDays.map(OptionalInt::of).orElseGet(OptionalInt::empty);
+        }
+        return OptionalInt.empty();
+    }
 
     /**
      * Diagnostic accessor populated only after a measure experiment

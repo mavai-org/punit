@@ -112,10 +112,11 @@ public final class BaselineEmitter {
                     "MEASURE experiment recorded zero samples — nothing to baseline. "
                             + "Check the spec's sample count and budget configuration.");
         }
+        int expiresInDays = experiment.expiresInDays().orElse(0);
         BaselineRecord record = experiment.dispatch(new Spec.Dispatcher<>() {
             @Override
             public <FT, IT, OT> BaselineRecord apply(TypedSpec<FT, IT, OT> typed) {
-                return composeRecord(typed, summary, experiment.experimentId());
+                return composeRecord(typed, summary, experiment.experimentId(), expiresInDays);
             }
         });
         sink.accept(record.filename(), new BaselineWriter().toYaml(record));
@@ -125,7 +126,8 @@ public final class BaselineEmitter {
     private static <FT, IT, OT> BaselineRecord composeRecord(
             TypedSpec<FT, IT, OT> typed,
             SampleSummary<?> rawSummary,
-            String experimentId) {
+            String experimentId,
+            int expiresInDays) {
         Iterator<Configuration<FT, IT, OT>> configs = typed.configurations();
         if (!configs.hasNext()) {
             throw new IllegalStateException(
@@ -187,7 +189,8 @@ public final class BaselineEmitter {
                 Instant.now(),
                 stats,
                 profile,
-                latencyIndicator);
+                latencyIndicator,
+                expiresInDays);
     }
 
     /**

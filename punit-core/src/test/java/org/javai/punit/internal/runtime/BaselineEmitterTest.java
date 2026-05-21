@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -18,6 +20,8 @@ import org.javai.punit.api.ServiceContract;
 import org.javai.punit.api.spec.Experiment;
 import org.javai.punit.api.spec.NextFactor;
 import org.javai.punit.internal.engine.Engine;
+import org.javai.punit.internal.engine.baseline.BaselineReader;
+import org.javai.punit.internal.engine.baseline.BaselineRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -123,5 +127,73 @@ class BaselineEmitterTest {
 
         // No sample[N] keys, no anchor comments anywhere in the body.
         assertThat(yaml).doesNotContain("sample[0]", "sample[1]", "anchor:");
+    }
+
+    private static Sampling<NoFactors, Integer, String> samplingWithCriteria() {
+        return Sampling.<NoFactors, Integer, String>builder()
+                .serviceContractFactory(f -> EVENS_PASS)
+                .inputs(2, 4)   // both even → all pass
+                .samples(4)
+                .build();
+    }
+
+    @Test
+    @DisplayName("emits expiresInDays + derived expiresAt when the measure declared a "
+            + "validity window, and round-trips through BaselineReader")
+    void emitsExpirationMetadataWhenDeclared() {
+        Experiment measure = Experiment.measuring(samplingWithCriteria(), new NoFactors())
+                .experimentId("baseline-v1")
+                .expiresInDays(30)
+                .build();
+        new Engine().run(measure);
+
+        Map<String, String> sink = new LinkedHashMap<>();
+        BaselineEmitter.emit(measure, sink::put);
+        String yaml = sink.values().iterator().next();
+        Map<String, Object> root = new Yaml().load(yaml);
+
+        assertThat(root)
+                .as("a measure declaring .expiresInDays(30) must persist the validity "
+                        + "window — dropping it silently disables baseline expiration")
+                .containsEntry("expiresInDays", 30)
+                .containsKey("expiresAt");
+
+        // expiresAt is generatedAt + 30 days.
+        Instant generatedAt = Instant.parse(root.get("generatedAt").toString());
+        Instant expiresAt = Instant.parse(root.get("expiresAt").toString());
+        assertThat(expiresAt).isEqualTo(generatedAt.plus(Duration.ofDays(30)));
+
+        // Both expiration fields precede contentFingerprint, so they fall
+        // under the integrity hash — a hand-edit would be detected.
+        assertThat(yaml.indexOf("expiresInDays"))
+                .isLessThan(yaml.indexOf("contentFingerprint"));
+        assertThat(yaml.indexOf("expiresAt"))
+                .isLessThan(yaml.indexOf("contentFingerprint"));
+
+        // Round-trips back to the same window.
+        BaselineRecord parsed = new BaselineReader().parse(yaml);
+        assertThat(parsed.expiresInDays()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("omits expiresInDays / expiresAt when no validity window was declared — "
+            + "absent means no expiration, not 0")
+    void omitsExpirationMetadataWhenNotDeclared() {
+        Experiment measure = Experiment.measuring(samplingWithCriteria(), new NoFactors())
+                .experimentId("baseline-v1")
+                .build();
+        new Engine().run(measure);
+
+        Map<String, String> sink = new LinkedHashMap<>();
+        BaselineEmitter.emit(measure, sink::put);
+        String yaml = sink.values().iterator().next();
+        Map<String, Object> root = new Yaml().load(yaml);
+
+        assertThat(root)
+                .doesNotContainKey("expiresInDays")
+                .doesNotContainKey("expiresAt");
+
+        // A baseline with no window reads back as 0 (no expiration).
+        assertThat(new BaselineReader().parse(yaml).expiresInDays()).isZero();
     }
 }
