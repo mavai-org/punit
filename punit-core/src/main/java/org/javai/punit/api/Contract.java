@@ -3,12 +3,17 @@ package org.javai.punit.api;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.javai.outcome.Outcome;
 import org.javai.outcome.Outcome.Ok;
 import org.javai.punit.api.criterion.Criteria;
 import org.javai.punit.api.criterion.Criterion;
+import org.javai.punit.api.criterion.CriterionDecl;
 import org.javai.punit.api.criterion.CriterionSampleResult;
 import org.javai.punit.api.criterion.Decl;
 import org.javai.punit.api.criterion.LatencyCriterion;
@@ -80,6 +85,32 @@ public interface Contract<I, O> {
      * @return the wrapped outcome
      */
     Outcome<O> invoke(I input, TokenTracker tracker);
+
+    /**
+     * Author an <em>inline contract</em> — an anonymous, operational
+     * contract (the service call plus contractual acceptance criteria)
+     * declared at the test/experiment call site, with no named class.
+     *
+     * <p>An inline contract is exactly the operational layer this
+     * interface defines: it carries no identity, covariates, or factor
+     * record. That is why it is restricted to <strong>contractual</strong>
+     * criteria — the builder routes through {@link Criteria#meeting()}
+     * and offers no empirical path. Empirical criteria need a baseline,
+     * a baseline needs identity, and identity is precisely what the
+     * metadata layer ({@link ServiceContract}) adds. When a criterion
+     * needs an empirical baseline, graduate by lifting the inline body
+     * into a named {@code ServiceContract} class and giving it an
+     * {@code id()} — the operational body transfers verbatim.
+     *
+     * <p>The factor type is phantom — factors reach the body by closure
+     * capture, never through a method — so {@link Inline#build()}
+     * produces a {@code ServiceContract<FT, IT, OT>} for whatever
+     * {@code FT} the call site demands, and {@link Inline#sampling}
+     * binds the factor-less case directly.
+     */
+    static <IT, OT> Inline<IT, OT> inline() {
+        return new Inline<>();
+    }
 
     /**
      * Author-facing, value-form criteria declaration — returns a
@@ -318,6 +349,156 @@ public interface Contract<I, O> {
             List<CriterionSampleResult> criterionSampleResults) {
         static ClauseEvaluation empty() {
             return new ClauseEvaluation(List.of(), List.of());
+        }
+    }
+
+    /**
+     * Builder for an inline contract — opened by {@link Contract#inline()}.
+     * Accumulates the service call and a contractual criterion, then
+     * terminates with {@link #sampling} (factor-less) or {@link #build}
+     * (factored). Exposes no empirical authoring path by design.
+     */
+    final class Inline<IT, OT> {
+
+        private BiFunction<IT, TokenTracker, Outcome<OT>> invoke;
+        private CriterionDecl<OT> decl;
+        private LatencyCriterion latency;
+
+        private Inline() { }
+
+        /** The service call, returning an {@link Outcome}. */
+        public Inline<IT, OT> invoking(Function<IT, Outcome<OT>> call) {
+            Objects.requireNonNull(call, "call");
+            this.invoke = (in, tracker) -> call.apply(in);
+            return this;
+        }
+
+        /** The service call, with the per-run cost channel. */
+        public Inline<IT, OT> invoking(BiFunction<IT, TokenTracker, Outcome<OT>> call) {
+            this.invoke = Objects.requireNonNull(call, "call");
+            return this;
+        }
+
+        /** The service call, returning a bare value the framework wraps in {@code Outcome.ok}. */
+        public Inline<IT, OT> returning(Function<IT, OT> call) {
+            Objects.requireNonNull(call, "call");
+            this.invoke = (in, tracker) -> Outcome.ok(call.apply(in));
+            return this;
+        }
+
+        public Inline<IT, OT> passRate(double rate) {
+            rejectSecondCriterion();
+            this.decl = Criteria.meeting().<OT>passRate(rate);
+            return this;
+        }
+
+        public Inline<IT, OT> zeroFailures() {
+            rejectSecondCriterion();
+            this.decl = Criteria.meeting().<OT>zeroFailures();
+            return this;
+        }
+
+        public Inline<IT, OT> satisfies(String name, Function<OT, Outcome<?>> check) {
+            this.decl = requireDecl().satisfies(name, check);
+            return this;
+        }
+
+        public Inline<IT, OT> where(String name, Predicate<OT> predicate) {
+            this.decl = requireDecl().where(name, predicate);
+            return this;
+        }
+
+        public Inline<IT, OT> contractRef(ThresholdOrigin origin, String ref) {
+            this.decl = requireDecl().contractRef(origin, ref);
+            return this;
+        }
+
+        public Inline<IT, OT> latencyAtMost(PercentileKey key, Duration max) {
+            this.latency = Criteria.meeting().atMost(key, max);
+            return this;
+        }
+
+        /**
+         * Sample this inline contract — the contract-first terminal for
+         * the factor-less case. Reads "author the contract, then sample
+         * it {@code n} times over these inputs"; returns a
+         * {@code Sampling<NoFactors, IT, OT>} ready for
+         * {@code PUnit.testing(...)} / {@code PUnit.measuring(...)}.
+         *
+         * <p>For factored experiments (explore / optimize) the contract
+         * depends on the iteration's factors, so use {@link #build()}
+         * inside the {@code Sampling.of(factory, ...)} factory instead.
+         */
+        public Sampling<NoFactors, IT, OT> sampling(int samples, List<IT> inputs) {
+            return Sampling.of(this.<NoFactors>build(), samples, inputs);
+        }
+
+        /** Varargs form of {@link #sampling(int, List)}. */
+        @SafeVarargs
+        public final Sampling<NoFactors, IT, OT> sampling(int samples, IT... inputs) {
+            return Sampling.of(this.<NoFactors>build(), samples, inputs);
+        }
+
+        /** Build the anonymous contract for any {@code FT} (phantom). */
+        public <FT> ServiceContract<FT, IT, OT> build() {
+            if (invoke == null) {
+                throw new IllegalStateException(
+                        "an inline contract requires invoking(...) or returning(...)");
+            }
+            if (decl == null) {
+                throw new IllegalStateException(
+                        "an inline contract requires a criterion — call passRate(...) or zeroFailures()");
+            }
+            final BiFunction<IT, TokenTracker, Outcome<OT>> call = invoke;
+            final CriterionDecl<OT> criteria = decl;
+            final LatencyCriterion lat = latency;
+            return new ServiceContract<FT, IT, OT>() {
+                @Override
+                public Outcome<OT> invoke(IT input, TokenTracker tracker) {
+                    return call.apply(input, tracker);
+                }
+
+                @Override
+                public Criteria<OT> criteria() {
+                    return criteria;
+                }
+
+                @Override
+                public LatencyCriterion latency() {
+                    return lat != null ? lat : LatencyCriterion.none();
+                }
+
+                @Override
+                public String id() {
+                    return "inline";
+                }
+            };
+        }
+
+        private CriterionDecl<OT> requireDecl() {
+            if (decl == null) {
+                throw new IllegalStateException(
+                        "declare the criterion kind first — call passRate(...) or zeroFailures() "
+                                + "before satisfies/where/contractRef");
+            }
+            return decl;
+        }
+
+        /**
+         * An inline contract declares a <em>single</em> criterion (with
+         * any number of postconditions). Multiple independently-thresholded
+         * criteria — each with its own pass rate and per-criterion verdict
+         * — are a graduation trigger: declare them in a named
+         * {@link ServiceContract} via {@code Criteria.of(...)}.
+         */
+        private void rejectSecondCriterion() {
+            if (decl != null) {
+                throw new IllegalStateException(
+                        "an inline contract declares a single criterion (with any number of "
+                                + "postconditions via satisfies/where). For multiple "
+                                + "independently-thresholded criteria, graduate to a named "
+                                + "ServiceContract and declare them with Criteria.of(...).");
+            }
         }
     }
 }
