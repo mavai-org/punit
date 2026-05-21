@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-21
+
+> **Highlights:** **baseline expiration** — measured baselines can now
+> carry a validity window that surfaces as a verdict caveat, with a
+> configurable fail-on-expired policy — and the probabilistic-test
+> **inline contract** (`Contract.inline()`), which authors a
+> single-artefact contractual test with no separate `ServiceContract`
+> class. Also adds expected-value matching and renames "zero tolerance"
+> to "zero failures".
+
+### Added
+
+- **Inline contract authoring surface (`Contract.inline()`).** Declares
+  a contractual probabilistic test in one method — the service call
+  (`invoking` / `returning`), a single criterion (`passRate` /
+  `zeroFailures`, refined with `satisfies` / `where` / `contractRef` /
+  `latencyAtMost`), and a contract-first `sampling(n, inputs)` terminal —
+  with no named `ServiceContract` class. Restricted by design to
+  contractual criteria (no empirical path — the absence is enforced at
+  compile time) and to a single criterion. Empirical baselines,
+  covariates, configurable factors, reuse, and multiple
+  independently-thresholded criteria remain the province of a named
+  `ServiceContract`, which the inline body lifts into verbatim; `build()`
+  yields a `ServiceContract` for the factored explore / optimize path.
+  The user-guide quick start now opens with this form.
+- **Baseline expiration.** A measured baseline can declare a validity
+  window via `MeasureBuilder.expiresInDays(n)`, persisted into the
+  `punit-baseline-3` schema. An expired (or soon-to-expire) baseline
+  surfaces as a verdict caveat on the typed path
+  (`WarningLevel.APPROACHING` / `EXPIRED`), and a configurable policy can
+  escalate an expired baseline to a failing verdict.
+- **Expected-value matching.** Inputs implementing `Expected<O>` can be
+  matched against produced outputs via `ValueMatcher` and the
+  `.matchedBy(...)` / `.matchedByEquality()` criterion shape.
+
+### Changed
+
+- **Terminology: "zero tolerance" → "zero failures".** The
+  any-failure-fails criterion and its surrounding prose and identifiers
+  now use "zero failures" consistently (`zeroFailures()`).
+- Removed redundant attribution-licensing references left over from the
+  Apache 2.0 relicense.
+
 ## [0.8.0] - 2026-05-20
 
 > **🎯 Stable release.** Graduates the 0.7.0-alpha series straight
