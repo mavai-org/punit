@@ -160,18 +160,24 @@ public final class BaselineResolver {
                     Optional.empty(), CovariateProfile.empty(), report.notes(),
                     Optional.empty());
         }
-        Optional<String> sourceFile = Optional.of(selected.get().filename());
+        BaselineRecord rec = selected.get();
+        Optional<String> sourceFile = Optional.of(rec.filename());
+        // Evaluate the baseline's validity window once: the same status
+        // drives both the human note (warning channel) and the
+        // structured `expired` flag the fail-on-expired policy reads.
+        ExpirationStatus expirationStatus = expirationStatusOf(rec);
+        boolean expired = expirationStatus != null && expirationStatus.isExpired();
         // Surface the integrity warning (if any) for the *selected*
         // candidate only — warnings about candidates that didn't
         // influence the verdict would be noise.
-        List<String> notes = withExpirationWarning(
-                withIntegrityWarning(report.notes(), enumerated, selected.get()),
-                selected.get());
-        CovariateProfile baselineProfile = selected.get().covariateProfile();
-        BaselineStatistics entry = selected.get().statisticsByCriterionName().get(criterionName);
+        List<String> notes = withExpirationNote(
+                withIntegrityWarning(report.notes(), enumerated, rec),
+                rec, expirationStatus);
+        CovariateProfile baselineProfile = rec.covariateProfile();
+        BaselineStatistics entry = rec.statisticsByCriterionName().get(criterionName);
         if (entry == null) {
             return new BaselineLookup<>(
-                    Optional.empty(), baselineProfile, notes, sourceFile);
+                    Optional.empty(), baselineProfile, notes, sourceFile, expired);
         }
         // Backward-compat unwrap: callers that still request
         // PassRateStatistics directly (legacy tests, pinned-baseline
@@ -185,12 +191,13 @@ public final class BaselineResolver {
             Map<String, PassRateStatistics> byCriterion = perCriterion.byCriterion();
             if (byCriterion.isEmpty()) {
                 return new BaselineLookup<>(
-                        Optional.empty(), baselineProfile, notes, sourceFile);
+                        Optional.empty(), baselineProfile, notes, sourceFile, expired);
             }
             if (byCriterion.size() == 1) {
                 PassRateStatistics only = byCriterion.values().iterator().next();
                 return new BaselineLookup<>(
-                        Optional.of(statisticsType.cast(only)), baselineProfile, notes, sourceFile);
+                        Optional.of(statisticsType.cast(only)), baselineProfile, notes,
+                        sourceFile, expired);
             }
             // K>1 + legacy PassRateStatistics request — return empty
             // with a note. Production callers now request
@@ -200,7 +207,7 @@ public final class BaselineResolver {
                     + ") cannot be unwrapped to a single PassRateStatistics — "
                     + "callers should request PerCriterionPassRateStatistics");
             return new BaselineLookup<>(
-                    Optional.empty(), baselineProfile, notesWithNote, sourceFile);
+                    Optional.empty(), baselineProfile, notesWithNote, sourceFile, expired);
         }
         if (!statisticsType.isInstance(entry)) {
             throw new IllegalStateException(
@@ -211,25 +218,32 @@ public final class BaselineResolver {
                             + " — write-side and read-side criterion kinds disagree");
         }
         return new BaselineLookup<>(
-                Optional.of(statisticsType.cast(entry)), baselineProfile, notes, sourceFile);
+                Optional.of(statisticsType.cast(entry)), baselineProfile, notes,
+                sourceFile, expired);
     }
 
     /**
-     * Append a baseline-expiration note when the selected baseline
-     * carries a validity window that is approaching or past its end.
-     * The note rides the lookup's notes channel, which the spec layer
-     * surfaces as a verdict warning. No-op when the baseline declared
-     * no window or is comfortably within it.
+     * Evaluate the selected baseline's validity window, or {@code null}
+     * when it declared none ({@code expiresInDays <= 0}).
      */
-    private static List<String> withExpirationWarning(
-            List<String> notes, BaselineRecord selected) {
+    private static ExpirationStatus expirationStatusOf(BaselineRecord selected) {
         if (selected.expiresInDays() <= 0) {
-            return notes;
+            return null;
         }
-        ExpirationStatus status = new ExpirationPolicy(
-                selected.expiresInDays(), selected.generatedAt())
+        return new ExpirationPolicy(selected.expiresInDays(), selected.generatedAt())
                 .evaluateAt(Instant.now());
-        if (!status.requiresWarning()) {
+    }
+
+    /**
+     * Append a baseline-expiration note when the evaluated status calls
+     * for a warning (approaching or expired). The note rides the
+     * lookup's notes channel, which the spec layer surfaces as a
+     * verdict caveat. No-op when there is no window or the window is
+     * comfortably open.
+     */
+    private static List<String> withExpirationNote(
+            List<String> notes, BaselineRecord selected, ExpirationStatus status) {
+        if (status == null || !status.requiresWarning()) {
             return notes;
         }
         List<String> combined = new ArrayList<>(notes.size() + 1);

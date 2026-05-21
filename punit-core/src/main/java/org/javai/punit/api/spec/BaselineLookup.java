@@ -42,12 +42,20 @@ import org.javai.punit.api.covariate.CovariateProfile;
  *                         candidate matched; surfaces to verdict XML's
  *                         {@code <provenance spec-filename>} for audit
  *                         traceability. Empty otherwise.
+ * @param expired          whether the matched baseline's validity
+ *                         window (if any) has elapsed. {@code false}
+ *                         when no baseline matched, the baseline
+ *                         declared no window, or the window is still
+ *                         open. The fail-on-expired policy reads this
+ *                         structured flag rather than re-parsing the
+ *                         human note appended to {@link #notes()}.
  */
 public record BaselineLookup<S extends BaselineStatistics>(
         Optional<S> selected,
         CovariateProfile baselineProfile,
         List<String> notes,
-        Optional<String> sourceFile) {
+        Optional<String> sourceFile,
+        boolean expired) {
 
     public BaselineLookup {
         Objects.requireNonNull(selected, "selected");
@@ -58,14 +66,28 @@ public record BaselineLookup<S extends BaselineStatistics>(
     }
 
     /**
+     * Convenience constructor defaulting {@link #expired()} to
+     * {@code false} — for callers that don't evaluate expiration
+     * (the resolver sets it explicitly on the selected path).
+     */
+    public BaselineLookup(
+            Optional<S> selected,
+            CovariateProfile baselineProfile,
+            List<String> notes,
+            Optional<String> sourceFile) {
+        this(selected, baselineProfile, notes, sourceFile, false);
+    }
+
+    /**
      * Backward-compatible constructor that omits {@link #sourceFile()}.
-     * Defaults to {@link Optional#empty()}.
+     * Defaults to {@link Optional#empty()} and {@link #expired()} to
+     * {@code false}.
      */
     public BaselineLookup(
             Optional<S> selected,
             CovariateProfile baselineProfile,
             List<String> notes) {
-        this(selected, baselineProfile, notes, Optional.empty());
+        this(selected, baselineProfile, notes, Optional.empty(), false);
     }
 
     /**
