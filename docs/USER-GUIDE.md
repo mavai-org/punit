@@ -128,8 +128,47 @@ import static org.javai.punit.api.ThresholdOrigin.*;       // SLA, SLO, POLICY, 
 import static org.javai.punit.api.PercentileKey.*;         // P50, P90, P95, P99
 ```
 
-**A service contract** declares what the framework is testing — the service
-call, and the criteria its output must satisfy:
+**The smallest test.** A probabilistic test can be a single method.
+Declare the service call and the bar it must clear *inline*, then say how
+many times to sample it:
+
+```java
+@ProbabilisticTest
+void apiReturnsJson() {
+    LlmClient llm = LlmClient.resolve();
+    PUnit.testing(
+            Contract.<String, String>inline()
+                    .invoking(prompt -> {
+                        ChatResponse r = llm.chat(prompt);
+                        return r.content() == null
+                                ? Outcome.fail("empty", "LLM returned no content")
+                                : Outcome.ok(r.content());
+                    })
+                    .passRate(0.95)
+                    .satisfies("parses as JSON", s -> isValidJson(s)
+                            ? Outcome.ok()
+                            : Outcome.fail("not-json", "did not parse: " + truncate(s)))
+                    .sampling(100, PROMPTS))
+            .assertPasses();
+}
+```
+
+That is a complete probabilistic test. It runs the call 100 times over
+`PROMPTS`, counts how many parse as JSON, and applies the Wilson-95%
+lower bound to the observed rate; it passes if the bound clears 0.95.
+One artefact, no separate class, none of the "contract" vocabulary yet —
+just **the call, the bar, and the sample size**. `Contract.inline()`
+reads top-to-bottom: the service call (`invoking`), the target
+(`passRate`), the per-sample check (`satisfies`), then `sampling(...)`.
+
+**Factoring the contract out.** The inline form fits a service held to a
+fixed, *normative* target — a number you assert from an SLA or a policy.
+The moment you want to **reuse** that definition across several tests,
+sweep it in an experiment, or derive its threshold from a **measured
+baseline** instead of asserting one, you lift the same body into a named
+`ServiceContract`. The service call and the criteria transfer almost
+verbatim — the criteria simply gains the `meeting()` opener and the class
+gains an `id()`:
 
 ```java
 public final class JsonResponseServiceContract
@@ -199,10 +238,13 @@ That is the whole pattern. The rest of this guide unpacks it.
 
 ## Part 1: The Service Contract — the shared correctness target
 
-Before any test, experiment, or sentinel can run, an author writes one
-class: the `ServiceContract`. It is the single shared definition of the
+Beyond the single inline test shown in the quick start, the shared unit
+every test, experiment, and sentinel is built on is one class: the
+`ServiceContract`. It is the single shared definition of the
 service-under-test that every probabilistic test, every experiment, and
-every sentinel run consults. A baseline measured against
+every sentinel run consults — and the artefact the inline form graduates
+into the moment a definition needs to be reused, swept in an experiment,
+or compared against a measured baseline. A baseline measured against
 `ShoppingBasketServiceContract` and a regression test running against
 `ShoppingBasketServiceContract` cannot drift onto different definitions of
 "shopping basket".
