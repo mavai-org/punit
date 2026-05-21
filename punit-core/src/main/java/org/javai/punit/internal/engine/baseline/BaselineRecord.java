@@ -38,6 +38,11 @@ import org.javai.punit.api.spec.BaselineStatistics;
  *        Part of the baseline's identity — a baseline measured under
  *        one profile must not silently match a test running under a
  *        different profile.
+ * @param expiresInDays       the baseline validity window in days, or
+ *        {@code 0} for no expiration. When positive, the measure
+ *        declared {@code .expiresInDays(n)}; the writer emits it and the
+ *        derived {@code expiresAt} into the baseline so a paired test can
+ *        evaluate staleness.
  */
 public record BaselineRecord(
         String serviceContractId,
@@ -48,7 +53,8 @@ public record BaselineRecord(
         Instant generatedAt,
         Map<String, BaselineStatistics> statisticsByCriterionName,
         CovariateProfile covariateProfile,
-        LatencyIndicator latencyIndicator) {
+        LatencyIndicator latencyIndicator,
+        int expiresInDays) {
 
     public BaselineRecord {
         Objects.requireNonNull(serviceContractId, "serviceContractId");
@@ -72,6 +78,10 @@ public record BaselineRecord(
             throw new IllegalArgumentException(
                     "sampleCount must be non-negative, got " + sampleCount);
         }
+        if (expiresInDays < 0) {
+            throw new IllegalArgumentException(
+                    "expiresInDays must be non-negative (0 = no expiration), got " + expiresInDays);
+        }
         if (statisticsByCriterionName.isEmpty()) {
             throw new IllegalArgumentException(
                     "statisticsByCriterionName must not be empty — a baseline with no "
@@ -81,8 +91,29 @@ public record BaselineRecord(
     }
 
     /**
+     * Convenience constructor matching the pre-expiration canonical
+     * signature; defaults {@link #expiresInDays()} to {@code 0}
+     * (no expiration).
+     */
+    public BaselineRecord(
+            String serviceContractId,
+            String methodName,
+            String factorsFingerprint,
+            String inputsIdentity,
+            int sampleCount,
+            Instant generatedAt,
+            Map<String, BaselineStatistics> statisticsByCriterionName,
+            CovariateProfile covariateProfile,
+            LatencyIndicator latencyIndicator) {
+        this(serviceContractId, methodName, factorsFingerprint, inputsIdentity,
+                sampleCount, generatedAt, statisticsByCriterionName,
+                covariateProfile, latencyIndicator, 0);
+    }
+
+    /**
      * Backward-compatible 8-arg constructor that defaults
-     * {@link #latencyIndicator()} to {@link LatencyIndicator#empty()}.
+     * {@link #latencyIndicator()} to {@link LatencyIndicator#empty()}
+     * and {@link #expiresInDays()} to {@code 0}.
      */
     public BaselineRecord(
             String serviceContractId,
@@ -95,15 +126,15 @@ public record BaselineRecord(
             CovariateProfile covariateProfile) {
         this(serviceContractId, methodName, factorsFingerprint, inputsIdentity,
                 sampleCount, generatedAt, statisticsByCriterionName,
-                covariateProfile, LatencyIndicator.empty());
+                covariateProfile, LatencyIndicator.empty(), 0);
     }
 
     /**
      * Convenience constructor for callers that don't carry a covariate
      * profile (covariate-insensitive baselines, tests that don't
      * exercise covariate resolution). Equivalent to the canonical
-     * constructor with {@link CovariateProfile#empty()} and
-     * {@link LatencyIndicator#empty()}.
+     * constructor with {@link CovariateProfile#empty()},
+     * {@link LatencyIndicator#empty()}, and no expiration.
      */
     public BaselineRecord(
             String serviceContractId,
@@ -115,7 +146,7 @@ public record BaselineRecord(
             Map<String, BaselineStatistics> statisticsByCriterionName) {
         this(serviceContractId, methodName, factorsFingerprint, inputsIdentity,
                 sampleCount, generatedAt, statisticsByCriterionName,
-                CovariateProfile.empty(), LatencyIndicator.empty());
+                CovariateProfile.empty(), LatencyIndicator.empty(), 0);
     }
 
     /**

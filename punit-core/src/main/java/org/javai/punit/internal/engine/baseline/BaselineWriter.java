@@ -3,6 +3,8 @@ package org.javai.punit.internal.engine.baseline;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.CRITERION_BERNOULLI_PASS_RATE;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.CRITERION_PERCENTILE_LATENCY;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_COVARIATES;
+import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_EXPIRES_AT;
+import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_EXPIRES_IN_DAYS;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_FACTORS_FINGERPRINT;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_GENERATED_AT;
 import static org.javai.punit.internal.engine.baseline.BaselineSchema.FIELD_INPUTS_IDENTITY;
@@ -99,6 +101,18 @@ public final class BaselineWriter {
         root.put(FIELD_INPUTS_IDENTITY, record.inputsIdentity());
         root.put(FIELD_SAMPLE_COUNT, record.sampleCount());
         root.put(FIELD_GENERATED_AT, DateTimeFormatter.ISO_INSTANT.format(record.generatedAt()));
+
+        // Baseline expiration baseline expiration: emit only when a window was
+        // declared. expiresInDays is authoritative; expiresAt is the
+        // derived generatedAt + window, written for human readers and
+        // recomputed (not trusted) on load. Positioned before the
+        // appended contentFingerprint so both fall under the integrity
+        // hash.
+        if (record.expiresInDays() > 0) {
+            root.put(FIELD_EXPIRES_IN_DAYS, record.expiresInDays());
+            root.put(FIELD_EXPIRES_AT, DateTimeFormatter.ISO_INSTANT.format(
+                    record.generatedAt().plus(Duration.ofDays(record.expiresInDays()))));
+        }
 
         // The legacy criterion-named "percentile-latency" entry is
         // no longer emitted to YAML — the canonical location for

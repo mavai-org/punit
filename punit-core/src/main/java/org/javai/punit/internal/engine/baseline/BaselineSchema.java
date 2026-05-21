@@ -40,6 +40,13 @@ final class BaselineSchema {
     static final String FIELD_STATISTICS = "statistics";
     static final String FIELD_COVARIATES = "covariates";
 
+    // Baseline expiration. Both omitted entirely when there is
+    // no expiration window (expiresInDays == 0). expiresInDays is the
+    // authoritative input; expiresAt is the derived (generatedAt +
+    // expiresInDays) convenience the reader recomputes rather than trusts.
+    static final String FIELD_EXPIRES_IN_DAYS = "expiresInDays";
+    static final String FIELD_EXPIRES_AT = "expiresAt";
+
     // PassRate / PassRateStatistics
     static final String FIELD_OBSERVED_PASS_RATE = "observedPassRate";
 
