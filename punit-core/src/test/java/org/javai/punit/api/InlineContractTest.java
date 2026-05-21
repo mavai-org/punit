@@ -50,7 +50,7 @@ class InlineContractTest {
     @DisplayName("a met pass rate yields PASS")
     void metPassRatePasses() {
         ServiceContract<NoFactors, String, Integer> contract =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .passRate(0.95)
                         .where("even length", n -> n % 2 == 0)
@@ -62,7 +62,7 @@ class InlineContractTest {
     @DisplayName("a missed pass rate yields FAIL")
     void missedPassRateFails() {
         ServiceContract<NoFactors, String, Integer> contract =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .passRate(0.95)
                         .where("even length", n -> n % 2 == 0)
@@ -74,7 +74,7 @@ class InlineContractTest {
     @DisplayName("invoking(...) Outcome form with a satisfies(...) postcondition and contract reference")
     void invokingOutcomeFormWithSatisfies() {
         ServiceContract<NoFactors, String, Integer> contract =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .invoking(in -> Outcome.ok(in.length()))
                         .passRate(0.95)
                         .contractRef(SLA, "Length SLA v1 §1")
@@ -88,7 +88,7 @@ class InlineContractTest {
     @DisplayName("invoking(...) with the cost channel records tokens and passes")
     void invokingWithCostChannel() {
         ServiceContract<NoFactors, String, Integer> contract =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .invoking((in, tracker) -> {
                             tracker.recordTokens(1);
                             return Outcome.ok(in.length());
@@ -102,7 +102,7 @@ class InlineContractTest {
     @DisplayName("zeroFailures fails on any failing sample, passes on none")
     void zeroFailures() {
         ServiceContract<NoFactors, String, Integer> failing =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .zeroFailures()
                         .where("even length", n -> n % 2 == 0)
@@ -110,7 +110,7 @@ class InlineContractTest {
         assertThat(verdict(failing, MIXED_INPUTS)).isEqualTo(Verdict.FAIL);
 
         ServiceContract<NoFactors, String, Integer> clean =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .zeroFailures()
                         .where("even length", n -> n % 2 == 0)
@@ -122,7 +122,7 @@ class InlineContractTest {
     @DisplayName("an inline latency ceiling participates in the verdict")
     void inlineLatencyParticipates() {
         ServiceContract<NoFactors, String, Integer> contract =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .passRate(0.95)
                         .where("even length", n -> n % 2 == 0)
@@ -135,7 +135,7 @@ class InlineContractTest {
     @DisplayName("inline contract and an equivalent named contract produce the same verdict")
     void inlineMatchesNamedContract() {
         ServiceContract<NoFactors, String, Integer> inline =
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .returning(String::length)
                         .passRate(0.95)
                         .contractRef(SLA, "Length SLA v1 §1")
@@ -171,15 +171,29 @@ class InlineContractTest {
     }
 
     @Test
+    @DisplayName("the contract-first sampling(...) terminal yields the same verdict as Sampling.of(build(), ...)")
+    void samplingTerminalMatchesExplicitBinding() {
+        Sampling<NoFactors, String, Integer> viaTerminal =
+                Contract.<String, Integer>inline()
+                        .returning(String::length)
+                        .passRate(0.95)
+                        .where("even length", n -> n % 2 == 0)
+                        .sampling(60, EVEN_INPUTS);
+        ProbabilisticTest spec = ProbabilisticTest.testing(viaTerminal, NoFactors.INSTANCE).build();
+        Verdict viaTerminalVerdict = ((ProbabilisticTestResult) new Engine().run(spec)).verdict();
+        assertThat(viaTerminalVerdict).isEqualTo(Verdict.PASS);
+    }
+
+    @Test
     @DisplayName("the builder exposes no empirical authoring path")
     void noEmpiricalPath() {
-        Set<String> methodNames = Arrays.stream(InlineContract.Builder.class.getMethods())
+        Set<String> methodNames = Arrays.stream(Contract.Inline.class.getMethods())
                 .map(Method::getName)
                 .collect(Collectors.toSet());
         assertThat(methodNames).contains("passRate", "zeroFailures");
         assertThat(methodNames).doesNotContain("empirical");
 
-        boolean referencesEmpiricalType = Arrays.stream(InlineContract.Builder.class.getMethods())
+        boolean referencesEmpiricalType = Arrays.stream(Contract.Inline.class.getMethods())
                 .flatMap(m -> Stream.concat(
                         Stream.of(m.getReturnType()), Arrays.stream(m.getParameterTypes())))
                 .anyMatch(t -> t.getName().contains("Empirical"));
@@ -192,7 +206,7 @@ class InlineContractTest {
     @DisplayName("inline contracts bind to measure, explore, and optimize specs")
     void bindsAcrossExperimentKinds() {
         Sampling<NoFactors, String, Integer> measureSampling = Sampling.of(
-                InlineContract.<String, Integer>of()
+                Contract.<String, Integer>inline()
                         .invoking(in -> Outcome.ok(in.length()))
                         .passRate(0.95)
                         .build(),
@@ -201,7 +215,7 @@ class InlineContractTest {
                 .isNotNull();
 
         Sampling<Tuning, String, Integer> factoredSampling = Sampling.of(
-                (Tuning f) -> InlineContract.<String, Integer>of()
+                (Tuning f) -> Contract.<String, Integer>inline()
                         .invoking(in -> Outcome.ok(in.length() + f.bump()))
                         .passRate(0.95)
                         .build(),
