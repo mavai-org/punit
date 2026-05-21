@@ -1,6 +1,7 @@
 package org.javai.punit.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.javai.punit.api.ThresholdOrigin.SLA;
 import static org.javai.punit.api.criterion.Criteria.meeting;
 
@@ -182,6 +183,17 @@ class InlineContractTest {
         ProbabilisticTest spec = ProbabilisticTest.testing(viaTerminal, NoFactors.INSTANCE).build();
         Verdict viaTerminalVerdict = ((ProbabilisticTestResult) new Engine().run(spec)).verdict();
         assertThat(viaTerminalVerdict).isEqualTo(Verdict.PASS);
+    }
+
+    @Test
+    @DisplayName("declaring a second criterion is rejected — inline is single-criterion")
+    void rejectsSecondCriterion() {
+        Contract.Inline<String, Integer> builder = Contract.<String, Integer>inline()
+                .returning(String::length)
+                .passRate(0.95);
+        assertThatThrownBy(builder::zeroFailures)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("single criterion");
     }
 
     @Test

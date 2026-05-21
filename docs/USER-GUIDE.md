@@ -162,10 +162,12 @@ reads top-to-bottom: the service call (`invoking`), the target
 (`passRate`), the per-sample check (`satisfies`), then `sampling(...)`.
 
 **Factoring the contract out.** The inline form fits a service held to a
-fixed, *normative* target — a number you assert from an SLA or a policy.
-The moment you want to **reuse** that definition across several tests,
-sweep it in an experiment, or derive its threshold from a **measured
-baseline** instead of asserting one, you lift the same body into a named
+fixed, *normative* target with a **single** criterion (which may carry
+several postconditions, ANDed together). The moment you want to **reuse**
+that definition across several tests, sweep it in an experiment, derive
+its threshold from a **measured baseline** instead of asserting one, or
+declare **several independently-thresholded criteria** (each with its own
+pass rate and verdict), you lift the same body into a named
 `ServiceContract`. The service call and the criteria transfer almost
 verbatim — the criteria simply gains the `meeting()` opener and the class
 gains an `id()`:

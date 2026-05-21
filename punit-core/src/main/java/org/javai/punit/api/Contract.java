@@ -387,11 +387,13 @@ public interface Contract<I, O> {
         }
 
         public Inline<IT, OT> passRate(double rate) {
+            rejectSecondCriterion();
             this.decl = Criteria.meeting().<OT>passRate(rate);
             return this;
         }
 
         public Inline<IT, OT> zeroFailures() {
+            rejectSecondCriterion();
             this.decl = Criteria.meeting().<OT>zeroFailures();
             return this;
         }
@@ -480,6 +482,23 @@ public interface Contract<I, O> {
                                 + "before satisfies/where/contractRef");
             }
             return decl;
+        }
+
+        /**
+         * An inline contract declares a <em>single</em> criterion (with
+         * any number of postconditions). Multiple independently-thresholded
+         * criteria — each with its own pass rate and per-criterion verdict
+         * — are a graduation trigger: declare them in a named
+         * {@link ServiceContract} via {@code Criteria.of(...)}.
+         */
+        private void rejectSecondCriterion() {
+            if (decl != null) {
+                throw new IllegalStateException(
+                        "an inline contract declares a single criterion (with any number of "
+                                + "postconditions via satisfies/where). For multiple "
+                                + "independently-thresholded criteria, graduate to a named "
+                                + "ServiceContract and declare them with Criteria.of(...).");
+            }
         }
     }
 }
