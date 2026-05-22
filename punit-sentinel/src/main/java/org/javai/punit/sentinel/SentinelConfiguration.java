@@ -17,7 +17,7 @@ import org.javai.punit.verdict.VerdictSink;
  * <pre>{@code
  * SentinelConfiguration config = SentinelConfiguration.builder()
  *     .sentinelClass(ShoppingBasketReliability.class)
- *     .verdictSink(new WebhookVerdictSink("https://alerts.example.com/punit"))
+ *     .verdictSink(WebhookVerdictSink.builder("https://alerts.example.com/punit").build())
  *     .environmentMetadata(EnvironmentMetadata.fromEnvironment())
  *     .build();
  * }</pre>
