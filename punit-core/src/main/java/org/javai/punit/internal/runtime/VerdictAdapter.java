@@ -197,7 +197,12 @@ public final class VerdictAdapter {
                     v.verdict(),
                     counts.pass(),
                     counts.fail(),
-                    counts.inconclusive(),
+                    // No per-trial inconclusive any more — a failed
+                    // transform / no-value trial is a FAIL. The XML
+                    // schema's per-trial inconclusive count is retained
+                    // for cross-framework compatibility and is always
+                    // zero here.
+                    0,
                     v.observed(),
                     v.threshold()));
         }

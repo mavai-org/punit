@@ -160,7 +160,8 @@ public final class OptimizeOutputWriter {
                 row.put("observedPassRate", c.observedPassRate());
                 row.put("pass", c.pass());
                 row.put("fail", c.fail());
-                row.put("inconclusive", c.inconclusive());
+                row.put("conditionFail", c.conditionFail());
+                row.put("transformFail", c.transformFail());
                 criteria.put(c.criterionId(), row);
             }
             block.put("criteria", criteria);

@@ -289,11 +289,11 @@ public final class CriterionDecl<O> implements Decl<O> {
      *       postcondition chain runs against {@code t}; criterion
      *       sample is PASS / FAIL based on the chain.</li>
      *   <li>Transform returns {@link Outcome.Fail Fail(...)} or throws
-     *       — criterion sample is
-     *       {@link CriterionSampleOutcome#INCONCLUSIVE INCONCLUSIVE};
-     *       the postcondition chain is skipped. The failure's
-     *       symbolic name and message flow through to the per-sample
-     *       record for diagnostics.</li>
+     *       — criterion sample is a
+     *       {@link CriterionSampleOutcome#FAIL FAIL} carrying the
+     *       failing reason; the postcondition chain is skipped. The
+     *       failure's symbolic name and message flow through to the
+     *       per-sample record for diagnostics.</li>
      * </ul>
      *
      * <p>Posture stays attached to the outer (this) decl; postconditions

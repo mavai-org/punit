@@ -294,7 +294,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                             auto.criterionId(),
                             summary.successes(),
                             summary.failures(),
-                            auto.inconclusive()));
+                            auto.transformFail()));
         }
         if (methodologyCriteria.isEmpty()) {
             // Run produced no methodology-criterion sample counts
@@ -356,7 +356,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         boolean isK1 = methodologyCriteria.size() == 1;
 
         for (CriterionSampleCounts counts : methodologyCriteria) {
-            int criterionTotal = counts.pass() + counts.fail() + counts.inconclusive();
+            int criterionTotal = counts.pass() + counts.fail();
             double observed = criterionTotal == 0
                     ? 0.0
                     : (double) counts.pass() / (double) criterionTotal;
@@ -418,17 +418,18 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                 Verdict pv;
                 if (criterionTotal == 0) {
                     pv = Verdict.INCONCLUSIVE;
-                } else if (counts.fail() == 0 && counts.inconclusive() == 0) {
+                } else if (counts.fail() == 0) {
                     pv = Verdict.PASS;
                 } else {
                     pv = Verdict.FAIL;
                 }
                 perCriterionVerdicts.add(pv);
                 perCriterionExplanations.add(String.format(
-                        "%s: zero-failures (origin=%s); failures=%d, inconclusive=%d over %d samples → %s",
+                        "%s: zero-failures (origin=%s); failures=%d "
+                                + "(of which transform/no-value=%d) over %d samples → %s",
                         counts.criterionId(),
                         ztOrigin,
-                        counts.fail(), counts.inconclusive(), criterionTotal, pv));
+                        counts.fail(), counts.transformFail(), criterionTotal, pv));
                 continue;
             }
 
@@ -518,7 +519,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         Map<String, Object> detail = new LinkedHashMap<>();
         if (methodologyCriteria.size() == 1) {
             CriterionSampleCounts only = methodologyCriteria.get(0);
-            int onlyTotal = only.pass() + only.fail() + only.inconclusive();
+            int onlyTotal = only.pass() + only.fail();
             double observed = observedByCriterion.get(only.criterionId());
             double t = thresholdsByCriterion.get(only.criterionId());
             detail.put("observed", observed);
@@ -551,7 +552,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         String explanation;
         if (methodologyCriteria.size() == 1) {
             CriterionSampleCounts only = methodologyCriteria.get(0);
-            int onlyTotal = only.pass() + only.fail() + only.inconclusive();
+            int onlyTotal = only.pass() + only.fail();
             double observed = observedByCriterion.get(only.criterionId());
             double t = thresholdsByCriterion.get(only.criterionId());
             if (isEmpirical()) {

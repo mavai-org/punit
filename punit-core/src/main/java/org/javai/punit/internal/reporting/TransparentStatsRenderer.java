@@ -325,8 +325,9 @@ public final class TransparentStatsRenderer {
             sb.append("    ").append(row.criterionId())
                     .append(" → ").append(row.verdict()).append('\n');
             sb.append(label("Counts:", String.format(Locale.ROOT,
-                    "pass=%d, fail=%d, inconclusive=%d, total=%d",
-                    c.pass(), c.fail(), c.inconclusive(), c.total())));
+                    "pass=%d, fail=%d (condition=%d, transform=%d), total=%d",
+                    c.pass(), c.fail(), c.conditionFail(), c.transformFail(),
+                    c.total())));
             sb.append(label("Observed rate:", observedStr));
             sb.append(label("Threshold:", thresholdStr));
         }

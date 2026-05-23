@@ -150,7 +150,8 @@ public final class ExploreOutputWriter {
                 row.put("observedPassRate", counts.observedPassRate());
                 row.put("pass", counts.pass());
                 row.put("fail", counts.fail());
-                row.put("inconclusive", counts.inconclusive());
+                row.put("conditionFail", counts.conditionFail());
+                row.put("transformFail", counts.transformFail());
                 criteria.put(counts.criterionId(), row);
             }
             block.put("criteria", criteria);

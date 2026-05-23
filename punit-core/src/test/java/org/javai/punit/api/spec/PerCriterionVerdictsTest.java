@@ -67,9 +67,10 @@ class PerCriterionVerdictsTest {
     }
 
     @Test
-    @DisplayName("inconclusive samples lower the marginal observed rate")
-    void inconclusiveLowersObservedRate() {
-        // 80 PASS, 10 FAIL, 10 INCONCLUSIVE — marginal denominator 100, observed 0.80.
+    @DisplayName("transform-failure samples count in the denominator as fails")
+    void transformFailureSamplesCountAsFails() {
+        // 80 PASS, 10 condition-fail, 10 transform-fail — denominator
+        // 100, observed 0.80. Both kinds of fail count as a non-pass.
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.85)),
                 List.of(new CriterionSampleCounts("crit", 80, 10, 10)));

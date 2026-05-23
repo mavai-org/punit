@@ -16,9 +16,10 @@ import java.util.Optional;
  * (verdict path, report, sentinel) needs about the criterion's
  * behaviour on a sample rides on the returned
  * {@link CriterionSampleResult} — per-postcondition pass/fail
- * details, transform-failure detail when the outcome is
- * {@link CriterionSampleOutcome#INCONCLUSIVE}, and any other
- * diagnostic content the implementation chooses to carry.
+ * details, the transform-failure reason when the trial is a
+ * {@link CriterionSampleOutcome#FAIL} produced by a failed
+ * transform, and any other diagnostic content the implementation
+ * chooses to carry.
  *
  * <h2>Authoring</h2>
  *
