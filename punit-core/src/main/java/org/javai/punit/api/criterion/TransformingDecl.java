@@ -22,11 +22,12 @@ import org.javai.punit.api.PostconditionCheck;
  * is the transformed value type the postconditions see).
  *
  * <p>Transform failure ({@link Outcome.Fail}) or a thrown exception
- * classifies the criterion's per-sample outcome as
- * {@link CriterionSampleOutcome#INCONCLUSIVE INCONCLUSIVE} —
- * <em>distinct</em> from FAIL. The postcondition chain is not
- * evaluated; the parse / projection failure flows through to the
- * per-sample record with its symbolic name and message preserved.
+ * classifies the criterion's per-sample outcome as a
+ * {@link CriterionSampleOutcome#FAIL FAIL} carrying the failing
+ * reason. The postcondition chain is not evaluated; the parse /
+ * projection failure flows through to the per-sample record with its
+ * symbolic name and message preserved, distinguishing it from a
+ * condition failure.
  *
  * @param <O> the contract's per-sample output value type
  * @param <T> the transformed value type the postconditions evaluate

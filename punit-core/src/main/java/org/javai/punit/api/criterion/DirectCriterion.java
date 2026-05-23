@@ -11,9 +11,10 @@ import org.javai.punit.api.PostconditionResult;
 /**
  * A criterion whose postconditions evaluate directly against the
  * contract's output. No transform — the per-sample outcome is
- * restricted to {@link CriterionSampleOutcome#PASS PASS} or
- * {@link CriterionSampleOutcome#FAIL FAIL}; INCONCLUSIVE cannot
- * arise.
+ * {@link CriterionSampleOutcome#PASS PASS} or
+ * {@link CriterionSampleOutcome#FAIL FAIL}; with no transform there
+ * is no transform-failure reason, so every FAIL here is a condition
+ * failure carrying postcondition results.
  *
  * <p>Package-private; constructed when a {@link CriterionDecl} is
  * lowered to its runtime criterion. Authors do not reference this

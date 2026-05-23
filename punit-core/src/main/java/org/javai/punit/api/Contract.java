@@ -314,14 +314,12 @@ public interface Contract<I, O> {
 
     private ClauseEvaluation evaluateClauses(O value, Optional<O> expected) {
         // Walk criteria via per-sample evaluate(value). For each criterion
-        // we get a three-valued CriterionSampleResult; the verdict path
+        // we get a two-valued CriterionSampleResult; the verdict path
         // (which consumes a flat List<PostconditionResult>) is fed the
-        // per-postcondition results on PASS / FAIL, and a single synthetic
-        // failed PostconditionResult on INCONCLUSIVE — preserving the
-        // reason's name and message for diagnostics. The
-        // synthetic-result-on-INCONCLUSIVE mapping is the step-2 default
-        // for the denominator policy; a configurable policy is the subject
-        // of a later step. The per-criterion sample results are retained
+        // per-postcondition results when the postcondition chain ran, and
+        // a single synthetic failed PostconditionResult for a transform /
+        // no-value FAIL — preserving the reason's name and message for
+        // diagnostics. The per-criterion sample results are retained
         // verbatim alongside the flat list so downstream consumers — the
         // per-criterion accumulator, the per-criterion verdict computation
         // — can read the methodology-level partition unit's behaviour
@@ -331,14 +329,17 @@ public interface Contract<I, O> {
         for (Criterion<O> criterion : effectiveCriteria()) {
             CriterionSampleResult result = criterion.evaluate(value, expected);
             perCriterion.add(result);
-            switch (result.outcome()) {
-                case PASS, FAIL -> flat.addAll(result.postconditionResults());
-                case INCONCLUSIVE -> {
-                    Outcome.Fail<?> reason = result.reason().orElseThrow();
-                    flat.add(PostconditionResult.failed(
-                            criterion.id(),
-                            reason));
-                }
+            // A transform / no-value FAIL carries a reason and no
+            // postcondition results: synthesise a single failed
+            // PostconditionResult so the flat verdict path counts the
+            // trial as a non-pass. Otherwise feed the chain's results
+            // through verbatim.
+            if (result.reason().isPresent()) {
+                flat.add(PostconditionResult.failed(
+                        criterion.id(),
+                        result.reason().get()));
+            } else {
+                flat.addAll(result.postconditionResults());
             }
         }
         return new ClauseEvaluation(flat, perCriterion);

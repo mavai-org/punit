@@ -13,8 +13,8 @@ import org.javai.punit.api.Postcondition;
  * to a derived form {@code D}, then evaluates its postcondition
  * chain against the derived value. Transform failure
  * ({@link Outcome.Fail} or a thrown exception) classifies the sample
- * as {@link CriterionSampleOutcome#INCONCLUSIVE INCONCLUSIVE}; the
- * postcondition chain is not evaluated.
+ * as a {@link CriterionSampleOutcome#FAIL FAIL} carrying the failing
+ * reason; the postcondition chain is not evaluated.
  *
  * <p>Package-private; constructed when a {@link TransformingDecl}
  * is lowered to its runtime criterion. Authors do not reference this
@@ -81,7 +81,7 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
             case Outcome.Ok<D> ok ->
                     DirectCriterion.evaluateChain(id, postconditions, ok.value(), Optional.empty());
             case Outcome.Fail<D> f ->
-                    CriterionSampleResult.inconclusive(id, f);
+                    CriterionSampleResult.failedTransform(id, f);
         };
     }
 }

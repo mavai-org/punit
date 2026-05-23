@@ -13,7 +13,9 @@ import org.junit.jupiter.api.Test;
 /**
  * Per-outcome invariants on the {@link CriterionSampleResult}
  * record. The canonical constructor enforces the shape contracts
- * each of the three outcomes carries.
+ * each outcome carries: PASS carries postcondition results and no
+ * reason; a FAIL carries either postcondition results (a condition
+ * failure) or a reason (a transform / no-value failure), never both.
  */
 class CriterionSampleResultTest {
 
@@ -38,42 +40,31 @@ class CriterionSampleResultTest {
     }
 
     @Test
-    void inconclusiveCarriesTransformFailureAndEmptyPostconditionResults() {
+    void failedTransformCarriesReasonAndEmptyPostconditionResults() {
         Outcome.Fail<?> tf = (Outcome.Fail<?>) Outcome.fail("err", "msg");
-        var r = CriterionSampleResult.inconclusive("id", tf);
+        var r = CriterionSampleResult.failedTransform("id", tf);
 
-        assertThat(r.outcome()).isEqualTo(CriterionSampleOutcome.INCONCLUSIVE);
+        assertThat(r.outcome()).isEqualTo(CriterionSampleOutcome.FAIL);
         assertThat(r.postconditionResults()).isEmpty();
         assertThat(r.reason()).contains(tf);
     }
 
     @Test
-    void inconclusiveWithoutTransformFailureRejected() {
-        assertThatThrownBy(() -> new CriterionSampleResult(
-                "id",
-                CriterionSampleOutcome.INCONCLUSIVE,
-                List.of(),
-                Optional.empty()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("reason");
-    }
-
-    @Test
-    void inconclusiveWithPostconditionResultsRejected() {
+    void failWithBothReasonAndPostconditionResultsRejected() {
         Outcome.Fail<?> tf = (Outcome.Fail<?>) Outcome.fail("err", "msg");
         var pr = PostconditionResult.passed("c");
 
         assertThatThrownBy(() -> new CriterionSampleResult(
                 "id",
-                CriterionSampleOutcome.INCONCLUSIVE,
+                CriterionSampleOutcome.FAIL,
                 List.of(pr),
                 Optional.of(tf)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("postcondition");
+                .hasMessageContaining("both");
     }
 
     @Test
-    void nonInconclusiveWithTransformFailureRejected() {
+    void passWithReasonRejected() {
         Outcome.Fail<?> tf = (Outcome.Fail<?>) Outcome.fail("err", "msg");
 
         assertThatThrownBy(() -> new CriterionSampleResult(

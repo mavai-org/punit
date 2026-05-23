@@ -18,8 +18,12 @@ import java.util.Objects;
  * @param verdict       PASS / FAIL / INCONCLUSIVE under the
  *                      contract-inherited threshold
  * @param pass          count of PASS samples
- * @param fail          count of FAIL samples
- * @param inconclusive  count of INCONCLUSIVE samples
+ * @param fail          count of FAIL samples (condition failures plus
+ *                      transform / no-value failures)
+ * @param inconclusive  retained per-trial inconclusive count for the
+ *                      cross-framework verdict-XML schema; always
+ *                      zero since a per-trial inconclusive is now a
+ *                      FAIL
  * @param observedRate  observed marginal pass-rate ({@code pass / total})
  *                      or {@link Double#NaN} when {@code total} is zero
  * @param threshold     the contract-inherited threshold the verdict

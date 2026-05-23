@@ -9,9 +9,9 @@ import org.javai.punit.api.PostconditionResult;
 
 /**
  * The full per-sample evaluation record for one criterion: the
- * three-valued outcome, the per-postcondition results when the chain
- * ran, and the reason the chain did not when the sample is
- * INCONCLUSIVE.
+ * two-valued outcome, the per-postcondition results when the chain
+ * ran, and — for a FAIL that did not run the chain — the reason the
+ * chain did not run.
  *
  * <p>Constructed by a {@link Criterion#evaluate(Object)} call. The
  * record is the single contract between a criterion and downstream
@@ -19,24 +19,32 @@ import org.javai.punit.api.PostconditionResult;
  * consumers need about the criterion's behaviour on this sample
  * rides here.
  *
- * <p>An INCONCLUSIVE sample carries a {@code reason} — an
- * {@link Outcome.Fail} whose symbolic name names the kind of
- * undefined-evaluation that occurred. Today's only source is a
- * transform failure (the criterion's pre-postcondition transform
- * returned {@code Outcome.Fail} or threw); later steps may
- * introduce other sources (availability-gate failure, apply-level
- * failure) without changing this record's shape.
+ * <p>A FAIL takes one of two shapes:
+ * <ul>
+ *   <li><b>condition failure</b> — the postcondition chain ran and
+ *       at least one postcondition failed. Carries the
+ *       per-postcondition results; no reason.</li>
+ *   <li><b>transform / no-value failure</b> — the criterion's
+ *       pre-postcondition transform returned {@code Outcome.Fail} or
+ *       threw, so no postcondition was reached. Carries a
+ *       {@code reason} — an {@link Outcome.Fail} whose symbolic name
+ *       names the kind of failure — and no postcondition results.
+ *       Later steps may introduce other reason sources
+ *       (availability-gate failure, apply-level failure) without
+ *       changing this record's shape.</li>
+ * </ul>
+ * Both shapes count as a non-pass in the criterion's denominator.
  *
  * @param criterionId  the criterion's stable identifier, copied onto
  *                     the result for downstream addressing
  * @param outcome      the per-sample outcome
  * @param postconditionResults the per-postcondition results when the
- *                     chain ran (empty when {@code outcome ==
- *                     INCONCLUSIVE} — no postcondition was reached)
- * @param reason       the reason the chain did not run when
- *                     {@code outcome == INCONCLUSIVE} (empty
- *                     otherwise). Preserves the failure name and
- *                     message for diagnostics.
+ *                     chain ran (empty for a transform / no-value
+ *                     FAIL — no postcondition was reached)
+ * @param reason       the reason the chain did not run for a
+ *                     transform / no-value FAIL (empty otherwise).
+ *                     Preserves the failure name and message for
+ *                     diagnostics.
  */
 public record CriterionSampleResult(
         String criterionId,
@@ -51,18 +59,19 @@ public record CriterionSampleResult(
         Objects.requireNonNull(reason, "reason");
         postconditionResults = List.copyOf(postconditionResults);
 
-        if (outcome == CriterionSampleOutcome.INCONCLUSIVE) {
-            if (reason.isEmpty()) {
+        if (outcome == CriterionSampleOutcome.PASS) {
+            if (reason.isPresent()) {
                 throw new IllegalArgumentException(
-                        "INCONCLUSIVE result must carry a reason");
+                        "PASS result must not carry a reason");
             }
-            if (!postconditionResults.isEmpty()) {
+        } else {
+            // FAIL: exactly one of postcondition results (condition
+            // failure) or a reason (transform / no-value failure).
+            if (reason.isPresent() && !postconditionResults.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "INCONCLUSIVE result must not carry postcondition results");
+                        "FAIL result must not carry both a reason and "
+                                + "postcondition results");
             }
-        } else if (reason.isPresent()) {
-            throw new IllegalArgumentException(
-                    "Non-INCONCLUSIVE result must not carry a reason");
         }
     }
 
@@ -78,12 +87,18 @@ public record CriterionSampleResult(
                 criterionId, CriterionSampleOutcome.FAIL, results, Optional.empty());
     }
 
-    public static CriterionSampleResult inconclusive(
+    /**
+     * A FAIL produced because the criterion's transform failed (or
+     * produced no value), so the postcondition chain never ran. The
+     * trial is a non-pass; the failing reason is carried for
+     * diagnostics.
+     */
+    public static CriterionSampleResult failedTransform(
             String criterionId, Outcome.Fail<?> reason) {
         Objects.requireNonNull(reason, "reason");
         return new CriterionSampleResult(
                 criterionId,
-                CriterionSampleOutcome.INCONCLUSIVE,
+                CriterionSampleOutcome.FAIL,
                 List.of(),
                 Optional.of(reason));
     }

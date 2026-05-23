@@ -358,8 +358,8 @@ public final class Engine {
 
         private static final class MutableCriterionCounts {
             int pass = 0;
-            int fail = 0;
-            int inconclusive = 0;
+            int conditionFail = 0;
+            int transformFail = 0;
         }
 
         private void recordCriterionSampleOutcomes(ServiceContractOutcome<?, OT> stamped) {
@@ -372,8 +372,17 @@ public final class Engine {
                         entry.criterionId(), k -> new MutableCriterionCounts());
                 switch (entry.outcome()) {
                     case PASS -> counts.pass++;
-                    case FAIL -> counts.fail++;
-                    case INCONCLUSIVE -> counts.inconclusive++;
+                    case FAIL -> {
+                        // A FAIL carrying a reason is a transform /
+                        // no-value failure (the chain never ran); one
+                        // carrying postcondition results is a condition
+                        // failure.
+                        if (entry.reason().isPresent()) {
+                            counts.transformFail++;
+                        } else {
+                            counts.conditionFail++;
+                        }
+                    }
                 }
             }
         }
@@ -419,7 +428,8 @@ public final class Engine {
             List<CriterionSampleCounts> out = new ArrayList<>(criterionCounts.size());
             for (var e : criterionCounts.entrySet()) {
                 MutableCriterionCounts c = e.getValue();
-                out.add(new CriterionSampleCounts(e.getKey(), c.pass, c.fail, c.inconclusive));
+                out.add(new CriterionSampleCounts(
+                        e.getKey(), c.pass, c.conditionFail, c.transformFail));
             }
             return List.copyOf(out);
         }

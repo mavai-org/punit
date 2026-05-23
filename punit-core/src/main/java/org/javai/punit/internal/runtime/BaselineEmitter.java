@@ -204,7 +204,7 @@ public final class BaselineEmitter {
             SampleSummary<?> summary) {
         Map<String, PassRateStatistics> byCriterion = new LinkedHashMap<>();
         for (CriterionSampleCounts c : summary.criterionSampleCounts()) {
-            int criterionTotal = c.pass() + c.fail() + c.inconclusive();
+            int criterionTotal = c.pass() + c.fail();
             double observed = criterionTotal == 0
                     ? 0.0
                     : (double) c.pass() / (double) criterionTotal;

@@ -126,9 +126,10 @@ class CriteriaAsDataTest {
         assertThat(rt.evaluate("4").outcome()).isEqualTo(CriterionSampleOutcome.PASS);
         // Transform ok, postcondition fails → FAIL
         assertThat(rt.evaluate("3").outcome()).isEqualTo(CriterionSampleOutcome.FAIL);
-        // Transform fails → INCONCLUSIVE (chain skipped)
+        // Transform fails → FAIL carrying the reason (chain skipped)
         CriterionSampleResult parseFail = rt.evaluate("xyz");
-        assertThat(parseFail.outcome()).isEqualTo(CriterionSampleOutcome.INCONCLUSIVE);
+        assertThat(parseFail.outcome()).isEqualTo(CriterionSampleOutcome.FAIL);
+        assertThat(parseFail.postconditionResults()).isEmpty();
         assertThat(parseFail.reason()).isPresent();
         assertThat(parseFail.reason().get().failure().id().name()).isEqualTo("not-a-number");
     }
@@ -165,7 +166,7 @@ class CriteriaAsDataTest {
         assertThat(c.asList().get(0).id()).isEqualTo("response-not-empty");
         assertThat(c.asList().get(1).id()).isEqualTo("parses");
         assertThat(c.asList().get(1).evaluate("nope").outcome())
-                .isEqualTo(CriterionSampleOutcome.INCONCLUSIVE);
+                .isEqualTo(CriterionSampleOutcome.FAIL);
     }
 
     @Test
