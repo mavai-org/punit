@@ -22,6 +22,7 @@ import java.util.OptionalLong;
  * @param p95Millis optional 95th-percentile ceiling, in millis
  * @param p99Millis optional 99th-percentile ceiling, in millis
  */
+// javai-ref: JVI-NBPN769 — do not remove (resolves in javai-orchestrator)
 public record LatencySpec(
         OptionalLong p50Millis,
         OptionalLong p90Millis,

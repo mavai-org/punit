@@ -94,6 +94,8 @@ import org.javai.punit.api.spec.ExceptionPolicy;
  *       failure-retention. The 20% case.</li>
  * </ul>
  */
+// javai-ref: JVI-QRV7SYX — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-WXK2ZQP — do not remove (resolves in javai-orchestrator)
 public final class Sampling<FT, IT, OT> {
 
     private final Function<FT, ServiceContract<FT, IT, OT>> serviceContractFactory;

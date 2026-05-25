@@ -100,6 +100,7 @@ public final class PUnit {
     // ── Sampling-bound factories ────────────────────────────────────
 
     /** Compose a contractual probabilistic test against a shared sampling. */
+    // javai-ref: JVI-SVDWG0G — do not remove (resolves in javai-orchestrator)
     public static <FT, IT, OT> TestBuilder<FT, IT, OT> testing(
             Sampling<FT, IT, OT> sampling, FT factors) {
         return new TestBuilder<>(
@@ -442,6 +443,7 @@ public final class PUnit {
     // ── Wrapper builders ────────────────────────────────────────────
 
     /** Wrapper around {@link Experiment.MeasureBuilder} adding {@link #run}. */
+    // javai-ref: JVI-315MNJX — do not remove (resolves in javai-orchestrator)
     public static final class MeasureBuilder<FT, IT, OT> {
         private final Experiment.MeasureBuilder<FT, IT, OT> delegate;
 
@@ -473,6 +475,7 @@ public final class PUnit {
     }
 
     /** Wrapper around {@link Experiment.ExploreBuilder} adding {@link #run}. */
+    // javai-ref: JVI-HGF78G* — do not remove (resolves in javai-orchestrator)
     public static final class ExploreBuilder<FT, IT, OT> {
         private final Experiment.ExploreBuilder<FT, IT, OT> delegate;
 
@@ -506,6 +509,7 @@ public final class PUnit {
     }
 
     /** Wrapper around {@link Experiment.OptimizeBuilder} adding {@link #run}. */
+    // javai-ref: JVI-PS5XC2C — do not remove (resolves in javai-orchestrator)
     public static final class OptimizeBuilder<FT, IT, OT> {
         private final Experiment.OptimizeBuilder<FT, IT, OT> delegate;
 

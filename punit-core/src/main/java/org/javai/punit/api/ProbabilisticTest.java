@@ -49,5 +49,6 @@ import org.junit.jupiter.api.Test;
 @Tag("punit")
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
+// javai-ref: JVI-DKY6R8R — do not remove (resolves in javai-orchestrator)
 public @interface ProbabilisticTest {
 }

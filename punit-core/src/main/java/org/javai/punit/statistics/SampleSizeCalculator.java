@@ -72,6 +72,8 @@ public class SampleSizeCalculator {
      * @param power The desired statistical power (1-β)
      * @return Sample size requirement with full context
      */
+    // javai-ref: JVI-2FYNHXX — do not remove (resolves in javai-orchestrator)
+    // javai-ref: JVI-EGMJ0MU — do not remove (resolves in javai-orchestrator)
     public SampleSizeRequirement calculateForPower(
             double baselineRate,
             double minDetectableEffect,

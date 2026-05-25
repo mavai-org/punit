@@ -19,6 +19,7 @@ import org.javai.punit.verdict.VerdictSink;
  * <p>Output uses the standard PUnit framing (header/footer dividers) and
  * label-value alignment provided by {@link PUnitReporter}.
  */
+// javai-ref: JVI-ZVX9J8V — do not remove (resolves in javai-orchestrator)
 public final class ConsoleVerdictSink implements VerdictSink {
 
     private final PrintStream out;

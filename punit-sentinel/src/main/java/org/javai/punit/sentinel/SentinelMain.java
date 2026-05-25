@@ -66,6 +66,9 @@ public class SentinelMain {
         this.system = system;
     }
 
+    // javai-ref: JVI-PYF4FP9 — do not remove (resolves in javai-orchestrator)
+    // javai-ref: JVI-P37E1Y2 — do not remove (resolves in javai-orchestrator)
+    // javai-ref: JVI-D0BEKXM — do not remove (resolves in javai-orchestrator)
     public static void main(String[] args) {
         new SentinelMain(args, new RealSystemBridge()).run();
     }

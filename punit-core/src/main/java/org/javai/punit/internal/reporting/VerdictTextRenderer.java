@@ -40,6 +40,7 @@ import org.javai.punit.verdict.ProbabilisticTestVerdict.Termination;
  *   <li>{@link #renderForReporter} — verbose box-drawn output for transparent stats console</li>
  * </ul>
  */
+// javai-ref: JVI-ZVX9J8V — do not remove (resolves in javai-orchestrator)
 public final class VerdictTextRenderer {
 
     private static final int LINE_WIDTH = 78;

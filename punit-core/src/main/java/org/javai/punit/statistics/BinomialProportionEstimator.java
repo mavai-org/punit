@@ -77,6 +77,7 @@ public class BinomialProportionEstimator {
      * @param confidenceLevel Confidence level (1-α), e.g., 0.95 for 95% CI
      * @return Proportion estimate with Wilson score confidence interval
      */
+    // javai-ref: JVI-58DBYP~ — do not remove (resolves in javai-orchestrator)
     public ProportionEstimate estimate(int successes, int trials, double confidenceLevel) {
         validateInputs(successes, trials);
         validateConfidenceLevel(confidenceLevel);
@@ -116,6 +117,7 @@ public class BinomialProportionEstimator {
      * @return One-sided lower confidence bound for p
      */
     // javai-ref: JVI-MNVWS4U — do not remove (resolves in javai-orchestrator)
+    // javai-ref: JVI-TX478RT — do not remove (resolves in javai-orchestrator)
     public double lowerBound(int successes, int trials, double confidenceLevel) {
         validateInputs(successes, trials);
         double pHat = (double) successes / trials;

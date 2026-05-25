@@ -256,6 +256,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     }
 
     @Override
+    // javai-ref: JVI-BQTS77W — do not remove (resolves in javai-orchestrator)
+    // javai-ref: JVI-GZFMZXV — do not remove (resolves in javai-orchestrator)
     public OptionalDouble earlyTerminationPassRate() {
         return contractualTarget();
     }

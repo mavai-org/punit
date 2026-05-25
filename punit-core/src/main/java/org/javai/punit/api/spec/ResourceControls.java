@@ -35,6 +35,10 @@ import java.util.OptionalLong;
  *                       {@code ServiceContract.apply}; default ABORT_TEST
  * @param maxExampleFailures cap on retained failure detail; default 10
  */
+// javai-ref: JVI-9M5SBQZ — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-N0WK25H — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-W6A4WRA — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-T60D7VU — do not remove (resolves in javai-orchestrator)
 public record ResourceControls(
         Optional<Duration> timeBudget,
         OptionalLong tokenBudget,

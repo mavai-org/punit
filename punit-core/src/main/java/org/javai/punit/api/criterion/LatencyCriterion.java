@@ -43,6 +43,8 @@ import org.javai.punit.api.ThresholdOrigin;
  * authored at the call site. Authors who want a project-specific
  * label put it in {@link #contractRef(ThresholdOrigin, String)}.
  */
+// javai-ref: JVI-MPAYH0Q — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-QVNG2SX — do not remove (resolves in javai-orchestrator)
 public final class LatencyCriterion {
 
     /** The fixed id under which a present latency criterion appears in {@code effectiveCriteria()}. */

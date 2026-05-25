@@ -316,6 +316,8 @@ public final class Engine {
          * same sample — it takes precedence over a (necessarily
          * stale) success-guaranteed reading.
          */
+        // javai-ref: JVI-BQTS77W — do not remove (resolves in javai-orchestrator)
+        // javai-ref: JVI-GZFMZXV — do not remove (resolves in javai-orchestrator)
         private void checkStatisticalEarlyTermination() {
             if (earlyTermination.isEmpty()) {
                 return;

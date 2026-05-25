@@ -33,6 +33,7 @@ import org.javai.punit.api.PostconditionCheck;
  * @param <T> the transformed value type the postconditions evaluate
  *            against
  */
+// javai-ref: JVI-Q8BDYMS — do not remove (resolves in javai-orchestrator)
 public final class TransformingDecl<O, T> implements Decl<O> {
 
     private final CriterionPosture posture;

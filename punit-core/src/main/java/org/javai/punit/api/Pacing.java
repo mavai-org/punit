@@ -41,6 +41,10 @@ import java.util.OptionalLong;
  *                           in milliseconds
  * @param maxConcurrent optional cap on the number of in-flight samples
  */
+// javai-ref: JVI-PC8GT83 — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-P1GG550 — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-M1TXHHQ — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-FNJKJT5 — do not remove (resolves in javai-orchestrator)
 public record Pacing(
         OptionalDouble maxRequestsPerSecond,
         OptionalDouble maxRequestsPerMinute,

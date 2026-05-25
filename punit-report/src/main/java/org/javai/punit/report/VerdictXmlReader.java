@@ -32,6 +32,7 @@ import org.w3c.dom.NodeList;
  *
  * <p>Uses DOM parsing since individual verdict files are small.
  */
+// javai-ref: JVI-DQWKY4Z — do not remove (resolves in javai-orchestrator)
 public final class VerdictXmlReader {
 
     private static final DocumentBuilderFactory FACTORY = DocumentBuilderFactory.newInstance();

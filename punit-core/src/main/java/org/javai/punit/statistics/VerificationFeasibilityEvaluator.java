@@ -77,6 +77,7 @@ public final class VerificationFeasibilityEvaluator {
      * @return the feasibility result including minimum required samples
      * @throws IllegalArgumentException if any parameter is out of range
      */
+    // javai-ref: JVI-M5YQ6RB — do not remove (resolves in javai-orchestrator)
     public static FeasibilityResult evaluate(int samples, double target, double confidence) {
         if (samples <= 0) {
             throw new IllegalArgumentException("samples must be > 0, got: " + samples);

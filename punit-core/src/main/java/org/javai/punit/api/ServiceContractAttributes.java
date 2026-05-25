@@ -11,6 +11,7 @@ package org.javai.punit.api;
  * @param warmup number of warmup invocations to discard before counting (0 = no warmup)
  * @param maxConcurrent maximum concurrent sample executions (0 = framework default)
  */
+// javai-ref: JVI-FX47WDW — do not remove (resolves in javai-orchestrator)
 public record ServiceContractAttributes(int warmup, int maxConcurrent) {
 
     /** Default attributes (no warmup, no concurrency override). */
