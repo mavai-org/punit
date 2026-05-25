@@ -16,6 +16,7 @@ import org.javai.punit.api.PostconditionCheck;
  *
  * @param <O> the value type the check evaluates against
  */
+// javai-ref: JVI-BD4F1AB — do not remove (resolves in javai-orchestrator)
 public record NamedPostcondition<O>(
         String name,
         PostconditionCheck<O> check

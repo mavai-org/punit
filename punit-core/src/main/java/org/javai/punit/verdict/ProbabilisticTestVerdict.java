@@ -24,6 +24,7 @@ import org.javai.punit.api.ServiceContractAttributes;
  * <p>All rendering paths (text logs, XML report, HTML report) consume this model.
  * No rendering target has access to information that another lacks.
  */
+// javai-ref: JVI-60WEAWK — do not remove (resolves in javai-orchestrator)
 public record ProbabilisticTestVerdict(
         String correlationId,
         Instant timestamp,

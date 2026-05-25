@@ -63,6 +63,7 @@ import org.javai.punit.statistics.ThresholdDeriver;
  * dependencies. The {@link Criterion} interface itself stays in
  * {@code api package}; only this implementation moved.
  */
+// javai-ref: JVI-C5P3EQE — do not remove (resolves in javai-orchestrator)
 public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateStatistics> {
 
     private static final String NAME = "bernoulli-pass-rate";

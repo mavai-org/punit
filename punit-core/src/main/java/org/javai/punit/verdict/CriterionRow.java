@@ -31,6 +31,7 @@ import java.util.Objects;
  *                      no threshold was resolved (e.g. the run gated
  *                      INCONCLUSIVE before threshold derivation)
  */
+// javai-ref: JVI-8E4WNW5 — do not remove (resolves in javai-orchestrator)
 public record CriterionRow(
         String criterionId,
         org.javai.punit.api.spec.Verdict verdict,
