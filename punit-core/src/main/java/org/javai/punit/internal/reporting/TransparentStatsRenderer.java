@@ -61,6 +61,7 @@ import org.javai.punit.api.spec.Verdict;
  * <p>Output is plain text — readable in IDE test consoles,
  * surefire reports, and CI logs without further processing.
  */
+// javai-ref: JVI-G3NPRSS — do not remove (resolves in javai-orchestrator)
 public final class TransparentStatsRenderer {
 
     private static final String LABEL_INDENT = "      ";
