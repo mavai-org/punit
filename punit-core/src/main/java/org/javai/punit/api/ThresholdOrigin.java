@@ -40,6 +40,7 @@ package org.javai.punit.api;
  * @see ProbabilisticTest#thresholdOrigin()
  * @see ProbabilisticTest#contractRef()
  */
+// javai-ref: JVI-J8G7TKM — do not remove (resolves in javai-orchestrator)
 public enum ThresholdOrigin {
 
 	SLA(true, "Externally agreed normative target (contract/SLA)."),

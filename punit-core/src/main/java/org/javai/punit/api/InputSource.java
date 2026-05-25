@@ -69,6 +69,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
+// javai-ref: JVI-QBEZ3W9 — do not remove (resolves in javai-orchestrator)
 public @interface InputSource {
 
     /**

@@ -28,6 +28,7 @@ import org.javai.punit.internal.reporting.VerdictTextRenderer;
  * Test results are grouped by use-case-id (or class name when absent) and presented
  * in an expandable table using HTML5 {@code <details>}/{@code <summary>} elements.
  */
+// javai-ref: JVI-PNR8C3F — do not remove (resolves in javai-orchestrator)
 final class HtmlReportWriter {
 
     private static final DateTimeFormatter TIMESTAMP_FORMAT =

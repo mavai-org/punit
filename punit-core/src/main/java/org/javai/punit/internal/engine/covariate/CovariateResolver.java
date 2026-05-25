@@ -64,6 +64,7 @@ import org.javai.punit.api.covariate.TimezoneCovariate;
  * mid-run (the clock advances, the system property could mutate),
  * defeating the purpose of recording a snapshot.
  */
+// javai-ref: JVI-GYHECWN — do not remove (resolves in javai-orchestrator)
 public final class CovariateResolver {
 
     static final String REGION_PROPERTY = "punit.region";

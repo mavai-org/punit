@@ -25,6 +25,7 @@ import org.javai.punit.api.ServiceContractAttributes;
  * No rendering target has access to information that another lacks.
  */
 // javai-ref: JVI-60WEAWK — do not remove (resolves in javai-orchestrator)
+// javai-ref: JVI-NSB1JPC — do not remove (resolves in javai-orchestrator)
 public record ProbabilisticTestVerdict(
         String correlationId,
         Instant timestamp,

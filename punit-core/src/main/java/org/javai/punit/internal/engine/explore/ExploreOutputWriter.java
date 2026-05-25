@@ -36,6 +36,7 @@ import org.yaml.snakeyaml.Yaml;
  * projection metadata through, a {@code resultProjection:} block can
  * be appended additively.
  */
+// javai-ref: JVI-8CHB31R — do not remove (resolves in javai-orchestrator)
 public final class ExploreOutputWriter {
 
     /** Schema-version value carried in every emitted file. */

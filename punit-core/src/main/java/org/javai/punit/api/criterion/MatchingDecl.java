@@ -31,6 +31,7 @@ import org.javai.punit.api.Postcondition;
  *
  * @param <O> the contract's per-sample output value type
  */
+// javai-ref: JVI-3P2SEQ4 — do not remove (resolves in javai-orchestrator)
 public final class MatchingDecl<O> implements Decl<O> {
 
     private final CriterionPosture posture;

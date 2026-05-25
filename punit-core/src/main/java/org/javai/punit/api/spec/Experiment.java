@@ -326,6 +326,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-315MNJX — do not remove (resolves in javai-orchestrator)
     public static final class MeasureBuilder<FT, IT, OT> {
 
         private final Sampling<FT, IT, OT> sampling;
@@ -444,6 +445,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-HGF78G* — do not remove (resolves in javai-orchestrator)
     public static final class ExploreBuilder<FT, IT, OT> {
 
         private final Sampling<FT, IT, OT> sampling;
@@ -625,6 +627,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-PS5XC2C — do not remove (resolves in javai-orchestrator)
     public static final class OptimizeBuilder<FT, IT, OT> {
 
         private final Sampling<FT, IT, OT> sampling;
@@ -779,6 +782,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-SVDWG0G — do not remove (resolves in javai-orchestrator)
     public static final class InlineMeasureBuilder<FT, IT, OT> {
 
         private final InlineSamplingState<FT, IT, OT> sampling;
@@ -872,6 +876,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-SVDWG0G — do not remove (resolves in javai-orchestrator)
     public static final class InlineExploreBuilder<FT, IT, OT> {
 
         private final InlineSamplingState<FT, IT, OT> sampling;
@@ -966,6 +971,7 @@ public final class Experiment implements Spec {
         }
     }
 
+    // javai-ref: JVI-SVDWG0G — do not remove (resolves in javai-orchestrator)
     public static final class InlineOptimizeBuilder<FT, IT, OT> {
 
         private final InlineSamplingState<FT, IT, OT> sampling;

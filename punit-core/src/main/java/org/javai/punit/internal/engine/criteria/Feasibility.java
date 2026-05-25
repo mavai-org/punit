@@ -65,6 +65,7 @@ import org.javai.punit.statistics.VerificationFeasibilityEvaluator.FeasibilityRe
  * orchestrates. Diagnostic prose comes from
  * {@link InfeasibilityMessageRenderer}.
  */
+// javai-ref: JVI-RDWGWVV — do not remove (resolves in javai-orchestrator)
 public final class Feasibility {
 
     private Feasibility() { }

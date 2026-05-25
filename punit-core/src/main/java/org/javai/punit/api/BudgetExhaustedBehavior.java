@@ -4,6 +4,7 @@ package org.javai.punit.api;
  * Defines the behavior when a budget (time or token) is exhausted
  * before all samples have been executed.
  */
+// javai-ref: JVI-KJS8SB7 — do not remove (resolves in javai-orchestrator)
 public enum BudgetExhaustedBehavior {
     
     /**

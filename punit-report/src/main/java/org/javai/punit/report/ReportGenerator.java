@@ -17,6 +17,7 @@ import org.javai.punit.verdict.ProbabilisticTestVerdict;
  * {@link ProbabilisticTestVerdict} instances, and writes a standalone
  * HTML report.
  */
+// javai-ref: JVI-PNR8C3F — do not remove (resolves in javai-orchestrator)
 public final class ReportGenerator {
 
     private final VerdictXmlReader reader = new VerdictXmlReader();

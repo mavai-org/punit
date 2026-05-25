@@ -64,6 +64,7 @@ import org.javai.punit.internal.engine.covariate.CovariateResolver;
  *   <li>{@code generatedAt} — {@code Instant.now()}</li>
  * </ul>
  */
+// javai-ref: JVI-EC8CPT3 — do not remove (resolves in javai-orchestrator)
 public final class BaselineEmitter {
 
     private BaselineEmitter() { }
