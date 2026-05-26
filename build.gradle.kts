@@ -226,6 +226,18 @@ fun runCommandAndCapture(vararg args: String): String {
     return output.trim()
 }
 
+// Extracts the CHANGELOG section for a version: everything between the
+// "## [$ver]" heading and the next "## [" heading, trimmed. Empty if absent.
+fun extractChangelogSection(changelogText: String, ver: String): String {
+    val lines = changelogText.lines()
+    val startIdx = lines.indexOfFirst { it.startsWith("## [$ver]") }
+    if (startIdx < 0) return ""
+    val rest = lines.drop(startIdx + 1)
+    val endRel = rest.indexOfFirst { it.startsWith("## [") }
+    val body = if (endRel < 0) rest else rest.take(endRel)
+    return body.joinToString("\n").trim()
+}
+
 // Derives the next SNAPSHOT version after a release.
 // - "0.6.0"        -> "0.6.1-SNAPSHOT"
 // - "0.7.0-alpha"  -> "0.7.0-alpha2-SNAPSHOT"
@@ -261,7 +273,7 @@ fun nextSnapshotVersion(ver: String): String {
 }
 
 tasks.register("release") {
-    description = "Validates, publishes to Maven Central, tags the release, and bumps to next SNAPSHOT"
+    description = "Validates, publishes to Maven Central, tags the release, creates the GitHub release, and bumps to next SNAPSHOT"
     group = "publishing"
 
     doLast {
@@ -314,6 +326,32 @@ tasks.register("release") {
         // 6. Push tag (artifact is published, so the tag must reach the remote)
         logger.lifecycle("Pushing tag $tag to origin...")
         runCommand("git", "push", "origin", tag)
+
+        // 6b. Create the GitHub release for the tag, with notes from CHANGELOG.
+        // Soft-fails: the artifact is already published and the tag pushed, so a
+        // gh hiccup must not strand the release before the SNAPSHOT bump — warn
+        // with the manual command and continue.
+        val isPrerelease = ver.contains("-")
+        val notesFile = layout.buildDirectory.file("release-notes-$ver.md").get().asFile
+        notesFile.parentFile.mkdirs()
+        notesFile.writeText(extractChangelogSection(changelogText, ver))
+        val ghArgs = mutableListOf(
+            "gh", "release", "create", tag,
+            "--title", tag,
+            "--notes-file", notesFile.absolutePath,
+            "--verify-tag"
+        )
+        ghArgs += if (isPrerelease) "--prerelease" else "--latest"
+        logger.lifecycle("Creating GitHub release $tag...")
+        try {
+            runCommand(*ghArgs.toTypedArray())
+        } catch (e: Exception) {
+            logger.warn(
+                "GitHub release creation failed for $tag — create it manually:\n" +
+                "  " + ghArgs.joinToString(" ") + "\n" +
+                "Continuing with the version bump."
+            )
+        }
 
         // 7. Bump to next SNAPSHOT
         val nextVersion = nextSnapshotVersion(ver)
