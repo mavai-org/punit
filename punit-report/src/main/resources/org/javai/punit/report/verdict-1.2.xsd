@@ -96,7 +96,7 @@
 
   <!-- ===================================================================
        Factor bundle (FT instance the test ran under; shape-symmetric
-       with EX04 baseline factors:)
+       with the baseline factors block)
        =================================================================== -->
 
   <xs:complexType name="FactorsType">
@@ -430,8 +430,8 @@
        Per-criterion methodology-level decomposition (1.1 addition,
        1.2 refinement)
 
-       Carries the per-criterion three-valued aggregate verdicts (CR07)
-       and the composite verdict over them (CR09).
+       Carries each criterion's three-valued aggregate verdict
+       and the composite verdict over them.
 
        The bundle is optional under <verdict-record>. Present when the
        producing run had per-criterion data (every normal run on every

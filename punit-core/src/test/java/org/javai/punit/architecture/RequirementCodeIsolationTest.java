@@ -29,11 +29,15 @@ import org.junit.jupiter.api.Test;
  * by its domain name, not by its tracking code.
  *
  * <p>This test walks every Java source file under the project's
- * <code>src/main/java</code> AND <code>src/test/java</code> trees and
- * asserts no requirement-style code appears anywhere - neither in code
- * nor in comments. Earlier iterations only guarded production source;
- * test sources were a back door through which codes kept leaking back
- * in, defeating the rule. The guard now scans both.
+ * <code>src/main/java</code> AND <code>src/test/java</code> trees, plus
+ * the published text resources (<code>.xsd</code> / <code>.xslt</code> /
+ * <code>.xml</code>) under <code>src/main/resources</code> and
+ * <code>src/test/resources</code>, and asserts no requirement-style code
+ * appears anywhere - neither in code, comments, nor schema/resource
+ * files. Earlier iterations only guarded production Java source; test
+ * sources, then resource files (the verdict XSDs in particular), were
+ * back doors through which codes kept leaking back in, defeating the
+ * rule. The guard now scans Java and text resources, production and test.
  *
  * <p>The one exception: this file itself necessarily mentions the
  * prefixes (in its docstring above and in the regex below) so it can
@@ -53,6 +57,7 @@ class RequirementCodeIsolationTest {
      * Letters cover every prefix currently in use across the
      * orchestrator catalog and design docs:
      * <ul>
+     *   <li>CR - criterion decomposition</li>
      *   <li>CT - conformance testing</li>
      *   <li>EX - experiments</li>
      *   <li>LT - latency dimension</li>
@@ -73,7 +78,7 @@ class RequirementCodeIsolationTest {
      * wire-format constants.
      */
     private static final Pattern REQUIREMENT_CODE = Pattern.compile(
-            "\\b(CT|EX|LT|PT|RC|RP|SC|SN|TH|UC|XM|DG)\\d{2}\\b");
+            "\\b(CR|CT|EX|LT|PT|RC|RP|SC|SN|TH|UC|XM|DG)\\d{2}\\b");
 
     /**
      * Filenames that legitimately mention the prefixes - this test
@@ -89,22 +94,43 @@ class RequirementCodeIsolationTest {
      * its CWD is .../punit/punit-core). Walk up one level to reach the
      * project root, then descend per-module.
      *
-     * <p>Both <code>src/main/java</code> and <code>src/test/java</code>
-     * are scanned. Test sources are not exempt: an orchestrator code
-     * in a {@code @DisplayName} or javadoc surfaces in build reports
-     * and IDE test panes, where an open-source reader meets it without
-     * any catalog access. The earlier production-only scope let codes
-     * leak back in through test files; the rule is now uniform.
+     * <p>Both <code>src/main</code> and <code>src/test</code> are scanned,
+     * for Java and for text resources. Neither test sources nor resource
+     * files are exempt: an orchestrator code in a {@code @DisplayName}, a
+     * javadoc, or an XSD comment surfaces in build reports, IDE test
+     * panes, and the published repository, where an open-source reader
+     * meets it without any catalog access. Earlier scopes (production
+     * only, then Java only) let codes leak back in through test files and
+     * the verdict XSDs; the rule is now uniform.
      */
     private static final List<Path> SOURCE_ROOTS = List.of(
             Paths.get("..", "punit-core", "src", "main", "java"),
             Paths.get("..", "punit-core", "src", "test", "java"),
+            Paths.get("..", "punit-core", "src", "main", "resources"),
+            Paths.get("..", "punit-core", "src", "test", "resources"),
             Paths.get("..", "punit-junit5", "src", "main", "java"),
             Paths.get("..", "punit-junit5", "src", "test", "java"),
+            Paths.get("..", "punit-junit5", "src", "main", "resources"),
+            Paths.get("..", "punit-junit5", "src", "test", "resources"),
             Paths.get("..", "punit-report", "src", "main", "java"),
             Paths.get("..", "punit-report", "src", "test", "java"),
+            Paths.get("..", "punit-report", "src", "main", "resources"),
+            Paths.get("..", "punit-report", "src", "test", "resources"),
             Paths.get("..", "punit-sentinel", "src", "main", "java"),
-            Paths.get("..", "punit-sentinel", "src", "test", "java"));
+            Paths.get("..", "punit-sentinel", "src", "test", "java"),
+            Paths.get("..", "punit-sentinel", "src", "main", "resources"),
+            Paths.get("..", "punit-sentinel", "src", "test", "resources"));
+
+    /**
+     * File extensions scanned for leaked codes: Java source plus the
+     * published text-resource formats that carry human-readable comments
+     * (the verdict XSDs, the report XSLT, and any bundled XML). Binary
+     * resources and data formats (YAML specs, {@code .properties},
+     * service files) are not scanned - lowercase wire-format constants do
+     * not match the two-uppercase-letter pattern anyway.
+     */
+    private static final List<String> SCANNED_EXTENSIONS =
+            List.of(".java", ".xsd", ".xslt", ".xml");
 
     @Test
     @DisplayName("no orchestrator-internal requirement codes appear in production or test source")
@@ -116,7 +142,7 @@ class RequirementCodeIsolationTest {
             }
             try (Stream<Path> stream = Files.walk(root)) {
                 stream
-                        .filter(p -> p.toString().endsWith(".java"))
+                        .filter(RequirementCodeIsolationTest::isScannable)
                         .filter(p -> !isSelfReferencing(p))
                         .forEach(file -> scanFile(file, hits));
             }
@@ -131,6 +157,11 @@ class RequirementCodeIsolationTest {
                         + "earlier iterations only scanned production, and codes kept "
                         + "leaking back in through test files.")
                 .isEmpty();
+    }
+
+    private static boolean isScannable(Path file) {
+        String name = file.toString();
+        return SCANNED_EXTENSIONS.stream().anyMatch(name::endsWith);
     }
 
     private static boolean isSelfReferencing(Path file) {

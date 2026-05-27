@@ -115,7 +115,7 @@ public class ProbabilisticTestVerdictBuilder {
     // ── Postcondition failure histogram ───────────────────────────────────
     private Map<String, FailureCount> postconditionFailures = Map.of();
 
-    // ── Per-criterion structural decomposition (CR07 / CR09) ──────────────
+    // ── Per-criterion structural decomposition (rows + composite) ─────────
     // Optional. Populated by VerdictAdapter from
     // ProbabilisticTestResult.perCriterionEvaluation() on every normal
     // run; empty for apply-level-failure paths.

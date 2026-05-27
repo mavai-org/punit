@@ -43,8 +43,8 @@ import org.javai.punit.internal.engine.covariate.CovariateResolver;
  * <p>Called from {@link PUnit.MeasureBuilder#run} after the engine
  * finishes its sampling loop. The record carries both
  * {@link PassRateStatistics} and {@link LatencyStatistics} so any
- * future empirical criterion (CR02 or CR03 today, future kinds
- * additively) can read what it needs from the same baseline file.
+ * empirical criterion — today's kinds and future ones, additively —
+ * can read what it needs from the same baseline file.
  *
  * <p>Identity fields:
  *

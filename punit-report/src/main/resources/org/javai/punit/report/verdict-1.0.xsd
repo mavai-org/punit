@@ -84,7 +84,7 @@
 
   <!-- ===================================================================
        Factor bundle (FT instance the test ran under; shape-symmetric
-       with EX04 baseline factors:)
+       with the baseline factors block)
        =================================================================== -->
 
   <xs:complexType name="FactorsType">

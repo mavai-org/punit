@@ -42,7 +42,7 @@ import org.javai.punit.api.spec.ExceptionPolicy;
  * {@code ProbabilisticTest.testing(sampling, factors)}, etc.). For
  * the measure / test pair, both call sites pass the same factors;
  * the framework's empirical-baseline resolver then matches the
- * test's factors against the measure's stored baseline (CR02).
+ * test's factors against the measure's stored baseline.
  *
  * <h2>The pair pattern at the call site</h2>
  *
