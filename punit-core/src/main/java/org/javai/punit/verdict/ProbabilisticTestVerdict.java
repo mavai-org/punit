@@ -59,8 +59,9 @@ public record ProbabilisticTestVerdict(
 
     /**
      * Backward-compatible constructor for the 17-component shape that
-     * predates the per-criterion structural surface (CR09 / CR01 in
-     * the verdict XML). Defaults the per-criterion component to empty.
+     * predates the per-criterion structural surface (the composite
+     * verdict and its per-criterion rows in the verdict XML). Defaults
+     * the per-criterion component to empty.
      */
     public ProbabilisticTestVerdict(
             String correlationId,

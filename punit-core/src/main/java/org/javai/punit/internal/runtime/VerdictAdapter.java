@@ -174,7 +174,8 @@ public final class VerdictAdapter {
         // field is only meaningful inside the JUnit context).
         b.junitPassed(true);
 
-        // Per-criterion structural decomposition (CR07 / CR09). The
+        // Per-criterion structural decomposition: the per-criterion verdict
+        // rows and the composite over them. The
         // in-memory PerCriterionEvaluation translates row-for-row into
         // the persistence-layer PerCriterionStructure. Empty
         // evaluations leave the field absent.
