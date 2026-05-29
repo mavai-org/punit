@@ -168,7 +168,6 @@ class PUnitPluginFunctionalTest {
                 includeBuild("$punitRootDir") {
                     dependencySubstitution {
                         substitute(module("org.mavai:punit-core")).using(project(":punit-core"))
-                        substitute(module("org.mavai:punit-junit5")).using(project(":punit-junit5"))
                         substitute(module("org.mavai:punit-sentinel")).using(project(":punit-sentinel"))
                     }
                 }
