@@ -4,7 +4,7 @@
 schemaVersion: punit-spec-1
 useCaseId: BaselineDerivedThresholdUseCase
 generatedAt: 2026-03-07T12:00:00.000000Z
-experimentClass: org.javai.punit.testsubjects.BaselineDerivedThresholdSubjects
+experimentClass: org.mavai.punit.testsubjects.BaselineDerivedThresholdSubjects
 experimentMethod: measure
 execution:
   samplesPlanned: 100

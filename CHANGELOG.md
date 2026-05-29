@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Coordinate / package / module / plugin-id move to `org.mavai`
+  (breaking).** punit has moved off the `org.javai` namespace:
+  - Maven coordinates: `org.javai:punit{,-core,-report,-sentinel}` →
+    `org.mavai:punit{,-core,-report,-sentinel}`.
+  - Java packages: `org.javai.punit.*` → `org.mavai.punit.*`.
+  - JPMS modules: `org.javai.punit.{core,report,sentinel}` →
+    `org.mavai.punit.{core,report,sentinel}`. Modular consumers update
+    their `requires` directives accordingly.
+  - Gradle plugin id: `org.javai.punit` → `org.mavai.punit`
+    (`plugins { id("org.mavai.punit") }`).
+  - The `outcome` dependency follows its own move to
+    `org.mavai:outcome`.
+
+  No API surface change — every type, annotation, and method keeps its
+  simple name; only the namespace differs. Final `org.javai:punit*`
+  releases carry a Maven relocation POM that auto-redirects with a
+  deprecation warning; the Gradle Plugin Portal cannot redirect, so a
+  final `org.javai.punit` plugin release points at the new id. The
+  verdict-XML wire namespace (`http://javai.org/verdict/1.0`) is
+  unchanged — it is a cross-framework interchange identifier, not a
+  Maven coordinate.
+
 ## [0.8.1] - 2026-05-21
 
 > **Highlights:** **baseline expiration** — measured baselines can now

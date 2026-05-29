@@ -17,31 +17,31 @@
  * the minimum surface they need to compose with punit-core; external
  * consumers continue to see only the public packages.
  */
-module org.javai.punit.core {
+module org.mavai.punit.core {
 
     // ── Public API surface ────────────────────────────────────
-    exports org.javai.punit.api;
-    exports org.javai.punit.api.criterion;
-    exports org.javai.punit.api.spec;
-    exports org.javai.punit.api.covariate;
-    exports org.javai.punit.runtime;
-    exports org.javai.punit.verdict;
-    exports org.javai.punit.statistics;
-    exports org.javai.punit.statistics.transparent;
+    exports org.mavai.punit.api;
+    exports org.mavai.punit.api.criterion;
+    exports org.mavai.punit.api.spec;
+    exports org.mavai.punit.api.covariate;
+    exports org.mavai.punit.runtime;
+    exports org.mavai.punit.verdict;
+    exports org.mavai.punit.statistics;
+    exports org.mavai.punit.statistics.transparent;
 
     // ── Targeted exports — internal types granted to sibling
     //    modules at their narrowest. Each grant is the minimum
     //    sufficient set surfaced by the sibling's compile errors;
     //    none of these are visible to external (unnamed-module)
     //    consumers.
-    exports org.javai.punit.internal.engine.emit
-        to org.javai.punit.report;
-    exports org.javai.punit.internal.reporting
-        to org.javai.punit.report,
-           org.javai.punit.sentinel;
+    exports org.mavai.punit.internal.engine.emit
+        to org.mavai.punit.report;
+    exports org.mavai.punit.internal.reporting
+        to org.mavai.punit.report,
+           org.mavai.punit.sentinel;
 
     // ── Required modules ──────────────────────────────────────
-    requires transitive org.javai.outcome;
+    requires transitive org.mavai.outcome;
     requires transitive org.opentest4j;
     requires static org.junit.jupiter.api;
     requires java.xml;
@@ -52,8 +52,8 @@ module org.javai.punit.core {
     requires org.apache.logging.log4j;
 
     // ── ServiceLoader ─────────────────────────────────────────
-    uses org.javai.punit.verdict.VerdictSink;
-    uses org.javai.punit.api.spec.SpecCriterionDeriver;
-    provides org.javai.punit.api.spec.SpecCriterionDeriver
-        with org.javai.punit.internal.engine.criteria.PostureBasedSpecCriterionDeriver;
+    uses org.mavai.punit.verdict.VerdictSink;
+    uses org.mavai.punit.api.spec.SpecCriterionDeriver;
+    provides org.mavai.punit.api.spec.SpecCriterionDeriver
+        with org.mavai.punit.internal.engine.criteria.PostureBasedSpecCriterionDeriver;
 }

@@ -8,7 +8,7 @@
     </Appenders>
     <Loggers>
         <!-- PUnit reporter - plain output for tests -->
-        <Logger name="org.javai.punit.reporting.PUnitReporter" level="info" additivity="false">
+        <Logger name="org.mavai.punit.reporting.PUnitReporter" level="info" additivity="false">
             <AppenderRef ref="PUnitConsole"/>
         </Logger>
         

@@ -116,8 +116,8 @@ no longer wants.
 
 The annotations live at:
 
-- `org.javai.punit.api.ProbabilisticTest`
-- `org.javai.punit.api.Experiment`
+- `org.mavai.punit.api.ProbabilisticTest`
+- `org.mavai.punit.api.Experiment`
 
 Their JUnit meta-tags are inherited; they are not authored separately
 on each test method.
@@ -126,7 +126,7 @@ on each test method.
 
 ## The PUnit entry point
 
-`org.javai.punit.runtime.PUnit` is the one entry point an author
+`org.mavai.punit.runtime.PUnit` is the one entry point an author
 imports. Everything else flows from a static call on `PUnit`.
 
 ```java
@@ -140,7 +140,7 @@ PUnit.optimizing(sampling)               // optimize experiment
 Each factory returns a typed builder. The four builder families
 (`TestBuilder`, `MeasureBuilder`, `ExploreBuilder`, `OptimizeBuilder`)
 all live as static-nested classes on `PUnit`. They wrap the
-corresponding spec-builder in `org.javai.punit.api.spec` and add the
+corresponding spec-builder in `org.mavai.punit.api.spec` and add the
 test-harness-aware terminal:
 
 | Builder            | Terminal(s)                                      | What the terminal does                           |
@@ -177,7 +177,7 @@ the Verdict, not in the JUnit pass/fail signal.
 
 ## The Sampling primitive
 
-`org.javai.punit.api.Sampling<FT, IT, OT>` describes *how to produce
+`org.mavai.punit.api.Sampling<FT, IT, OT>` describes *how to produce
 samples* — the service contract factory, the input cycle, the sample count,
 and the sample-loop governors (budgets, exception policy,
 failure-retention cap).
@@ -295,13 +295,13 @@ A service contract declares what counts as a passing sample by
 overriding `Criteria<O> criteria()` and returning a value built up
 from the `Criteria.meeting()` (contractual threshold) and
 `Criteria.empirical()` (baseline-comparison) static factories in
-`org.javai.punit.api.criterion`.
+`org.mavai.punit.api.criterion`.
 
 ### Declaring a single criterion
 
 ```java
-import static org.javai.punit.api.criterion.Criteria.meeting;
-import static org.javai.punit.api.ThresholdOrigin.SLA;
+import static org.mavai.punit.api.criterion.Criteria.meeting;
+import static org.mavai.punit.api.ThresholdOrigin.SLA;
 
 @Override
 public Criteria<Receipt> criteria() {
@@ -319,9 +319,9 @@ contract has only one criterion; missing names default to
 ### Declaring multiple criteria
 
 ```java
-import static org.javai.punit.api.criterion.Criteria.meeting;
-import static org.javai.punit.api.criterion.Criteria.empirical;
-import static org.javai.punit.api.criterion.Criteria.of;
+import static org.mavai.punit.api.criterion.Criteria.meeting;
+import static org.mavai.punit.api.criterion.Criteria.empirical;
+import static org.mavai.punit.api.criterion.Criteria.of;
 
 @Override
 public Criteria<Receipt> criteria() {
@@ -363,9 +363,9 @@ bundle. Both rules are enforced by `Criteria.of(...)`.
 
 A criterion is a spec-level claim evaluated against the observed
 sample aggregate. The abstract type lives at
-`org.javai.punit.api.spec.Criterion<OT, S extends BaselineStatistics>`;
+`org.mavai.punit.api.spec.Criterion<OT, S extends BaselineStatistics>`;
 concrete criteria with statistical machinery live under
-`org.javai.punit.internal.engine.criteria` (so the api package
+`org.mavai.punit.internal.engine.criteria` (so the api package
 stays free of statistical dependencies — see
 [Statistics isolation rule](#statistics-isolation-rule)).
 
@@ -374,9 +374,9 @@ stays free of statistical dependencies — see
 Two factory entry points live as static methods on `Criteria`:
 
 ```java
-import static org.javai.punit.api.criterion.Criteria.meeting;
-import static org.javai.punit.api.criterion.Criteria.empirical;
-import static org.javai.punit.api.ThresholdOrigin.SLA;
+import static org.mavai.punit.api.criterion.Criteria.meeting;
+import static org.mavai.punit.api.criterion.Criteria.empirical;
+import static org.mavai.punit.api.ThresholdOrigin.SLA;
 
 // Contractual — declared threshold, NORMATIVE origin
 meeting().<O>passRate(0.95).contractRef(SLA, "...").satisfies("...", ...);
@@ -403,9 +403,9 @@ Latency commitments live on the service contract's sibling
 
 ```java
 import static java.time.Duration.ofSeconds;
-import static org.javai.punit.api.PercentileKey.P95;
-import static org.javai.punit.api.criterion.Criteria.meeting;
-import static org.javai.punit.api.ThresholdOrigin.SLA;
+import static org.mavai.punit.api.PercentileKey.P95;
+import static org.mavai.punit.api.criterion.Criteria.meeting;
+import static org.mavai.punit.api.ThresholdOrigin.SLA;
 
 @Override
 public LatencyCriterion latency() {
@@ -533,24 +533,24 @@ import a non-exported package — the compiler refuses, and the
 runtime throws `IllegalAccessError`. **Unnamed-module** consumers
 (plain-classpath builds without a `module-info.java` of their own)
 still see all classes on the classpath as a legacy concession;
-they are guarded by the `org.javai.punit.internal.*` namespace
+they are guarded by the `org.mavai.punit.internal.*` namespace
 prefix and the ArchUnit regression rules.
 
 | Package                                                                               | Contains                                                                                                                                      | Author may import?                                            |
 |---------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|
-| `org.javai.punit.api`                                                                 | Annotations, ServiceContract, Contract, Sampling, Factor support, ValueMatcher, TestIntent, ThresholdOrigin, Pacing, PacingConfiguration, TokenTracker, …                              | yes                                                           |
-| `org.javai.punit.api.criterion`                                                       | `Criteria` static factory, criterion declaration types, `LatencyCriterion`, `CriterionPosture`, … — what an author calls from `criteria()` and `latency()`                              | yes                                                           |
-| `org.javai.punit.api.spec`                                                            | Spec types (Spec, Experiment, ProbabilisticTest, Criterion, EvaluationContext, FactorsStepper, NextFactor, BaselineProvider, …)               | yes                                                           |
-| `org.javai.punit.api.covariate`                                                       | Covariate (interface) and built-in covariate categories                                                                                       | yes                                                           |
-| `org.javai.punit.runtime`                                                                      | `PUnit` entry point only — emitters live under `internal.runtime`                                                                             | yes — for `PUnit` only                                        |
-| `org.javai.punit.verdict`                                                                      | Verdict types, sinks, RunMetadata, `TokenMode` enum                                                                                            | yes — for sink registration                                   |
-| `org.javai.punit.statistics`                                                                   | Wilson, percentile, threshold derivation, feasibility evaluation                                                                              | yes — but rarely needed; the criteria already wrap statistics |
-| `org.javai.punit.internal.engine.*` (criteria, baseline, explore, optimize, covariate, spec, …) | Engine internals and concrete criterion impls                                                                                                 | **no** — internal                                             |
-| `org.javai.punit.internal.reporting`                                                           | Internal rendering helpers                                                                                                                    | **no** — internal                                             |
-| `org.javai.punit.internal.runtime`                                                             | Emitters (`BaselineEmitter`, `ExploreEmitter`, `OptimizeEmitter`), resolvers, composer — driven by `PUnit`                                    | **no** — internal                                             |
-| `org.javai.punit.internal.util`                                                                | Internal utilities                                                                                                                            | **no** — internal                                             |
-| `org.javai.punit.report.*` (in punit-report)                                          | Verdict XML reader / writer; HTML report                                                                                                      | yes — for sink consumption                                    |
-| `org.javai.punit.sentinel.*` (in punit-sentinel)                                      | Sentinel runtime + CLI                                                                                                                        | author-side: for reliability spec authoring; no JUnit deps    |
+| `org.mavai.punit.api`                                                                 | Annotations, ServiceContract, Contract, Sampling, Factor support, ValueMatcher, TestIntent, ThresholdOrigin, Pacing, PacingConfiguration, TokenTracker, …                              | yes                                                           |
+| `org.mavai.punit.api.criterion`                                                       | `Criteria` static factory, criterion declaration types, `LatencyCriterion`, `CriterionPosture`, … — what an author calls from `criteria()` and `latency()`                              | yes                                                           |
+| `org.mavai.punit.api.spec`                                                            | Spec types (Spec, Experiment, ProbabilisticTest, Criterion, EvaluationContext, FactorsStepper, NextFactor, BaselineProvider, …)               | yes                                                           |
+| `org.mavai.punit.api.covariate`                                                       | Covariate (interface) and built-in covariate categories                                                                                       | yes                                                           |
+| `org.mavai.punit.runtime`                                                                      | `PUnit` entry point only — emitters live under `internal.runtime`                                                                             | yes — for `PUnit` only                                        |
+| `org.mavai.punit.verdict`                                                                      | Verdict types, sinks, RunMetadata, `TokenMode` enum                                                                                            | yes — for sink registration                                   |
+| `org.mavai.punit.statistics`                                                                   | Wilson, percentile, threshold derivation, feasibility evaluation                                                                              | yes — but rarely needed; the criteria already wrap statistics |
+| `org.mavai.punit.internal.engine.*` (criteria, baseline, explore, optimize, covariate, spec, …) | Engine internals and concrete criterion impls                                                                                                 | **no** — internal                                             |
+| `org.mavai.punit.internal.reporting`                                                           | Internal rendering helpers                                                                                                                    | **no** — internal                                             |
+| `org.mavai.punit.internal.runtime`                                                             | Emitters (`BaselineEmitter`, `ExploreEmitter`, `OptimizeEmitter`), resolvers, composer — driven by `PUnit`                                    | **no** — internal                                             |
+| `org.mavai.punit.internal.util`                                                                | Internal utilities                                                                                                                            | **no** — internal                                             |
+| `org.mavai.punit.report.*` (in punit-report)                                          | Verdict XML reader / writer; HTML report                                                                                                      | yes — for sink consumption                                    |
+| `org.mavai.punit.sentinel.*` (in punit-sentinel)                                      | Sentinel runtime + CLI                                                                                                                        | author-side: for reliability spec authoring; no JUnit deps    |
 
 ---
 
@@ -563,8 +563,8 @@ invariant from regression.
 |-----------------------------------------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `CoreArchitectureTest`                                          | punit-core     | Package-level rules in punit-core. No `org.junit` deps in non-api packages.                                                                                                                                          |
 | `CoreArchitectureTest.apiPackageMustNotDependOnJUnitExtensions` | punit-core     | The api package may reference JUnit annotation types as meta-annotations only — never extension, engine, or platform types.                                                                                          |
-| `CoreArchitectureTest.statisticsModuleMustBeIsolated`           | punit-core     | `org.javai.punit.statistics` has zero dependencies on other punit packages.                                                                                                                                          |
-| `RuntimeArchitectureTest`                                       | punit-core     | `org.javai.punit.runtime` has zero `org.junit` deps. Sentinel-deployable code reaches PUnit here without a JUnit classpath.                                                                                          |
+| `CoreArchitectureTest.statisticsModuleMustBeIsolated`           | punit-core     | `org.mavai.punit.statistics` has zero dependencies on other punit packages.                                                                                                                                          |
+| `RuntimeArchitectureTest`                                       | punit-core     | `org.mavai.punit.runtime` has zero `org.junit` deps. Sentinel-deployable code reaches PUnit here without a JUnit classpath.                                                                                          |
 | `AbstractionLevelArchitectureTest`                              | punit-core     | Abstraction-level discipline across the framework — evaluators / resolvers / deciders must not depend on reporting; renderers must not depend on statistical computation classes.                                   |
 | `SentinelArchitectureTest`                                      | punit-sentinel | Zero `org.junit` deps in punit-sentinel.                                                                                                                                                                             |
 | `RequirementCodeIsolationTest`                                  | all modules    | Internal feature-tracking codes (CT/EX/LT/PT/RC/RP/SC/SN/TH/UC/XM/DG) MUST NOT appear anywhere in src/main/java or src/test/java — including @DisplayName strings, test-class names, test-method names, string literals. |
@@ -593,7 +593,7 @@ To re-baseline a frozen rule after refining its expression:
 
 ## Statistics isolation rule
 
-**Statistical calculations live only in `org.javai.punit.statistics`.
+**Statistical calculations live only in `org.mavai.punit.statistics`.
 Period.**
 
 This is the architectural maxim that protects punit's statistical
@@ -609,7 +609,7 @@ without tracing through the rest of the codebase. Enforced by
   `BinomialProportionEstimator`, `LatencyDistribution`, or any other
   member of the statistics package. Reuse the existing class.
 - **Never introduce** a new statistical-arithmetic helper outside
-  `org.javai.punit.statistics`. If you find yourself reaching for
+  `org.mavai.punit.statistics`. If you find yourself reaching for
   `Math.sqrt`, an inverse-normal-CDF approximation, or
   `MessageDigest`-of-canonical-form in any other package, stop —
   the calculation belongs in the statistics package, with its own
@@ -618,9 +618,9 @@ without tracing through the rest of the codebase. Enforced by
   api-side type needs a statistical calculation, the implementation
   belongs in the engine layer, not in the api package. Concrete
   `Criterion` implementations whose `evaluate()` consumes statistics
-  live in `org.javai.punit.internal.engine.criteria` (e.g. `PassRate`)
-  — the `Criterion` interface stays in `org.javai.punit.api.spec`, the
-  statistical machinery stays in `org.javai.punit.statistics`, and
+  live in `org.mavai.punit.internal.engine.criteria` (e.g. `PassRate`)
+  — the `Criterion` interface stays in `org.mavai.punit.api.spec`, the
+  statistical machinery stays in `org.mavai.punit.statistics`, and
   the criterion bridges the two.
 
 A breach of this rule — typically a duplicated Wilson-score
@@ -649,7 +649,7 @@ test-harness dependencies**. The Sentinel reaches the engine through
 `PUnit` / `runtime`, not through any JUnit extension. Enforced by:
 
 - `RuntimeArchitectureTest` — zero `org.junit` deps in
-  `org.javai.punit.runtime` and `org.javai.punit.internal.runtime`.
+  `org.mavai.punit.runtime` and `org.mavai.punit.internal.runtime`.
 - `SentinelArchitectureTest` — zero `org.junit` deps in
   `punit-sentinel`.
 
@@ -675,7 +675,7 @@ Authoring a reliability specification: see
 ## Outcome vs exception convention
 
 Business-level failures travel as data, not as exceptions. Use
-`org.javai.outcome.Outcome<T>` (from the `org.javai:outcome`
+`org.mavai.outcome.Outcome<T>` (from the `org.mavai:outcome`
 library): return `Outcome.ok(value)` for success,
 `Outcome.fail(name, message)` for an expected business-level failure.
 In a service contract this is wrapped as `ServiceContractOutcome<OT>`
@@ -710,7 +710,7 @@ punit serialises every Verdict to XML using the javai.org family's
 feotest, javai.org sentinels and dashboards all read and write this
 format):
 
-- **XSD schema:** `punit-report/src/main/resources/org/javai/punit/report/verdict-1.0.xsd`.
+- **XSD schema:** `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.0.xsd`.
 - **Namespace:** `http://javai.org/verdict/1.0`.
 - **Root element:** `<verdict-record>`.
 
@@ -752,7 +752,7 @@ After 1.0:
 
 - Major version bumps signal breaking — and require the same
   migration-guide treatment.
-- Module coordinates (`org.javai:punit`, `org.javai:punit-core`, …)
+- Module coordinates (`org.mavai:punit`, `org.mavai:punit-core`, …)
   stay constant. Renames are a tool of last resort.
 
 The release process itself is documented in

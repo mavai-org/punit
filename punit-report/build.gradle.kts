@@ -20,7 +20,7 @@ tasks.jar {
             "Implementation-Title" to "PUnit Report",
             "Implementation-Version" to project.version,
             "Implementation-Vendor" to "javai.org",
-            "Automatic-Module-Name" to "org.javai.punit.report"
+            "Automatic-Module-Name" to "org.mavai.punit.report"
         )
     }
 }
@@ -29,12 +29,12 @@ mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
-    coordinates("org.javai", "punit-report", version.toString())
+    coordinates("org.mavai", "punit-report", version.toString())
 
     pom {
         name.set("PUnit Report")
         description.set("XML report generation for PUnit probabilistic test verdicts")
-        url.set("https://github.com/javai-org/punit")
+        url.set("https://github.com/mavai-org/punit")
 
         licenses {
             license {
@@ -52,9 +52,9 @@ mavenPublishing {
         }
 
         scm {
-            url.set("https://github.com/javai-org/punit")
-            connection.set("scm:git:git://github.com/javai-org/punit.git")
-            developerConnection.set("scm:git:ssh://github.com/javai-org/punit.git")
+            url.set("https://github.com/mavai-org/punit")
+            connection.set("scm:git:git://github.com/mavai-org/punit.git")
+            developerConnection.set("scm:git:ssh://github.com/mavai-org/punit.git")
         }
     }
 }

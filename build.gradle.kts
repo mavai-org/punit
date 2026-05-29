@@ -3,7 +3,7 @@ plugins {
     id("signing")
     id("com.vanniktech.maven.publish") version "0.36.0"
     id("jacoco")
-    id("org.javai.punit")
+    id("org.mavai.punit")
     idea
 }
 
@@ -27,7 +27,7 @@ allprojects {
     }
 }
 
-group = "org.javai"
+group = "org.mavai"
 version = property("punitVersion") as String
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -75,7 +75,7 @@ subprojects {
 
     // Outcome - result types for contract postconditions
     // Resolved locally via composite build (settings.gradle.kts), or from Maven Central on CI
-    api("org.javai:outcome:0.3.0")
+    api("org.mavai:outcome:1.0.0-alpha1")
 
     implementation("org.apache.logging.log4j:log4j-api:2.26.0")
     runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.0")
@@ -156,7 +156,7 @@ tasks.jar {
             "Implementation-Title" to "PUNIT - Probabilistic Unit Testing Framework",
             "Implementation-Version" to project.version,
             "Implementation-Vendor" to "javai.org",
-            "Automatic-Module-Name" to "org.javai.punit"
+            "Automatic-Module-Name" to "org.mavai.punit"
         )
     }
 }
@@ -165,12 +165,12 @@ mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
-    coordinates("org.javai", "punit", version.toString())
+    coordinates("org.mavai", "punit", version.toString())
 
     pom {
         name.set("PUnit")
         description.set("Probabilistic Unit Testing Framework for JUnit 5 - Test non-deterministic systems with statistical pass/fail thresholds")
-        url.set("https://github.com/javai-org/punit")
+        url.set("https://github.com/mavai-org/punit")
 
         licenses {
             license {
@@ -188,9 +188,9 @@ mavenPublishing {
         }
 
         scm {
-            url.set("https://github.com/javai-org/punit")
-            connection.set("scm:git:git://github.com/javai-org/punit.git")
-            developerConnection.set("scm:git:ssh://github.com/javai-org/punit.git")
+            url.set("https://github.com/mavai-org/punit")
+            connection.set("scm:git:git://github.com/mavai-org/punit.git")
+            developerConnection.set("scm:git:ssh://github.com/mavai-org/punit.git")
         }
     }
 }

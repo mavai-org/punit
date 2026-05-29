@@ -10,7 +10,7 @@ signing {
     useGpgCmd()
 }
 
-// Targeted `exports ... to org.javai.punit.report / .sentinel` in
+// Targeted `exports ... to org.mavai.punit.report / .sentinel` in
 // module-info.java reference sibling modules that depend on this one,
 // so they are not on the module path when punit-core compiles. javac
 // emits a benign "module not found" warning per target. Suppress the
@@ -66,7 +66,7 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.3")
 
     // Outcome — result types for contract postconditions
-    api("org.javai:outcome:0.3.0")
+    api("org.mavai:outcome:1.0.0-alpha1")
 
     // Logging
     implementation("org.apache.logging.log4j:log4j-api:2.26.0")
@@ -155,7 +155,7 @@ tasks.jar {
             "Implementation-Title" to "PUnit",
             "Implementation-Version" to project.version,
             "Implementation-Vendor" to "javai.org",
-            "Automatic-Module-Name" to "org.javai.punit.core"
+            "Automatic-Module-Name" to "org.mavai.punit.core"
         )
     }
 }
@@ -164,12 +164,12 @@ mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
-    coordinates("org.javai", "punit-core", version.toString())
+    coordinates("org.mavai", "punit-core", version.toString())
 
     pom {
         name.set("PUnit Core")
         description.set("PUnit probabilistic testing — author-facing API (UseCase, Contract, Sampling, criteria), execution engine, statistics, baselines, runtime entry point. JUnit-free; sentinel-deployable directly.")
-        url.set("https://github.com/javai-org/punit")
+        url.set("https://github.com/mavai-org/punit")
 
         licenses {
             license {
@@ -187,9 +187,9 @@ mavenPublishing {
         }
 
         scm {
-            url.set("https://github.com/javai-org/punit")
-            connection.set("scm:git:git://github.com/javai-org/punit.git")
-            developerConnection.set("scm:git:ssh://github.com/javai-org/punit.git")
+            url.set("https://github.com/mavai-org/punit")
+            connection.set("scm:git:git://github.com/mavai-org/punit.git")
+            developerConnection.set("scm:git:ssh://github.com/mavai-org/punit.git")
         }
     }
 }

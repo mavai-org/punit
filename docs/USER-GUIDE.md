@@ -106,11 +106,11 @@ companion where a reader wants the proof.
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("org.javai.punit") version "0.7.0-alpha5"
+    id("org.mavai.punit") version "0.7.0-alpha5"
 }
 
 dependencies {
-    testImplementation("org.javai:punit:0.7.0-alpha5")
+    testImplementation("org.mavai:punit:0.7.0-alpha5")
 }
 ```
 
@@ -123,9 +123,9 @@ filtering.
 vocabulary. The rest of the examples in this guide assume them:
 
 ```java
-import static org.javai.punit.api.criterion.Criteria.*;   // meeting, empirical, of
-import static org.javai.punit.api.ThresholdOrigin.*;       // SLA, SLO, POLICY, UNSPECIFIED
-import static org.javai.punit.api.PercentileKey.*;         // P50, P90, P95, P99
+import static org.mavai.punit.api.criterion.Criteria.*;   // meeting, empirical, of
+import static org.mavai.punit.api.ThresholdOrigin.*;       // SLA, SLO, POLICY, UNSPECIFIED
+import static org.mavai.punit.api.PercentileKey.*;         // P50, P90, P95, P99
 ```
 
 **The smallest test.** A probabilistic test can be a single method.
@@ -1178,7 +1178,7 @@ Three properties matter:
 
 [Statistical companion §12.4](https://r.javai.org/statistical-companion.pdf)
 develops the construction with proofs; the implementation lives in
-`org.javai.punit.statistics.LatencyThresholdDeriver`.
+`org.mavai.punit.statistics.LatencyThresholdDeriver`.
 
 ### Advisory vs enforced
 
@@ -1571,7 +1571,7 @@ This section is a brief tour of what PUnit computes and where it
 lives. The comprehensive treatment is the
 [Statistical Companion Document](https://r.javai.org/statistical-companion.pdf);
 the implementation lives in the ArchUnit-isolated
-`org.javai.punit.statistics` package, which has no dependencies on
+`org.mavai.punit.statistics` package, which has no dependencies on
 any other punit package so the statistical core can be audited
 against published formulae in isolation.
 
@@ -1785,7 +1785,7 @@ LLM model, temperature, prompt. Bound at the test/experiment call
 site as a record of type `F`.
 
 **`Outcome<T>`.** A sealed type with `Ok<T>` and `Fail<T>` variants.
-The `org.javai:outcome` library's data type for expected failure;
+The `org.mavai:outcome` library's data type for expected failure;
 distinct from thrown exceptions, which signal defects.
 
 **Postcondition.** One named acceptance clause on a criterion.

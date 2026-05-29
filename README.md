@@ -66,10 +66,10 @@ PUnit ships as three published artefacts plus a Gradle plugin:
 
 | Artefact               | Coordinate                 | Purpose                                                                                                          |
 |------------------------|----------------------------|------------------------------------------------------------------------------------------------------------------|
-| **punit-core**         | `org.javai:punit-core`     | Foundational library: author-facing API (`ServiceContract`, `Contract`, `Sampling`, criteria), engine, statistics, baselines, runtime entry point. Carries the user-facing `@ProbabilisticTest` and `@Experiment` annotations (meta-annotated with `@Test`). JUnit-free at runtime; sentinel-deployable directly. |
-| **punit-sentinel**     | `org.javai:punit-sentinel` | Sentinel runner for production/scheduled probabilistic checks without a test harness.                            |
-| **punit-report**       | `org.javai:punit-report`   | HTML report generator and verdict-XML reader/writer; auto-registers an XML `VerdictSink` via `ServiceLoader`.    |
-| **punit Gradle plugin**| `org.javai.punit` (plugin) | Auto-configures the `test` task, registers `experiment` / `exp` tasks, supports `-Prun=` filtering.              |
+| **punit-core**         | `org.mavai:punit-core`     | Foundational library: author-facing API (`ServiceContract`, `Contract`, `Sampling`, criteria), engine, statistics, baselines, runtime entry point. Carries the user-facing `@ProbabilisticTest` and `@Experiment` annotations (meta-annotated with `@Test`). JUnit-free at runtime; sentinel-deployable directly. |
+| **punit-sentinel**     | `org.mavai:punit-sentinel` | Sentinel runner for production/scheduled probabilistic checks without a test harness.                            |
+| **punit-report**       | `org.mavai:punit-report`   | HTML report generator and verdict-XML reader/writer; auto-registers an XML `VerdictSink` via `ServiceLoader`.    |
+| **punit Gradle plugin**| `org.mavai.punit` (plugin) | Auto-configures the `test` task, registers `experiment` / `exp` tasks, supports `-Prun=` filtering.              |
 
 The three library artefacts share the `punit-` prefix; `punit-core` is the foundation, the others extend it.
 
@@ -81,7 +81,7 @@ A probabilistic test calls `PUnit.testing(serviceContract).assertPasses()` insid
 
 ```kotlin
 plugins {
-    id("org.javai.punit") version "0.7.0"
+    id("org.mavai.punit") version "0.9.0"
 }
 
 repositories {
@@ -89,8 +89,8 @@ repositories {
 }
 
 dependencies {
-    testImplementation("org.javai:punit-core:0.7.0")
-    testImplementation("org.javai:punit-report:0.7.0")
+    testImplementation("org.mavai:punit-core:0.9.0")
+    testImplementation("org.mavai:punit-report:0.9.0")
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 ```
@@ -99,15 +99,15 @@ dependencies {
 
 ```xml
 <dependency>
-    <groupId>org.javai</groupId>
+    <groupId>org.mavai</groupId>
     <artifactId>punit-core</artifactId>
-    <version>0.7.0</version>
+    <version>0.9.0</version>
     <scope>test</scope>
 </dependency>
 <dependency>
-    <groupId>org.javai</groupId>
+    <groupId>org.mavai</groupId>
     <artifactId>punit-report</artifactId>
-    <version>0.7.0</version>
+    <version>0.9.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -121,8 +121,8 @@ For sentinel-deployable applications that run probabilistic checks without a tes
 A service contract wraps the service call and declares its acceptance criteria:
 
 ```java
-import static org.javai.punit.api.ThresholdOrigin.SLA;
-import static org.javai.punit.api.criterion.Criteria.meeting;
+import static org.mavai.punit.api.ThresholdOrigin.SLA;
+import static org.mavai.punit.api.criterion.Criteria.meeting;
 
 public class GreetingService implements ServiceContract<NoFactors, String, String> {
     @Override
@@ -188,4 +188,4 @@ Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 Contributions are welcome. All contributions are accepted under Apache 2.0 and
 require a [Developer Certificate of Origin](dco.txt) sign-off (`git commit -s`).
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details. Please open an issue or pull
-request on [GitHub](https://github.com/javai-org/punit).
+request on [GitHub](https://github.com/mavai-org/punit).

@@ -22,7 +22,7 @@ tasks.jar {
             "Implementation-Title" to "PUnit Sentinel",
             "Implementation-Version" to project.version,
             "Implementation-Vendor" to "javai.org",
-            "Automatic-Module-Name" to "org.javai.punit.sentinel"
+            "Automatic-Module-Name" to "org.mavai.punit.sentinel"
         )
     }
 }
@@ -31,12 +31,12 @@ mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
-    coordinates("org.javai", "punit-sentinel", version.toString())
+    coordinates("org.mavai", "punit-sentinel", version.toString())
 
     pom {
         name.set("PUnit Sentinel")
         description.set("Sentinel mode for PUnit — always-on production monitoring")
-        url.set("https://github.com/javai-org/punit")
+        url.set("https://github.com/mavai-org/punit")
 
         licenses {
             license {
@@ -54,9 +54,9 @@ mavenPublishing {
         }
 
         scm {
-            url.set("https://github.com/javai-org/punit")
-            connection.set("scm:git:git://github.com/javai-org/punit.git")
-            developerConnection.set("scm:git:ssh://github.com/javai-org/punit.git")
+            url.set("https://github.com/mavai-org/punit")
+            connection.set("scm:git:git://github.com/mavai-org/punit.git")
+            developerConnection.set("scm:git:ssh://github.com/mavai-org/punit.git")
         }
     }
 }

@@ -42,7 +42,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Service Contract
   java_type: ServiceContract<FT, IT, OT>          # interface (sealed by extension to Contract)
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Sealed-by-convention: extends Contract<IT, OT>. An author writes
     one `class X implements ServiceContract<F, I, O>` and overrides two
@@ -65,7 +65,7 @@ ArchUnit-style architecture test).
 
 - concept: Service Contract ID
   java_type: String (returned by ServiceContract#id())
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Filename-safe, stable across runs. Path component for emitted
     artefacts (baselines, explorations, optimizations).
@@ -76,7 +76,7 @@ ArchUnit-style architecture test).
 
 - concept: Factor
   java_type: typed factor record (author-defined) + Factor / FactorValue / FactorBundle support types
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     The factor type is a Java record the author declares. The
     framework reads its components reflectively for filename
@@ -94,7 +94,7 @@ ArchUnit-style architecture test).
 
 - concept: Covariate
   java_type: Covariate (interface) + CovariateProfile + per-category implementations
-  package: org.javai.punit.api.covariate
+  package: org.mavai.punit.api.covariate
   role_notes: |
     Covariates are first-class members of baseline identity, not
     metadata. Built-in categories: `DayOfWeekCovariate`,
@@ -111,7 +111,7 @@ ArchUnit-style architecture test).
 
 - concept: Input Source
   java_type: InputSource<IT> + InputSupplier<IT>
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Backed by an in-memory list, a JSON file fixture
     (`InputSource.fromJsonFile(...)`), or a custom
@@ -125,7 +125,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Service Contract
   java_type: Contract<IT, OT>             # interface
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     The operational layer. Carries `invoke` and `criteria()`
     (returning a `Criteria<O>` value). ServiceContract extends
@@ -143,7 +143,7 @@ ArchUnit-style architecture test).
 
 - concept: Criterion clause (postcondition)
   java_type: Decl::satisfies / ::transforming (returned by Criteria.meeting() / Criteria.empirical())
-  package: org.javai.punit.api.criterion
+  package: org.mavai.punit.api.criterion
   role_notes: |
     Authors declare clauses by chaining `.satisfies(name, predicate)`
     on a `Decl` returned from a `Criteria.meeting()` or
@@ -162,7 +162,7 @@ ArchUnit-style architecture test).
 
 - concept: Duration Constraint
   java_type: ServiceContract#maxLatency() returning Optional<Duration>
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Per-sample wall-clock bound. Independent of the criteria
     clauses: a duration violation is recorded even if every
@@ -175,7 +175,7 @@ ArchUnit-style architecture test).
 
 - concept: Expected-Output Match
   java_type: ValueMatcher<OT> + Expectation<OT>
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Golden-value comparison. Built-in matchers: exact,
     case-insensitive, JSON-structural; custom matchers compose.
@@ -184,7 +184,7 @@ ArchUnit-style architecture test).
 
 - concept: Conformance
   java_type: ServiceContractOutcome<OT> (the per-sample state) + criterion-level evaluation
-  package: org.javai.punit.api (ServiceContractOutcome) + org.javai.punit.api.spec (criterion path)
+  package: org.mavai.punit.api (ServiceContractOutcome) + org.mavai.punit.api.spec (criterion path)
   role_notes: |
     `ServiceContractOutcome` carries the per-sample data: timestamped
     wrapper of the `Outcome<OT>`, duration, token charge, clause
@@ -204,7 +204,7 @@ ArchUnit-style architecture test).
 - concept: Sample
   java_type: per-sample tuple (Outcome<OT> + duration + token diff)
               materialised inside Engine; surfaced via SampleSummary
-  package: org.javai.punit.internal.engine + org.javai.punit.api.spec
+  package: org.mavai.punit.internal.engine + org.mavai.punit.api.spec
   role_notes: |
     Authors do not write Sample — the framework produces it.
     `SampleSummary<OT>` is the aggregated form a criterion sees.
@@ -212,10 +212,10 @@ ArchUnit-style architecture test).
     inside `api/spec`.
 
 - concept: Outcome
-  java_type: org.javai.outcome.Outcome<T>     # sealed interface (Ok | Fail)
-  package: org.javai.outcome (external library)
+  java_type: org.mavai.outcome.Outcome<T>     # sealed interface (Ok | Fail)
+  package: org.mavai.outcome (external library)
   role_notes: |
-    Imported from the `org.javai:outcome` library; not punit's
+    Imported from the `org.mavai:outcome` library; not punit's
     invention. punit also publishes `ServiceContractOutcome<OT>` as the
     per-sample wrapper carrying the `Outcome<OT>` value plus
     cost / timing / clauses. Authors return `Outcome.ok(value)`
@@ -230,7 +230,7 @@ ArchUnit-style architecture test).
 
 - concept: Probabilistic Test
   java_type: ProbabilisticTest (api.spec interface) + @ProbabilisticTest annotation
-  package: org.javai.punit.api.spec (spec) + org.javai.punit.api (annotation)
+  package: org.mavai.punit.api.spec (spec) + org.mavai.punit.api (annotation)
   role_notes: |
     The annotation `@ProbabilisticTest` is attribute-free. Every
     parameter lives on the spec built inside the method body via
@@ -244,7 +244,7 @@ ArchUnit-style architecture test).
 
 - concept: Verdict
   java_type: PUnitVerdict (sealed interface) + ProbabilisticTestVerdict (record)
-  package: org.javai.punit.verdict
+  package: org.mavai.punit.verdict
   role_notes: |
     `PUnitVerdict` is the sealed common surface; the concrete
     record `ProbabilisticTestVerdict` is what every test produces.
@@ -266,7 +266,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Parameter Triangle
   java_type: surfaced via TestBuilder#samples / criterion shapes
-  package: org.javai.punit.runtime (builder) + org.javai.punit.api.spec (spec)
+  package: org.mavai.punit.runtime (builder) + org.mavai.punit.api.spec (spec)
   role_notes: |
     Three approaches: sample-size-first (samples + criterion;
     framework derives implied claim), confidence-first (criterion
@@ -276,8 +276,8 @@ ArchUnit-style architecture test).
 
 - concept: Threshold (pass-rate)
   java_type: Criteria.meeting() / Criteria.empirical() static factories returning Decl
-  package: org.javai.punit.api.criterion (author surface) +
-           org.javai.punit.internal.engine.criteria (PassRate impl)
+  package: org.mavai.punit.api.criterion (author surface) +
+           org.mavai.punit.internal.engine.criteria (PassRate impl)
   role_notes: |
     Two author-facing forms:
     `meeting().passRate(threshold).contractRef(origin, ref)`
@@ -293,12 +293,12 @@ ArchUnit-style architecture test).
       statistical *arithmetic*. PassRate delegates to
       `BinomialProportionEstimator` and `ThresholdDeriver`. If
       ever tempted to inline a Wilson here, stop — the calculation
-      belongs in `org.javai.punit.statistics`.
+      belongs in `org.mavai.punit.statistics`.
 
 - concept: Threshold (latency)
   java_type: LatencyCriterion returned by ServiceContract#latency()
-  package: org.javai.punit.api.criterion (author surface) +
-           org.javai.punit.internal.engine.criteria (PercentileLatency impl)
+  package: org.mavai.punit.api.criterion (author surface) +
+           org.mavai.punit.internal.engine.criteria (PercentileLatency impl)
   role_notes: |
     Latency thresholds are declared by overriding
     `LatencyCriterion latency()` on the service contract,
@@ -310,7 +310,7 @@ ArchUnit-style architecture test).
 
 - concept: Threshold Origin
   java_type: ThresholdOrigin enum
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     SLA / SLO / Policy → NORMATIVE (collectively). EMPIRICAL is
     distinct. Origin × Test Intent decides Feasibility Gate
@@ -318,7 +318,7 @@ ArchUnit-style architecture test).
 
 - concept: Threshold Provenance
   java_type: fields on ProbabilisticTestVerdict + RunMetadata
-  package: org.javai.punit.verdict
+  package: org.mavai.punit.verdict
   role_notes: |
     Carried through to verdict XML emission. RP07 makes the
     binding (per cross-framework invariant — "Sample-time provenance
@@ -326,7 +326,7 @@ ArchUnit-style architecture test).
 
 - concept: Feasibility Gate
   java_type: VerificationFeasibilityEvaluator + Feasibility (engine criterion adapter)
-  package: org.javai.punit.statistics (evaluator) + org.javai.punit.internal.engine.criteria (adapter)
+  package: org.mavai.punit.statistics (evaluator) + org.mavai.punit.internal.engine.criteria (adapter)
   role_notes: |
     The pre-execution gate. Verification + NORMATIVE → reject;
     Smoke + NORMATIVE → run with caveat; any + EMPIRICAL → run.
@@ -335,7 +335,7 @@ ArchUnit-style architecture test).
 
 - concept: Wilson Score Bound
   java_type: BinomialProportionEstimator (two-sided + one-sided)
-  package: org.javai.punit.statistics
+  package: org.mavai.punit.statistics
   role_notes: |
     Both bounds live in the estimator. The verdict path uses
     only the one-sided lower bound (cross-framework invariant —
@@ -347,7 +347,7 @@ ArchUnit-style architecture test).
 
 - concept: Latency Population
   java_type: LatencyDistribution (statistics) + LatencyPercentileComputer (engine)
-  package: org.javai.punit.statistics + org.javai.punit.internal.engine
+  package: org.mavai.punit.statistics + org.mavai.punit.internal.engine
   role_notes: |
     **Family invariant — Latency Population purity.** Only
     successful Samples contribute. The `LatencyPercentileComputer`
@@ -356,7 +356,7 @@ ArchUnit-style architecture test).
 
 - concept: Empirical Percentile
   java_type: nearest-rank computation in LatencyDistribution
-  package: org.javai.punit.statistics
+  package: org.mavai.punit.statistics
   role_notes: |
     Non-parametric, distribution-free. Latency thresholds derive
     from the binomial order-statistic upper confidence bound.
@@ -369,7 +369,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Token
   java_type: TokenTracker (interface) + InMemoryTokenTracker (engine impl) + TokenChargeRecorder (annotation-driven static charge)
-  package: org.javai.punit.api (tracker, recorder) + org.javai.punit.internal.engine (impl)
+  package: org.mavai.punit.api (tracker, recorder) + org.mavai.punit.internal.engine (impl)
   role_notes: |
     Generic unit of cost — not LLM-specific (family ambiguous
     term: `Token`). Authors call `tracker.recordTokens(n)` inside
@@ -378,7 +378,7 @@ ArchUnit-style architecture test).
 
 - concept: Budget
   java_type: ResourceControls + ResourceControlsBuilder + BudgetTracker (engine)
-  package: org.javai.punit.api.spec + org.javai.punit.internal.engine + org.javai.punit.internal.engine.budget
+  package: org.mavai.punit.api.spec + org.mavai.punit.internal.engine + org.mavai.punit.internal.engine.budget
   role_notes: |
     Time / token / sample-count flavours. Suite / class / method
     scopes; first exhausted budget triggers termination.
@@ -391,7 +391,7 @@ ArchUnit-style architecture test).
 
 - concept: Pacing
   java_type: Pacing record + per-pacing-mode strategies
-  package: org.javai.punit.api + org.javai.punit.internal.engine.pacing
+  package: org.mavai.punit.api + org.mavai.punit.internal.engine.pacing
   role_notes: |
     Pacing belongs on the Service Contract (`ServiceContract#pacing()`), not on
     the spec — every test of the same service should respect the
@@ -406,7 +406,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Experiment
   java_type: Experiment (api.spec interface) + @Experiment annotation
-  package: org.javai.punit.api.spec (spec) + org.javai.punit.api (annotation)
+  package: org.mavai.punit.api.spec (spec) + org.mavai.punit.api (annotation)
   role_notes: |
     Three modes via the spec's `Experiment.Kind`: MEASURE,
     EXPLORE, OPTIMIZE. The annotation carries no attributes; the
@@ -417,7 +417,7 @@ ArchUnit-style architecture test).
 
 - concept: Stepper (Factors)
   java_type: FactorsStepper<FT> (interface) + NextFactor<FT> (sealed return)
-  package: org.javai.punit.api.spec
+  package: org.mavai.punit.api.spec
   role_notes: |
     `next` returns `NextFactor.next(factors)` or
     `NextFactor.stop()`. The pre-0.7 `null`-as-stop pattern is
@@ -425,7 +425,7 @@ ArchUnit-style architecture test).
 
 - concept: Empirical Baseline
   java_type: BaselineProvider + BaselineLookup (api) + BaselineEmitter (runtime)
-  package: org.javai.punit.api.spec + org.javai.punit.runtime + org.javai.punit.internal.engine.baseline
+  package: org.mavai.punit.api.spec + org.mavai.punit.runtime + org.mavai.punit.internal.engine.baseline
   role_notes: |
     Emitted by MeasureBuilder.run() via BaselineEmitter; loaded
     via BaselineProvider; selected via covariate-aware resolver
@@ -433,14 +433,14 @@ ArchUnit-style architecture test).
 
 - concept: Footprint
   java_type: footprint hash inside engine.baseline + serialised as the EX09 field
-  package: org.javai.punit.internal.engine.baseline
+  package: org.mavai.punit.internal.engine.baseline
   role_notes: |
     Internal to the engine; surfaces in baseline YAML. Authors
     do not compute footprints by hand.
 
 - concept: Content Fingerprint
   java_type: contentFingerprint field on baseline YAML (EX10)
-  package: org.javai.punit.internal.engine.baseline
+  package: org.mavai.punit.internal.engine.baseline
   role_notes: |
     Soft-warning on mismatch (per 2026-05 catalog amendments),
     not hard abort.
@@ -453,7 +453,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Test Intent
   java_type: TestIntent enum (VERIFICATION, SMOKE)
-  package: org.javai.punit.api
+  package: org.mavai.punit.api
   role_notes: |
     Surfaced on the test builder via `.intent(TestIntent.SMOKE)`.
     Default is VERIFICATION.
@@ -479,7 +479,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Verdict XML (RP07)
   java_type: VerdictXmlWriter + VerdictXmlReader
-  package: org.javai.punit.report
+  package: org.mavai.punit.report
   role_notes: |
     `punit-report` module. XSD shipped at
     `punit-report/src/main/resources/.../verdict-1.0.xsd`. Must
@@ -492,8 +492,8 @@ ArchUnit-style architecture test).
 
 - concept: Verdict Sink
   java_type: VerdictSink (interface, public) + VerdictSinkBus (dispatcher, internal)
-  package: org.javai.punit.verdict (interface) +
-           org.javai.punit.internal.reporting (dispatcher)
+  package: org.mavai.punit.verdict (interface) +
+           org.mavai.punit.internal.reporting (dispatcher)
   role_notes: |
     ServiceLoader-discovered. With `punit-report` on the
     classpath, the XML sink registers automatically. Without
@@ -507,7 +507,7 @@ ArchUnit-style architecture test).
 ```yaml
 - concept: Sentinel
   java_type: SentinelMain + SentinelExecutor + SentinelOrchestrator
-  package: org.javai.punit.sentinel (in punit-sentinel module)
+  package: org.mavai.punit.sentinel (in punit-sentinel module)
   role_notes: |
     Zero `org.junit` dependencies. The Sentinel reaches the engine
     through `PUnit` / `runtime`, not through any JUnit surface.
@@ -523,7 +523,7 @@ ArchUnit-style architecture test).
 
 - concept: Reliability Specification
   java_type: SentinelConfiguration + EnvironmentMetadata
-  package: org.javai.punit.sentinel
+  package: org.mavai.punit.sentinel
   role_notes: |
     Bundle authored alongside the test suite; consumable by the
     suite via test adapter (SN05) and by the Sentinel via CLI.
@@ -566,10 +566,10 @@ differently).
 
 - name: api / api.criterion / api.spec / engine boundary
   description: |
-    `org.javai.punit.api` carries types an author touches when
+    `org.mavai.punit.api` carries types an author touches when
     *authoring* (ServiceContract, Contract, Sampling, Factor
     support, annotations, intent, origin, value matchers,
-    pacing). `org.javai.punit.api.criterion`
+    pacing). `org.mavai.punit.api.criterion`
     carries the types an author calls from `criteria()` and
     `latency()`: the `Criteria` static factory, criterion
     declaration types, `LatencyCriterion`, `CriterionPosture`. `api.spec`
@@ -626,8 +626,8 @@ differently).
   states: [in_memory_after_measure, written_to_explorations_outputDir
            (test build), committed_under_src_test_resources_punit_specs,
            loaded_via_BaselineProvider, expired_per_expiresInDays]
-  emit_path: org.javai.punit.runtime.BaselineEmitter
-  load_path: org.javai.punit.api.spec.BaselineProvider via
+  emit_path: org.mavai.punit.runtime.BaselineEmitter
+  load_path: org.mavai.punit.api.spec.BaselineProvider via
              ProfileBoundBaselineProvider
 ```
 
@@ -642,7 +642,7 @@ names the test for each.
 ```yaml
 - cross_framework_invariant: Statistical isolation
   punit_enforcement: |
-    `org.javai.punit.statistics` has no `org.javai.punit.*`
+    `org.mavai.punit.statistics` has no `org.mavai.punit.*`
     imports outside the package. Enforced by
     `CoreArchitectureTest.statisticsModuleMustBeIsolated`. Test
     sources must also keep statistical arithmetic out — see also
@@ -681,7 +681,7 @@ names the test for each.
   punit_enforcement: |
     `SentinelArchitectureTest` enforces no `org.junit` imports in
     `punit-sentinel`. `RuntimeArchitectureTest` enforces the same
-    in `org.javai.punit.runtime`.
+    in `org.mavai.punit.runtime`.
 
 - cross_framework_invariant: Service Contract aspect independence
   punit_enforcement: |
@@ -706,7 +706,7 @@ future cleanup directives.
 
 The **formal, executable specification** of the target package
 structure lives in
-`punit-core/src/test/java/org/javai/punit/architecture/PackageStructureArchitectureTest.java`.
+`punit-core/src/test/java/org/mavai/punit/architecture/PackageStructureArchitectureTest.java`.
 That test class encodes each architectural decision below as an
 ArchUnit rule against the *post-cleanup* state. Until the cleanup
 lands, current violations are captured in `archunit_store/` via

@@ -69,7 +69,7 @@ Contains `ServiceContract` implementations and the sentinel-deployable classes t
 // app-usecases/build.gradle.kts
 dependencies {
     api(project(":app-stochastic"))
-    api("org.javai:punit-core:0.6.0")  // Production dependency
+    api("org.mavai:punit-core:0.6.0")  // Production dependency
 }
 ```
 
@@ -100,8 +100,8 @@ The JUnit test source set. Contains standalone `@ProbabilisticTest` and `@Experi
 // In app-usecases/build.gradle.kts or a dedicated app-tests module
 dependencies {
     testImplementation(project(":app-usecases"))
-    testImplementation("org.javai:punit-core:0.7.0")
-    testImplementation("org.javai:punit-report:0.7.0")  // Verdict XML sink
+    testImplementation("org.mavai:punit-core:0.7.0")
+    testImplementation("org.mavai:punit-report:0.7.0")  // Verdict XML sink
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 ```
@@ -121,7 +121,7 @@ The resulting JAR (`build/libs/<project>-sentinel.jar`) includes:
 - All runtime dependencies, unpacked into the fat JAR
 - A generated `META-INF/punit/sentinel-classes` manifest
 
-The task requires at least one class declaring `@ProbabilisticTest` or `@Experiment` on the main classpath. The plugin automatically adds `punit-sentinel` as a dependency — no manual dependency declaration is needed beyond the standard `org.javai.punit` plugin application.
+The task requires at least one class declaring `@ProbabilisticTest` or `@Experiment` on the main classpath. The plugin automatically adds `punit-sentinel` as a dependency — no manual dependency declaration is needed beyond the standard `org.mavai.punit` plugin application.
 
 ---
 
@@ -241,8 +241,8 @@ The sentinel JAR is built by the PUnit Gradle plugin's `createSentinel` task fro
 
 | Consumer                            | Artefact                   | Scope                |
 |-------------------------------------|----------------------------|----------------------|
-| Sentinel-deployable / use-case author | `org.javai:punit-core`     | `api` (production)   |
-| JUnit test developer                | `org.javai:punit-core` + `org.javai:punit-report` + `org.junit.jupiter:junit-jupiter` | `testImplementation` |
-| Verdict-XML / report consumer       | `org.javai:punit-report`   | as appropriate       |
+| Sentinel-deployable / use-case author | `org.mavai:punit-core`     | `api` (production)   |
+| JUnit test developer                | `org.mavai:punit-core` + `org.mavai:punit-report` + `org.junit.jupiter:junit-jupiter` | `testImplementation` |
+| Verdict-XML / report consumer       | `org.mavai:punit-report`   | as appropriate       |
 
 The `punit-sentinel` artefact is included automatically by the PUnit Gradle plugin when building the sentinel JAR via `createSentinel`. No manual dependency declaration is needed for sentinel deployment.

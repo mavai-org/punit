@@ -12,7 +12,7 @@ val outcomeDir = file("../outcome")
 if (outcomeDir.isDirectory) {
     includeBuild(outcomeDir) {
         dependencySubstitution {
-            substitute(module("org.javai:outcome")).using(project(":"))
+            substitute(module("org.mavai:outcome")).using(project(":"))
         }
     }
 }

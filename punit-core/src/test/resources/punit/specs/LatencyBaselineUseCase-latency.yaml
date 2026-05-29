@@ -4,7 +4,7 @@
 schemaVersion: punit-spec-1
 useCaseId: LatencyBaselineUseCase
 generatedAt: 2026-03-07T12:00:00.000000Z
-experimentClass: org.javai.punit.testsubjects.LatencyBaselineTestSubjects
+experimentClass: org.mavai.punit.testsubjects.LatencyBaselineTestSubjects
 experimentMethod: measure
 execution:
   samplesPlanned: 100

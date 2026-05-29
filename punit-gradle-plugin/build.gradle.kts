@@ -3,7 +3,7 @@ plugins {
     `kotlin-dsl`
 }
 
-group = "org.javai"
+group = "org.mavai"
 version = property("punitVersion") as String
 
 repositories {
@@ -13,8 +13,8 @@ repositories {
 gradlePlugin {
     plugins {
         create("punit") {
-            id = "org.javai.punit"
-            implementationClass = "org.javai.punit.gradle.PUnitPlugin"
+            id = "org.mavai.punit"
+            implementationClass = "org.mavai.punit.gradle.PUnitPlugin"
             displayName = "PUnit Gradle Plugin"
             description = "Configures test and experiment tasks for PUnit probabilistic testing"
         }
@@ -47,11 +47,11 @@ val generateVersionFile = tasks.register("generateVersionFile") {
     outputs.dir(outputDir)
     inputs.property("punitVersion", punitVersion)
     doLast {
-        val dir = outputDir.get().asFile.resolve("org/javai/punit/gradle")
+        val dir = outputDir.get().asFile.resolve("org/mavai/punit/gradle")
         dir.mkdirs()
         dir.resolve("PUnitVersion.kt").writeText(
             """
-            package org.javai.punit.gradle
+            package org.mavai.punit.gradle
 
             internal object PUnitVersion {
                 const val VERSION = "$punitVersion"
