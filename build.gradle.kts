@@ -1,3 +1,6 @@
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.tasks.GenerateModuleMetadata
+
 plugins {
     id("java-library")
     id("signing")
@@ -5,6 +8,30 @@ plugins {
     id("jacoco")
     id("org.javai.punit")
     idea
+}
+
+// ===== RELOCATION-BRANCH ONLY (release/0.9.0-relocation) =====
+// Final org.javai:punit* release: every published POM carries a Maven
+// <relocation> to the org.mavai coordinate, and Gradle Module Metadata is
+// disabled so the .module file cannot override the POM relocation (consumers
+// would otherwise silently resolve the legacy jar). Do NOT carry to main.
+allprojects {
+    tasks.withType<GenerateModuleMetadata>().configureEach { enabled = false }
+    plugins.withId("com.vanniktech.maven.publish") {
+        extensions.configure<PublishingExtension> {
+            publications.withType<MavenPublication>().configureEach {
+                pom.withXml {
+                    val rel = asNode().appendNode("distributionManagement")
+                        .appendNode("relocation")
+                    rel.appendNode("groupId", "org.mavai")
+                    rel.appendNode("artifactId", artifactId)
+                    rel.appendNode("version", "0.9.0")
+                    rel.appendNode("message",
+                        "punit has moved to org.mavai (groupId). See https://mavai.org.")
+                }
+            }
+        }
+    }
 }
 
 // Configure IDEA to download sources and javadoc

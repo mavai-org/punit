@@ -6,13 +6,7 @@ rootProject.name = "punit"
 
 include("punit-core", "punit-sentinel", "punit-report")
 
-// Include the outcome library from the local filesystem when available (sibling folder).
-// On CI, this folder won't exist and Gradle resolves outcome from Maven Central instead.
-val outcomeDir = file("../outcome")
-if (outcomeDir.isDirectory) {
-    includeBuild(outcomeDir) {
-        dependencySubstitution {
-            substitute(module("org.javai:outcome")).using(project(":"))
-        }
-    }
-}
+// RELOCATION-BRANCH ONLY: the sibling ../outcome has moved to org.mavai, so the
+// local composite would break compilation of this legacy org.javai source tree.
+// Resolve org.javai:outcome:0.3.0 from Maven Central instead (immutable, still present).
+// Do NOT carry this change to main.
