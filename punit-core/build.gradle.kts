@@ -100,7 +100,7 @@ val fetchConformanceData by tasks.registering {
 
     doLast {
         val latestUrl = URI(
-            "https://github.com/javai-org/javai-R/releases/latest"
+            "https://github.com/mavai-org/mavai-R/releases/latest"
         ).toURL()
         val conn = latestUrl.openConnection() as HttpURLConnection
         conn.instanceFollowRedirects = false
@@ -121,7 +121,7 @@ val fetchConformanceData by tasks.registering {
         if (!cacheZip.exists()) {
             cacheZip.parentFile.mkdirs()
             val assetUrl = URI(
-                "https://github.com/javai-org/javai-R/releases/download/$tag/cases-$tag.zip"
+                "https://github.com/mavai-org/mavai-R/releases/download/$tag/cases-$tag.zip"
             ).toURL()
             assetUrl.openStream().use { input ->
                 cacheZip.outputStream().use { output -> input.copyTo(output) }
