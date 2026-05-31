@@ -155,7 +155,7 @@ tasks.jar {
         attributes(
             "Implementation-Title" to "PUNIT - Probabilistic Unit Testing Framework",
             "Implementation-Version" to project.version,
-            "Implementation-Vendor" to "javai.org",
+            "Implementation-Vendor" to "mavai.org",
             "Automatic-Module-Name" to "org.mavai.punit"
         )
     }

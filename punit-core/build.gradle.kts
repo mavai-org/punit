@@ -83,8 +83,8 @@ dependencies {
     testImplementation(project(":punit-report"))
 }
 
-// --- javai-R conformance reference data ----------------------------------------
-// Fetches the latest javai-R release (resolved via the GitHub /releases/latest
+// --- mavai-R conformance reference data ----------------------------------------
+// Fetches the latest mavai-R release (resolved via the GitHub /releases/latest
 // redirect, which costs no API-rate-limit quota), downloads its cases-<tag>.zip
 // asset, caches it keyed by tag, and extracts into a directory on the test
 // classpath so that /conformance/*.json resolves.
@@ -92,7 +92,7 @@ dependencies {
 val conformanceResourcesDir = layout.buildDirectory.dir("generated/conformance")
 
 val fetchConformanceData by tasks.registering {
-    description = "Fetches the latest javai-R conformance reference data release"
+    description = "Fetches the latest mavai-R conformance reference data release"
     group = "verification"
 
     outputs.dir(conformanceResourcesDir)
@@ -135,7 +135,7 @@ val fetchConformanceData by tasks.registering {
             from(zipTree(cacheZip))
             into(destDir)
         }
-        logger.lifecycle("Fetched javai-R conformance fixtures: $tag")
+        logger.lifecycle("Fetched mavai-R conformance fixtures: $tag")
     }
 }
 
@@ -154,7 +154,7 @@ tasks.jar {
         attributes(
             "Implementation-Title" to "PUnit",
             "Implementation-Version" to project.version,
-            "Implementation-Vendor" to "javai.org",
+            "Implementation-Vendor" to "mavai.org",
             "Automatic-Module-Name" to "org.mavai.punit.core"
         )
     }

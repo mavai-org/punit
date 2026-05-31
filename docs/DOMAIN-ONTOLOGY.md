@@ -1,6 +1,6 @@
 # punit Domain Ontology
 
-This document maps the javai.org framework family's shared domain
+This document maps the mavai.org framework family's shared domain
 concepts onto punit's Java idioms, packages, and types. It is the
 conceptual counterpart to [`DEVELOPER-API.md`](DEVELOPER-API.md) —
 together they form punit's spec for "what the framework looks like
@@ -86,9 +86,9 @@ ArchUnit-style architecture test).
   gotchas:
     - Drop the `with_` prefix on builder/fluent factor methods
       (project-wide rule — see cross-framework ontology assistant guidance).
-    - **Term to avoid: "factor level".** The canonical javai term
+    - **Term to avoid: "factor level".** The canonical mavai term
       is "factor value". "Factor level" survives only in
-      `javai-R/docs/GLOSSARY.md` as a Design-of-Experiments nod.
+      `mavai-R/docs/GLOSSARY.md` as a Design-of-Experiments nod.
       Two javadoc surfaces in `Factor.java` and `Config.java` still
       use "factor levels" — sweep when next editing those files.
 
@@ -484,7 +484,7 @@ ArchUnit-style architecture test).
     `punit-report` module. XSD shipped at
     `punit-report/src/main/resources/.../verdict-1.0.xsd`. Must
     diff clean against the cross-framework canonical XSD shared
-    with feotest and javai.org sentinels / dashboards.
+    with feotest and mavai.org sentinels / dashboards.
   gotchas:
     - Emits `wilson-lower` only on `<statistics>`; the upper bound
       is not emitted (the verdict path is left-tailed). Aligned to
@@ -718,7 +718,7 @@ lands, current violations are captured in `archunit_store/` via
     - punit-core/.../api/Factor.java:13
     - punit-core/.../api/Config.java:8
   fix: |
-    Replace with "factor values". The canonical javai term is
+    Replace with "factor values". The canonical mavai term is
     "factor value" (family ambiguous-terms entry "Factor Level").
   scope: editorial; sweep when next editing those files.
 
@@ -760,7 +760,7 @@ lands, current violations are captured in `archunit_store/` via
   are owned upstream. This document records *how punit enforces*
   each invariant, not what each invariant says.
 - **It does not duplicate the glossary.** Concept definitions live
-  in `javai-R/docs/GLOSSARY.md`. This document maps each
+  in `mavai-R/docs/GLOSSARY.md`. This document maps each
   glossary-defined concept onto a Java type / package / idiom.
 - **It does not restate methodology.** Statistical formulae live
   in the Statistical Companion; this document references the

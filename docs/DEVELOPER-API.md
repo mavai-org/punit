@@ -705,9 +705,9 @@ feotest the equivalent is idiomatic `Result<T, E>`.
 
 ## Verdict XML wire format
 
-punit serialises every Verdict to XML using the javai.org family's
+punit serialises every Verdict to XML using the mavai.org family's
 **verdict-XML interchange standard** (cross-language: punit,
-feotest, javai.org sentinels and dashboards all read and write this
+feotest, mavai.org sentinels and dashboards all read and write this
 format):
 
 - **XSD schema:** `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.0.xsd`.
@@ -722,7 +722,7 @@ context).
 
 When modifying the XML format:
 
-- Schema semantics are shared across the javai.org framework
+- Schema semantics are shared across the mavai.org framework
   family — coordinate cross-framework before changing punit's
   copy in isolation.
 - `<statistics>` carries `wilson-lower` only — the one-sided Wilson

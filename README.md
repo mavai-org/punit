@@ -166,7 +166,7 @@ This runs 100 samples against the contract's declared criteria — a 95% pass-ra
 
 ## Examples
 
-Find many examples in the [punitexamples repository](https://github.com/javai-org/punitexamples).
+Find many examples in the [punitexamples repository](https://github.com/mavai-org/punitexamples).
 
 ## Documentation
 

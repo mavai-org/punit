@@ -9,7 +9,7 @@ import java.util.Objects;
  * <p>This class provides the fundamental statistical operations for latency
  * analysis at full floating-point precision: nearest-rank percentile, mean,
  * and maximum. These operations underpin the framework's latency dimension
- * and are validated against javai-R reference data in the conformance test
+ * and are validated against mavai-R reference data in the conformance test
  * suite.
  *
  * <p>Percentiles use the nearest-rank (ceiling) method to match R's

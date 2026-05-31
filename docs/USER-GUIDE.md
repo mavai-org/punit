@@ -95,7 +95,7 @@ It provides:
    power analysis for sample sizing, qualified verdicts.
 
 The mathematical foundations live in the
-[Statistical Companion Document](https://r.javai.org/statistical-companion.pdf);
+[Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf);
 this guide stays at the engineering level, with pointers into the
 companion where a reader wants the proof.
 
@@ -1097,7 +1097,7 @@ are not comparable with successful ones (a fast validation rejection
 and a slow timeout both reflect *error paths*, not the latency of
 successful operation), so latency is conditioned on `X = 1` —
 successful samples only. This is the **tripartite-contract
-decomposition** the [statistical companion §12.2.1](https://r.javai.org/statistical-companion.pdf)
+decomposition** the [statistical companion §12.2.1](https://r.mavai.org/statistical-companion.pdf)
 formalises: correctness, availability, and latency-given-success are
 three orthogonal sub-contracts evaluated independently.
 
@@ -1176,7 +1176,7 @@ Three properties matter:
 - **Integer-millisecond** — the threshold is an observed value,
   aligning with how SLA targets are written and compared.
 
-[Statistical companion §12.4](https://r.javai.org/statistical-companion.pdf)
+[Statistical companion §12.4](https://r.mavai.org/statistical-companion.pdf)
 develops the construction with proofs; the implementation lives in
 `org.mavai.punit.statistics.LatencyThresholdDeriver`.
 
@@ -1556,7 +1556,7 @@ to the **RP07 javai verdict interchange standard**:
 The schema covers identity, verdict, criterion results, sample
 counts, latency percentiles, baseline expiration, environment
 metadata, contract reference, and correlation id. The verdict XML is
-the one format that flows between punit, feotest, and javai.org —
+the one format that flows between punit, feotest, and mavai.org —
 sentinels and dashboards consume it without caring which framework
 produced it.
 
@@ -1569,7 +1569,7 @@ Configuration: set the output directory via system property
 
 This section is a brief tour of what PUnit computes and where it
 lives. The comprehensive treatment is the
-[Statistical Companion Document](https://r.javai.org/statistical-companion.pdf);
+[Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf);
 the implementation lives in the ArchUnit-isolated
 `org.mavai.punit.statistics` package, which has no dependencies on
 any other punit package so the statistical core can be audited
@@ -1595,7 +1595,7 @@ p_lower  =  ──────────────────────�
 Wilson is used everywhere — small samples, extreme proportions, the
 boundary case `p̂ = 1`. There is no method-switching: the same
 formula handles every case correctly. Conformance against the
-R-generated reference data (`javai-R/inst/cases/wilson_*.json`) is
+R-generated reference data (`mavai-R/inst/cases/wilson_*.json`) is
 verified on every build.
 
 For empirical thresholds: the test passes iff the run's Wilson lower
@@ -1679,12 +1679,12 @@ author can either bump samples or rethink the threshold.
 ### Further reading
 
 Mathematical foundations:
-[Statistical Companion Document](https://r.javai.org/statistical-companion.pdf).
+[Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf).
 
-Cross-language conformance: every javai framework (punit, feotest,
+Cross-language conformance: every mavai framework (punit, feotest,
 baseltest) reproduces the R-generated reference data within stated
 tolerances. The conformance machinery is documented in the
-`javai-R` project README.
+`mavai-R` project README.
 
 ---
 
@@ -1841,5 +1841,5 @@ boundary `p̂ = 1`.
 
 *Last reviewed: 2026-05-03. The mathematical foundations are
 maintained separately as the
-[Statistical Companion Document](https://r.javai.org/statistical-companion.pdf);
+[Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf);
 this guide stays at the engineering level.*

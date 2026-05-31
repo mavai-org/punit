@@ -30,9 +30,9 @@ import static org.assertj.core.api.Assertions.within;
  * Conformance tests for binomial proportion statistics: Wilson score intervals,
  * threshold derivation, power analysis, feasibility, and verdict evaluation.
  *
- * @see <a href="https://github.com/javai-org/javai-R">javai-R</a>
+ * @see <a href="https://github.com/mavai-org/mavai-R">mavai-R</a>
  */
-@DisplayName("Proportion conformance (javai-R)")
+@DisplayName("Proportion conformance (mavai-R)")
 class ProportionConformanceTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

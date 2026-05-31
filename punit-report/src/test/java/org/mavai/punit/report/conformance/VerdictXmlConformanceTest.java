@@ -49,7 +49,7 @@ import org.xmlunit.diff.DifferenceEvaluators;
 /**
  * Cross-framework conformance test for the verdict-XML interchange
  * wire format. For each canonical fixture case published by the
- * javai.org product family's verdict-XML reference suite, builds a
+ * mavai.org product family's verdict-XML reference suite, builds a
  * verdict matching the case's semantics, serialises it via
  * {@link VerdictXmlWriter}, and asserts the result is structurally
  * equivalent to the case's canonical {@code expected.xml}.

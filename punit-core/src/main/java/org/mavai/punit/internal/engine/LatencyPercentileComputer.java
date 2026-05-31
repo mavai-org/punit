@@ -14,7 +14,7 @@ import org.mavai.punit.statistics.LatencyStatistics;
  * <p>Computation delegates to
  * {@link LatencyStatistics#nearestRankPercentile(double[], double)}
  * — the R-compatible nearest-rank percentile, so conformance with
- * the javai-R oracle is preserved.
+ * the mavai-R oracle is preserved.
  *
  * <p>This bridge lives in {@code punit-core} rather than
  * {@code api package} to keep the {@code commons-statistics} dependency
