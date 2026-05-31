@@ -19,7 +19,7 @@ tasks.jar {
         attributes(
             "Implementation-Title" to "PUnit Report",
             "Implementation-Version" to project.version,
-            "Implementation-Vendor" to "javai.org",
+            "Implementation-Vendor" to "mavai.org",
             "Automatic-Module-Name" to "org.mavai.punit.report"
         )
     }

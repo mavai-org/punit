@@ -176,7 +176,7 @@ void thresholdFirst() {
 | Minimizing risk (safety, compliance) | Confidence-First  | "We need to detect this regression at this power. How many samples?"           |
 | Honouring a contractual target       | Threshold-First   | "The SLA says 0.99. Pass iff observed beats it."                               |
 
-> **Working example:** See [`ShoppingBasketThresholdApproachesTest`](https://github.com/javai-org/punitexamples/blob/main/src/test/java/org/javai/punit/examples/probabilistictests/ShoppingBasketThresholdApproachesTest.java) in punitexamples for a complete demonstration of all three approaches.
+> **Working example:** See [`ShoppingBasketThresholdApproachesTest`](https://github.com/mavai-org/punitexamples/blob/main/src/test/java/org/mavai/punit/examples/probabilistictests/ShoppingBasketThresholdApproachesTest.java) in punitexamples for a complete demonstration of all three approaches.
 
 ---
 

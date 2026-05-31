@@ -9,7 +9,7 @@ import java.util.Objects;
  * <p>This record carries the full sorted vector of successful-response latencies
  * (in milliseconds) alongside the mean and maximum for reporting. The sorted
  * vector is the canonical storage format required by the exact binomial
- * order-statistic threshold derivation (javai-R STATISTICAL-COMPANION v1.1
+ * order-statistic threshold derivation (mavai-R STATISTICAL-COMPANION v1.1
  * &sect;12.4): thresholds are the {@code k}-th order statistic of this vector
  * for a rank {@code k} computed from the binomial upper confidence bound on
  * the baseline percentile.

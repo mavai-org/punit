@@ -42,9 +42,9 @@ import static org.assertj.core.api.Assertions.within;
  * Conformance tests for latency statistics: empirical percentile estimation,
  * summary statistics, and threshold derivation from baseline data.
  *
- * @see <a href="https://github.com/javai-org/javai-R">javai-R</a>
+ * @see <a href="https://github.com/mavai-org/mavai-R">mavai-R</a>
  */
-@DisplayName("Latency conformance (javai-R)")
+@DisplayName("Latency conformance (mavai-R)")
 class LatencyConformanceTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
