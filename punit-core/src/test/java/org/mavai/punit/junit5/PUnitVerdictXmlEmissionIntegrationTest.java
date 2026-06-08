@@ -65,7 +65,7 @@ class PUnitVerdictXmlEmissionIntegrationTest {
 
         String xml = Files.readString(expected);
         assertThat(xml).contains("<verdict-record")
-                .contains("xmlns=\"http://javai.org/verdict/1.0\"")
+                .contains("xmlns=\"http://mavai.org/verdict/1.0\"")
                 .contains("test-name=\"passes\"")
                 .contains("value=\"PASS\"");
     }

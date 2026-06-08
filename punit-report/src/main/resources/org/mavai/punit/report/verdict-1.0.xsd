@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns:tns="http://javai.org/verdict/1.0"
-           targetNamespace="http://javai.org/verdict/1.0"
+           xmlns:tns="http://mavai.org/verdict/1.0"
+           targetNamespace="http://mavai.org/verdict/1.0"
            elementFormDefault="qualified">
 
   <!-- ===================================================================

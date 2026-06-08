@@ -711,7 +711,7 @@ feotest, mavai.org sentinels and dashboards all read and write this
 format):
 
 - **XSD schema:** `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.0.xsd`.
-- **Namespace:** `http://javai.org/verdict/1.0`.
+- **Namespace:** `http://mavai.org/verdict/1.0`.
 - **Root element:** `<verdict-record>`.
 
 The standard includes pacing, environment metadata, baseline
