@@ -26,7 +26,7 @@ import org.w3c.dom.NodeList;
 /**
  * Deserialises a {@link ProbabilisticTestVerdict} from verdict XML.
  *
- * <p>Reads the {@code http://javai.org/verdict/1.0} format and maps it back
+ * <p>Reads the {@code http://mavai.org/verdict/1.0} format and maps it back
  * to the punit verdict model. PUnit-specific fields not present in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID) receive default values.
  *

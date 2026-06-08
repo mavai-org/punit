@@ -1549,7 +1549,7 @@ Output: `build/reports/punit/index.html`. The report shows, per test:
 Every probabilistic test verdict serialises to an XML file conforming
 to the **RP07 javai verdict interchange standard**:
 
-- Namespace: `http://javai.org/verdict/1.0`
+- Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`
 - Schema: `verdict-1.0.xsd` (bundled in `punit-report`).
 

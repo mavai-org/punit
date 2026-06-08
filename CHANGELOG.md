@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-06-08
+
+### Changed
+
+- **Verdict-XML namespace `http://javai.org/verdict/1.0` →
+  `http://mavai.org/verdict/1.0` (breaking interchange change).** The
+  verdict-XML wire namespace moves off `javai.org` to complete the family
+  rename. The writer emits, and the reader accepts, only the `mavai.org`
+  namespace — documents in the old namespace are no longer read. Only the
+  namespace host changes; the schema shape and all schema versions
+  (1.0 / 1.1 / 1.2) are unchanged. Consumers parsing the verdict XML by
+  namespace must update. (Released as a patch version by project decision
+  despite the breaking nature.)
+
 ## [0.9.0] - 2026-05-29
 
 ### Changed

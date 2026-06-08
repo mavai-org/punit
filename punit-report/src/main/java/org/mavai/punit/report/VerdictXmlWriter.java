@@ -16,7 +16,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * Serialises a {@link ProbabilisticTestVerdict} to the verdict XML
  * interchange format.
  *
- * <p>The output conforms to the {@code http://javai.org/verdict/1.0}
+ * <p>The output conforms to the {@code http://mavai.org/verdict/1.0}
  * namespace and the {@code verdict-1.0.xsd} schema bundled with this
  * module.
  *
@@ -33,7 +33,7 @@ public final class VerdictXmlWriter {
     /**
      * standard namespace.
      */
-    static final String NAMESPACE = "http://javai.org/verdict/1.0";
+    static final String NAMESPACE = "http://mavai.org/verdict/1.0";
     static final String VERSION_1_0 = "1.0";
     static final String VERSION_1_2 = "1.2";
 

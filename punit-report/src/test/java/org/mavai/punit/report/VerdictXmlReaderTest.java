@@ -451,7 +451,7 @@ class VerdictXmlReaderTest {
             // bundle without surprise; the legacy element is silently
             // discarded.
             String xml = """
-                    <verdict-record xmlns="http://javai.org/verdict/1.0"
+                    <verdict-record xmlns="http://mavai.org/verdict/1.0"
                                     version="1.1"
                                     timestamp="2026-03-11T14:30:00Z"
                                     generator="test">

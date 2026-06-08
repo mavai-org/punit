@@ -37,7 +37,7 @@ don't must canonicalise first.
 - Each element starts on its own line; attributes after the first
   are indented to align with the first attribute on the opening
   tag's continuation line.
-- The default namespace `http://javai.org/verdict/1.0` is declared
+- The default namespace `http://mavai.org/verdict/1.0` is declared
   on the root `<verdict-record>` element only; no prefix
   declarations on descendant elements.
 - Attributes appear in schema declaration order (the order they

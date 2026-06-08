@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<verdict-record xmlns="http://javai.org/verdict/1.0"
+<verdict-record xmlns="http://mavai.org/verdict/1.0"
                 version="1.0"
                 timestamp="2026-05-11T12:00:00Z"
                 generator="punit"
