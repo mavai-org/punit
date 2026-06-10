@@ -10,8 +10,8 @@ signing {
 dependencies {
     api(project(":punit-core"))
 
-    testImplementation("org.xmlunit:xmlunit-core:2.11.0")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
+    testImplementation("org.xmlunit:xmlunit-core:2.12.0")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
 }
 
 tasks.jar {

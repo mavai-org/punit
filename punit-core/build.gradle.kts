@@ -62,8 +62,8 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.6")
 
     // Jackson — for JSON/CSV parsing in @InputSource
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.3")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.22.0")
 
     // Outcome — result types for contract postconditions
     api("org.mavai:outcome:1.0.0-alpha1")
@@ -75,7 +75,7 @@ dependencies {
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter-api")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.0")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;
