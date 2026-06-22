@@ -76,3 +76,4 @@ punit-sentinel/punit/
 # lingers on disk after a clean:
 **/src/test/resources/punit/explorations/
 **/src/test/resources/punit/optimizations/
+/.understand-anything/
