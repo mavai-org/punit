@@ -317,6 +317,12 @@ tasks.register("release") {
         logger.lifecycle("Publishing $ver to Maven Central...")
         try {
             runCommand("./gradlew", "publishAndReleaseToMavenCentral")
+            // The Gradle plugin lives in a standalone includeBuild, so the root
+            // publish above never reaches it. Publish it explicitly so the
+            // org.mavai.punit plugin and its marker ship with every release —
+            // otherwise a standalone consumer cannot resolve the plugin.
+            logger.lifecycle("Publishing punit-gradle-plugin $ver to Maven Central...")
+            runCommand("./gradlew", ":punit-gradle-plugin:publishAndReleaseToMavenCentral")
         } catch (e: Exception) {
             logger.lifecycle("Publishing failed — removing local tag $tag")
             runCommand("git", "tag", "-d", tag)
