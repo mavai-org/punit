@@ -1,10 +1,22 @@
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
+    id("signing")
+    id("com.vanniktech.maven.publish") version "0.36.0"
 }
 
 group = "org.mavai"
 version = property("punitVersion") as String
+
+signing {
+    useGpgCmd()
+}
+
+if (project.hasProperty("signing.skip")) {
+    tasks.matching { it.name.startsWith("sign") }.configureEach {
+        enabled = false
+    }
+}
 
 repositories {
     mavenCentral()
@@ -17,6 +29,44 @@ gradlePlugin {
             implementationClass = "org.mavai.punit.gradle.PUnitPlugin"
             displayName = "PUnit Gradle Plugin"
             description = "Configures test and experiment tasks for PUnit probabilistic testing"
+        }
+    }
+}
+
+// Publish the plugin (and its auto-generated `org.mavai.punit.gradle.plugin`
+// marker) to Maven Central, so a standalone consumer can resolve the plugin
+// without a sibling `../punit` checkout. The `java-gradle-plugin` plugin
+// creates the marker publication; vanniktech signs and uploads both.
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
+    coordinates("org.mavai", "punit-gradle-plugin", version.toString())
+
+    pom {
+        name.set("PUnit Gradle Plugin")
+        description.set("Configures test and experiment tasks for PUnit probabilistic testing")
+        url.set("https://github.com/mavai-org/punit")
+
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("mikemannion")
+                name.set("Michael Franz Mannion")
+                email.set("michaelmannion@me.com")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/mavai-org/punit")
+            connection.set("scm:git:git://github.com/mavai-org/punit.git")
+            developerConnection.set("scm:git:ssh://github.com/mavai-org/punit.git")
         }
     }
 }
