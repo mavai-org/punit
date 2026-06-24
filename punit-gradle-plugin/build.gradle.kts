@@ -8,6 +8,15 @@ plugins {
 group = "org.mavai"
 version = property("punitVersion") as String
 
+// Target Java 21, matching the framework modules. Without this the plugin
+// compiles against whatever JDK the release machine defaults to and stamps
+// that version into the published Gradle Module Metadata (`org.gradle.jvm.version`),
+// which makes the plugin unresolvable for Java 21 consumers.
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 signing {
     useGpgCmd()
 }
