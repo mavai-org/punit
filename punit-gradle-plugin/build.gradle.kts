@@ -8,13 +8,19 @@ plugins {
 group = "org.mavai"
 version = property("punitVersion") as String
 
-// Target Java 21, matching the framework modules. Without this the plugin
-// compiles against whatever JDK the release machine defaults to and stamps
-// that version into the published Gradle Module Metadata (`org.gradle.jvm.version`),
-// which makes the plugin unresolvable for Java 21 consumers.
+// Pin a Java 21 toolchain. The plugin's logic is Kotlin, so a Java-only
+// sourceCompatibility/targetCompatibility pin is not enough: it sets the Java
+// target and the published Gradle Module Metadata (`org.gradle.jvm.version`) to
+// 21, but compileKotlin still follows the ambient JDK (25 on the release
+// machine) and emits Java 25 bytecode. The result is an artifact whose metadata
+// claims 21 while its classes are 25 — it resolves for a Java 21 consumer, then
+// fails at apply time with UnsupportedClassVersionError. A toolchain governs
+// both compileJava and compileKotlin (the Kotlin plugin reads the Java
+// toolchain), so all bytecode and the metadata agree on 21.
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 signing {
