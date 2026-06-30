@@ -1544,6 +1544,57 @@ Output: `build/reports/punit/index.html`. The report shows, per test:
 - The covariate alignment between the run and the matched baseline.
 - The transparent-statistics breakdown if it was enabled.
 
+### Experiment comparison reports
+
+Beyond the per-test report above, PUnit renders browser-friendly
+**comparison reports** for EXPLORE and OPTIMIZE experiments — a single
+self-contained HTML page that ranks the candidates so you can see at a
+glance which performed best, without reading the raw YAML. Both share the
+test report's styling and, like it, embed all CSS and make no external
+requests, so they open directly from disk with no server.
+
+Run a comparison report after the experiment that produces its data
+(`./gradlew exp -Prun=YourExperiment`). If no experiments have been run,
+the report states that none were found rather than failing the build.
+
+**Exploration comparison.** Compares the variants of an EXPLORE
+experiment (one factor combination — model, temperature, system prompt, …
+— per variant), overall and per criterion:
+
+```bash
+./gradlew explorationReport
+```
+
+Reads the exploration YAML under `build/punit/explorations/<service>/`
+(the `explorationsDir`) and writes
+`build/reports/punit-explorations/html/index.html`. Per service it shows a
+ranked leaderboard (overall pass rate, then latency, then cost), a
+per-criterion matrix comparing the variants check-by-check, and a
+latency-distribution strip per variant. Variants whose ranking rests on a
+margin within 5% are flagged **too close to call** (a presentational
+marker, not a significance test).
+
+**Optimization comparison.** Summarises one OPTIMIZE experiment's
+iterations, ranked by the scorer:
+
+```bash
+./gradlew optimizationReport
+```
+
+Reads the optimization YAML under `build/punit/optimizations/<service>/`
+(the `optimizationsDir`) and writes
+`build/reports/punit-optimizations/html/index.html`. Per run it names the
+service and the optimisation objective (`MAXIMIZE` / `MINIMIZE`), shows a
+score-ranked iteration leaderboard — each row expanding to reveal the
+factor bundle that produced it — a per-criterion matrix, and a score
+trajectory across the run, with the chosen best iteration highlighted.
+Iterations within 5% of each other on score are flagged **too close to
+call**.
+
+Both tasks reuse the `punit { }` extension's existing output-directory
+properties (`explorationsDir`, `optimizationsDir`); no extra configuration
+is required for the defaults.
+
 ### Verdict XML (RP07)
 
 Every probabilistic test verdict serialises to an XML file conforming
