@@ -10,6 +10,10 @@ signing {
 dependencies {
     api(project(":punit-core"))
 
+    // Exploration comparison report reads punit-spec-1 YAML. punit-core
+    // depends on snakeyaml as `implementation`, so it is not exposed here.
+    implementation("org.yaml:snakeyaml:2.6")
+
     testImplementation("org.xmlunit:xmlunit-core:2.12.0")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
 }

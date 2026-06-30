@@ -10,11 +10,13 @@ module org.mavai.punit.report {
 
     // ── Public API surface ────────────────────────────────────
     exports org.mavai.punit.report;
+    exports org.mavai.punit.report.explore;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
     requires java.xml;
     requires org.apache.logging.log4j;
+    requires org.yaml.snakeyaml;
 
     // ── ServiceLoader: register the XML verdict sink ──────────
     provides org.mavai.punit.verdict.VerdictSink

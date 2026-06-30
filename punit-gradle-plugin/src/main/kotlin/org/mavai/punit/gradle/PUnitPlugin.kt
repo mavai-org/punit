@@ -87,6 +87,7 @@ class PUnitPlugin : Plugin<Project> {
 
             registerCreateSentinelTask(project, extension, sentinelConfig)
             registerPUnitReportTask(project, reportConfig)
+            registerExplorationReportTask(project, extension, reportConfig)
             registerPUnitVerifyTask(project, reportConfig)
         }
     }
@@ -469,6 +470,24 @@ class PUnitPlugin : Plugin<Project> {
             group = "verification"
             xmlDir.set(project.layout.buildDirectory.dir("reports/punit/xml"))
             htmlDir.set(project.layout.buildDirectory.dir("reports/punit/html"))
+            reportClasspath.from(reportConfig)
+        }
+    }
+
+    private fun registerExplorationReportTask(
+        project: Project,
+        extension: PUnitExperimentExtension,
+        reportConfig: org.gradle.api.artifacts.Configuration
+    ) {
+        project.tasks.register("explorationReport", PUnitExploreReportTask::class.java).configure {
+            description = "Generates an HTML report comparing EXPLORE experiment variants"
+            group = "verification"
+            val rootPath = extension.explorationsDir
+            explorationsRootPath.set(rootPath)
+            // Optional input-file tracking only; a missing root resolves to an
+            // empty tree, so the task still runs and emits a "no explorations" page.
+            explorationFiles.from(rootPath.map { project.fileTree(it) { include("**/*.yaml") } })
+            htmlDir.set(project.layout.buildDirectory.dir("reports/punit-explorations/html"))
             reportClasspath.from(reportConfig)
         }
     }
