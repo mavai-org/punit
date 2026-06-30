@@ -11,6 +11,7 @@ module org.mavai.punit.report {
     // ── Public API surface ────────────────────────────────────
     exports org.mavai.punit.report;
     exports org.mavai.punit.report.explore;
+    exports org.mavai.punit.report.optimize;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
