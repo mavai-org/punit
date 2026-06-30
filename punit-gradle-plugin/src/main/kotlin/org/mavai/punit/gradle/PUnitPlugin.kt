@@ -88,6 +88,7 @@ class PUnitPlugin : Plugin<Project> {
             registerCreateSentinelTask(project, extension, sentinelConfig)
             registerPUnitReportTask(project, reportConfig)
             registerExplorationReportTask(project, extension, reportConfig)
+            registerOptimizationReportTask(project, extension, reportConfig)
             registerPUnitVerifyTask(project, reportConfig)
         }
     }
@@ -488,6 +489,24 @@ class PUnitPlugin : Plugin<Project> {
             // empty tree, so the task still runs and emits a "no explorations" page.
             explorationFiles.from(rootPath.map { project.fileTree(it) { include("**/*.yaml") } })
             htmlDir.set(project.layout.buildDirectory.dir("reports/punit-explorations/html"))
+            reportClasspath.from(reportConfig)
+        }
+    }
+
+    private fun registerOptimizationReportTask(
+        project: Project,
+        extension: PUnitExperimentExtension,
+        reportConfig: org.gradle.api.artifacts.Configuration
+    ) {
+        project.tasks.register("optimizationReport", PUnitOptimizeReportTask::class.java).configure {
+            description = "Generates an HTML report summarising OPTIMIZE experiment iterations"
+            group = "verification"
+            val rootPath = extension.optimizationsDir
+            optimizationsRootPath.set(rootPath)
+            // Optional input-file tracking only; a missing root resolves to an
+            // empty tree, so the task still runs and emits a "no optimizations" page.
+            optimizationFiles.from(rootPath.map { project.fileTree(it) { include("**/*.yaml") } })
+            htmlDir.set(project.layout.buildDirectory.dir("reports/punit-optimizations/html"))
             reportClasspath.from(reportConfig)
         }
     }
