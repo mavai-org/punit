@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-06-30
+
+> **Highlights:** two new **experiment comparison reports** — a
+> browser-friendly, self-contained HTML page that ranks the candidates of
+> an EXPLORE or OPTIMIZE experiment so you can see which performed best
+> without reading the raw YAML.
+
+### Added
+
+- **Exploration comparison report (`explorationReport` task).** Renders a
+  single self-contained HTML page comparing the variants of an EXPLORE
+  experiment — overall and per criterion. Per service: a ranked
+  leaderboard (overall pass rate, then latency, then cost), a per-criterion
+  matrix comparing the variants check-by-check, and a latency-distribution
+  strip per variant. Variants whose ordering rests on a margin within 5%
+  are flagged *too close to call* — a presentational marker, not a
+  significance test. Reads the exploration YAML under
+  `build/punit/explorations/<service>/` (the `explorationsDir`) and writes
+  `build/reports/punit-explorations/html/index.html`.
+
+- **Optimization comparison report (`optimizationReport` task).** Renders a
+  single self-contained HTML page summarising an OPTIMIZE experiment's
+  iterations, ranked by the scorer (objective-aware: `MAXIMIZE` /
+  `MINIMIZE`). Per run: names the service and objective, a score-ranked
+  iteration leaderboard with each row expanding to reveal the factor bundle
+  that produced it, a per-criterion matrix, and a score trajectory across
+  the run, with the chosen best iteration highlighted. Iterations within 5%
+  of each other on score are flagged *too close to call*. Reads the
+  optimization YAML under `build/punit/optimizations/<service>/` (the
+  `optimizationsDir`) and writes
+  `build/reports/punit-optimizations/html/index.html`.
+
+  Both reports share the test report's styling and, like it, embed all CSS
+  and make no external requests — they open directly from disk with no
+  server. Run them after the experiment that produces the data
+  (`./gradlew exp -Prun=…`); with no experiments present, the report states
+  that none were found rather than failing the build.
+
 ## [0.9.1] - 2026-06-08
 
 ### Changed
