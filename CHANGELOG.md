@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-06-30
+
+### Changed
+
+- **Optimization comparison report lists iterations in run order.** The
+  iteration table — previously an "Iteration leaderboard" sorted by score —
+  now lists iterations chronologically by iteration index, carrying the
+  score rank in a **Rank** column rather than by row order, so the run
+  reads as the sequence it actually ran in. The chosen-best iteration is
+  highlighted (row tint, green accent, and badge) instead of relying on row
+  position, and a low-but-valid score is no longer visually conflated with
+  an error — only abnormal termination is flagged. The per-criterion
+  comparison columns follow the same run order. Near-equal scores still
+  share a rank (read as a repeated rank value in the table); the `≈`
+  too-close-to-call marker now appears only in the overview's leading
+  cluster, not on the table rows.
+
 ## [0.9.2] - 2026-06-30
 
 > **Highlights:** two new **experiment comparison reports** — a
