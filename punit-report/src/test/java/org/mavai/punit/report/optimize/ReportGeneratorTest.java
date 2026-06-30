@@ -29,8 +29,8 @@ class ReportGeneratorTest {
     class Generate {
 
         @Test
-        @DisplayName("names the service, experiment, and objective and ranks iterations by score")
-        void rankedByScore() throws IOException {
+        @DisplayName("names the service, experiment, and objective and lists iterations in run order")
+        void listsIterationsInRunOrder() throws IOException {
             Path service = optimizationsRoot().resolve("shopping-basket");
             writeRun(service, "prompt-tune-v1.yaml", run("shopping-basket", "prompt-tune-v1", "MAXIMIZE",
                     List.of(
@@ -43,13 +43,18 @@ class ReportGeneratorTest {
             assertThat(html).contains("shopping-basket");
             assertThat(html).contains("prompt-tune-v1");
             assertThat(html).contains("MAXIMIZE");
-            // MAXIMIZE: higher score ranks first.
-            assertThat(html.indexOf("<summary>iteration 1"))
-                    .isLessThan(html.indexOf("<summary>iteration 0"));
+            // Rows follow run order regardless of score: iteration 0 before iteration 1.
+            assertThat(html.indexOf("<summary>iteration 0"))
+                    .isLessThan(html.indexOf("<summary>iteration 1"));
+            // The score rank is carried in a column, not by row order: under
+            // MAXIMIZE the higher-scoring iteration 1 is rank 1, so the rank-2
+            // cell (iteration 0's row, first chronologically) precedes rank 1.
+            assertThat(html.indexOf("<td class=\"rank\">2</td>"))
+                    .isLessThan(html.indexOf("<td class=\"rank\">1</td>"));
         }
 
         @Test
-        @DisplayName("ranks ascending under a MINIMIZE objective")
+        @DisplayName("assigns rank 1 to the lowest score under a MINIMIZE objective")
         void minimizeRanksAscending() throws IOException {
             Path service = optimizationsRoot().resolve("svc");
             writeRun(service, "min.yaml", run("svc", "min-exp", "MINIMIZE",
@@ -60,9 +65,10 @@ class ReportGeneratorTest {
 
             String html = generate();
 
-            // MINIMIZE: lower score ranks first.
-            assertThat(html.indexOf("<summary>iteration 0"))
-                    .isLessThan(html.indexOf("<summary>iteration 1"));
+            // Rows are chronological (iteration 0 first); MINIMIZE makes the
+            // lower score (iteration 0) rank 1, so rank cell "1" precedes "2".
+            assertThat(html.indexOf("<td class=\"rank\">1</td>"))
+                    .isLessThan(html.indexOf("<td class=\"rank\">2</td>"));
         }
 
         @Test

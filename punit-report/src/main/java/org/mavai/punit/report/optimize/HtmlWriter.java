@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -19,8 +20,9 @@ import org.mavai.punit.report.ReportHtml;
 /**
  * Renders the OPTIMIZE-experiment comparison report: a single,
  * self-contained HTML page summarising each optimize run — its iterations
- * ranked by the scorer, the chosen winner, a per-criterion matrix, and the
- * score trajectory across the run.
+ * listed in run order with a score-derived rank column, the chosen winner
+ * highlighted, a per-criterion matrix, and the score trajectory across the
+ * run.
  *
  * <p>Reuses the test report's base stylesheet
  * ({@link ReportHtml#appendBaseCss}) for visual parity with the test
@@ -28,9 +30,11 @@ import org.mavai.punit.report.ReportHtml;
  * the dependency-free bars and inline-SVG strips. No JavaScript, no
  * external asset, no chart library — the file renders fully offline.
  *
- * <p>Ranking is objective-aware (a higher score wins under
- * {@code MAXIMIZE}, a lower score under {@code MINIMIZE}) and is a plain
- * ordered sort, not a statistical claim.
+ * <p>Iterations are listed chronologically (by iteration index) so the
+ * reader follows the run as a sequence; the score rank is carried in a
+ * column rather than by row order. Ranking is objective-aware (a higher
+ * score wins under {@code MAXIMIZE}, a lower score under {@code MINIMIZE})
+ * and is a plain ordered sort, not a statistical claim.
  */
 final class HtmlWriter {
 
@@ -146,12 +150,14 @@ final class HtmlWriter {
 
     private static void appendRun(StringBuilder html, OptimizationRun run) {
         List<Iteration> ranked = ranked(run);
+        List<Iteration> chronological = run.iterations().stream()
+                .sorted(Comparator.comparingInt(Iteration::index)).toList();
         html.append("<section class=\"service\">\n");
         html.append("<h2>").append(escape(run.service())).append(" &middot; ")
                 .append(escape(run.experimentId())).append("</h2>\n");
         appendConvergence(html, run);
-        appendLeaderboard(html, run, ranked);
-        appendCriterionMatrix(html, ranked);
+        appendIterationTable(html, run, ranked, chronological);
+        appendCriterionMatrix(html, chronological);
         appendScoreTrajectory(html, run);
         html.append("</section>\n");
     }
@@ -171,31 +177,40 @@ final class HtmlWriter {
         html.append("</p>\n");
     }
 
-    // ── (a) Iteration leaderboard ─────────────────────────────────────────────
+    // ── (a) Iteration table ───────────────────────────────────────────────────
 
-    private static void appendLeaderboard(StringBuilder html, OptimizationRun run, List<Iteration> ranked) {
-        long maxLatency = Math.max(1, ranked.stream()
+    /**
+     * Iterations in run order (chronological by index). The score rank is a
+     * column, not the row order — a leaderboard sort scrambles the sequence
+     * the reader thinks in, for no gain the rank column does not already give.
+     * The chosen winner gets a row highlight; nothing else is colour-flagged
+     * here (a low-but-valid score is not an error — abnormal termination is
+     * surfaced by its own cell).
+     */
+    private static void appendIterationTable(StringBuilder html, OptimizationRun run,
+            List<Iteration> ranked, List<Iteration> chronological) {
+        long maxLatency = Math.max(1, chronological.stream()
                 .flatMapToLong(it -> LongStream.of(it.p50Ms(), it.p95Ms()))
                 .filter(ms -> ms != UNAVAILABLE).max().orElse(1));
-        long maxAvg = Math.max(1, ranked.stream()
+        long maxAvg = Math.max(1, chronological.stream()
                 .mapToLong(Iteration::avgTimePerSampleMs).max().orElse(1));
-        double scoreMin = ranked.stream().mapToDouble(Iteration::score).min().orElse(0.0);
-        double scoreMax = ranked.stream().mapToDouble(Iteration::score).max().orElse(0.0);
+        double scoreMin = chronological.stream().mapToDouble(Iteration::score).min().orElse(0.0);
+        double scoreMax = chronological.stream().mapToDouble(Iteration::score).max().orElse(0.0);
         int best = run.convergence().bestIteration();
+        Map<Integer, Integer> rankByIndex = rankByIndex(run, ranked);
 
-        html.append("<h3>Iteration leaderboard</h3>\n");
+        html.append("<h3>Iterations</h3>\n");
         html.append("<table class=\"leaderboard\">\n<thead>\n<tr>");
-        html.append("<th>#</th><th>Iteration</th><th>Score</th><th>Pass rate</th>");
+        html.append("<th>Rank</th><th>Iteration</th><th>Score</th><th>Pass rate</th>");
         html.append("<th>p50</th><th>p95</th><th>Avg cost</th>");
         html.append("<th>Samples</th><th>Termination</th>");
         html.append("</tr>\n</thead>\n<tbody>\n");
 
-        int[] ranks = competitionRanks(run, ranked);
-        for (int i = 0; i < ranked.size(); i++) {
-            Iteration it = ranked.get(i);
-            html.append("<tr>\n");
-            appendRankCell(html, run, ranked, ranks, i);
-            appendIterationCell(html, it, it.index() == best);
+        for (Iteration it : chronological) {
+            boolean isBest = it.index() == best;
+            html.append(isBest ? "<tr class=\"best\">\n" : "<tr>\n");
+            html.append("<td class=\"rank\">").append(rankByIndex.get(it.index())).append("</td>\n");
+            appendIterationCell(html, it, isBest);
             appendScoreCell(html, it, scoreMin, scoreMax, run.maximize());
             appendPassRateCell(html, it);
             appendLatencyCell(html, it.p50Ms(), maxLatency);
@@ -282,21 +297,21 @@ final class HtmlWriter {
 
     // ── (b) Per-criterion matrix ─────────────────────────────────────────────
 
-    private static void appendCriterionMatrix(StringBuilder html, List<Iteration> ranked) {
+    private static void appendCriterionMatrix(StringBuilder html, List<Iteration> chronological) {
         Set<String> criteria = new LinkedHashSet<>();
-        ranked.forEach(it -> criteria.addAll(it.criteria().keySet()));
+        chronological.forEach(it -> criteria.addAll(it.criteria().keySet()));
         if (criteria.isEmpty()) {
             return;
         }
         html.append("<h3>Per-criterion comparison</h3>\n");
         html.append("<table class=\"criterion-matrix\">\n<thead>\n<tr><th>Criterion</th>");
-        for (Iteration it : ranked) {
+        for (Iteration it : chronological) {
             html.append("<th>iter ").append(it.index()).append("</th>");
         }
         html.append("</tr>\n</thead>\n<tbody>\n");
         for (String criterion : criteria) {
             html.append("<tr>\n<td class=\"criterion-name\">").append(escape(criterion)).append("</td>\n");
-            for (Iteration it : ranked) {
+            for (Iteration it : chronological) {
                 appendCriterionCell(html, it.criteria().get(criterion));
             }
             html.append("</tr>\n");
@@ -421,16 +436,21 @@ final class HtmlWriter {
         return ranks;
     }
 
-    private static void appendRankCell(StringBuilder html, OptimizationRun run,
-            List<Iteration> ranked, int[] ranks, int i) {
-        boolean tiedWithPrev = i > 0 && nearTie(run, ranked.get(i), ranked.get(i - 1));
-        boolean tiedWithNext = i + 1 < ranked.size() && nearTie(run, ranked.get(i + 1), ranked.get(i));
-        html.append("<td class=\"rank\">").append(ranks[i]);
-        if (tiedWithPrev || tiedWithNext) {
-            html.append("<span class=\"tie-mark\" title=\"Too close to call: score within 5% of the "
-                    + "adjacent iteration — a presentational margin, not a significance test.\">&asymp;</span>");
+    /**
+     * Maps each iteration index to its competition rank. Computed from the
+     * ranked (score-sorted) order, then keyed by index so the chronological
+     * iteration table can show the rank in a column without reordering its
+     * rows. A repeated rank value is how a near-tie reads here — the table
+     * carries no separate tie-mark; the too-close-to-call marker lives in the
+     * Overview's best cell.
+     */
+    private static Map<Integer, Integer> rankByIndex(OptimizationRun run, List<Iteration> ranked) {
+        int[] ranks = competitionRanks(run, ranked);
+        Map<Integer, Integer> byIndex = new LinkedHashMap<>();
+        for (int i = 0; i < ranked.size(); i++) {
+            byIndex.put(ranked.get(i).index(), ranks[i]);
         }
-        html.append("</td>\n");
+        return byIndex;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -491,6 +511,10 @@ final class HtmlWriter {
                     line-height: 1.5;
                 }
                 table.leaderboard td { vertical-align: middle; }
+                table.leaderboard tr.best td { background: #f1f8f2; }
+                table.leaderboard tr.best td:first-child {
+                    box-shadow: inset 3px 0 0 var(--pass-color);
+                }
                 .bar-track {
                     position: relative;
                     display: inline-block;
