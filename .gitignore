@@ -1,4 +1,4 @@
-.gradle relea.gradle
+.gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
