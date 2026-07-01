@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Brought the optimize comparison report's description in the user guide
+  (Part 11) in line with the 0.9.3 run-order layout — iterations listed in
+  run order with a **Rank** column, not a score-sorted leaderboard.
+
 ## [0.9.3] - 2026-06-30
 
 ### Changed

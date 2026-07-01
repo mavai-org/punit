@@ -1584,12 +1584,13 @@ iterations, ranked by the scorer:
 Reads the optimization YAML under `build/punit/optimizations/<service>/`
 (the `optimizationsDir`) and writes
 `build/reports/punit-optimizations/html/index.html`. Per run it names the
-service and the optimisation objective (`MAXIMIZE` / `MINIMIZE`), shows a
-score-ranked iteration leaderboard — each row expanding to reveal the
-factor bundle that produced it — a per-criterion matrix, and a score
-trajectory across the run, with the chosen best iteration highlighted.
-Iterations within 5% of each other on score are flagged **too close to
-call**.
+service and the optimisation objective (`MAXIMIZE` / `MINIMIZE`), then lists
+the iterations in run order — each row expanding to reveal the factor bundle
+that produced it — carrying the objective-aware score rank in a **Rank**
+column rather than by row order, so the run reads as the sequence it
+actually ran in. The chosen best iteration is highlighted. A per-criterion
+matrix and a score trajectory across the run follow. Iterations within 5% of
+each other on score share a rank and are flagged **too close to call**.
 
 Both tasks reuse the `punit { }` extension's existing output-directory
 properties (`explorationsDir`, `optimizationsDir`); no extra configuration
