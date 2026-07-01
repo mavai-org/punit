@@ -2,6 +2,8 @@ package org.mavai.punit.report.optimize;
 
 import java.util.Map;
 
+import org.mavai.punit.report.CriterionResult;
+
 /**
  * One OPTIMIZE-experiment iteration — a single step in which a mutator
  * produced a factor bundle and a scorer rated the result.

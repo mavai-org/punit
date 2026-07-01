@@ -182,6 +182,27 @@ class ReportGeneratorTest {
         }
 
         @Test
+        @DisplayName("per-criterion matrix lists iterations as rows and criteria as columns")
+        void criterionMatrixHasIterationsAsRowsAndCriteriaAsColumns() throws IOException {
+            Path service = optimizationsRoot().resolve("svc");
+            Map<String, Object> i0 = iter(0, "p0", 1.0, 5, 0, "COMPLETED", new long[]{1000, 1100, 1200});
+            putCriteria(i0, Map.of("valid-json", crit(1.0, 5, 0)));
+            Map<String, Object> i1 = iter(1, "p1", 1.0, 5, 0, "COMPLETED", new long[]{900, 950, 1000});
+            putCriteria(i1, Map.of("valid-json", crit(1.0, 5, 0)));
+            writeRun(service, "exp.yaml", run("svc", "exp", "MAXIMIZE",
+                    List.of(i0, i1), convergence(2, 1, 1.0, "MAX_ITERATIONS")));
+
+            String html = generate();
+
+            // Header row: iteration label column, then one column per criterion.
+            assertThat(html).contains("<tr><th>Iteration</th><th>valid-json</th></tr>");
+            // Each data row's first cell is the iteration label, not the criterion name.
+            assertThat(html).contains("<td class=\"criterion-name\">iter 0</td>");
+            assertThat(html).contains("<td class=\"criterion-name\">iter 1</td>");
+            assertThat(html).doesNotContain("<td class=\"criterion-name\">valid-json</td>");
+        }
+
+        @Test
         @DisplayName("renders a score trajectory")
         void scoreTrajectory() throws IOException {
             Path service = optimizationsRoot().resolve("svc");

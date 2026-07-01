@@ -2,6 +2,8 @@ package org.mavai.punit.report.explore;
 
 import java.util.Map;
 
+import org.mavai.punit.report.CriterionResult;
+
 /**
  * One Explore-experiment variant — a single factor combination (model,
  * temperature, system prompt, …) evaluated against a service contract.

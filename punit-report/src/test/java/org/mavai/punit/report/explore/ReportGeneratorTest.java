@@ -171,6 +171,32 @@ class ReportGeneratorTest {
         }
 
         @Test
+        @DisplayName("per-criterion matrix lists variants as rows and criteria as columns")
+        void criterionMatrixHasVariantsAsRowsAndCriteriaAsColumns() throws IOException {
+            Path service = tempDir.resolve("explorations").resolve("svc");
+
+            Map<String, Object> a = variant("svc", factors("gpt-4o"),
+                    1.0, 5, 0, "COMPLETED", new long[]{1000, 1100, 1200}, 1100);
+            putCriteria(a, Map.of("valid-json", crit(1.0, 5, 0)));
+
+            Map<String, Object> b = variant("svc", factors("gpt-4o-mini"),
+                    1.0, 5, 0, "COMPLETED", new long[]{900, 950, 1000}, 950);
+            putCriteria(b, Map.of("valid-json", crit(1.0, 5, 0)));
+
+            writeVariant(service, "a.yaml", a);
+            writeVariant(service, "b.yaml", b);
+
+            String html = generate(tempDir.resolve("explorations"));
+
+            // Header row: variant label column, then one column per criterion.
+            assertThat(html).contains("<tr><th>Variant</th><th>valid-json</th></tr>");
+            // Each data row's first cell is the variant label, not the criterion name.
+            assertThat(html).contains("<td class=\"criterion-name\">gpt-4o</td>");
+            assertThat(html).contains("<td class=\"criterion-name\">gpt-4o-mini</td>");
+            assertThat(html).doesNotContain("<td class=\"criterion-name\">valid-json</td>");
+        }
+
+        @Test
         @DisplayName("marks equally-reliable variants within the latency margin as too close to call")
         void nearTieMarksAdjacentVariants() throws IOException {
             Path service = tempDir.resolve("explorations").resolve("svc");

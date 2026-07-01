@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.mavai.punit.internal.engine.emit.LatencySection;
+import org.mavai.punit.report.CriterionResult;
 import org.mavai.punit.statistics.LatencyStatistics;
 import org.yaml.snakeyaml.Yaml;
 

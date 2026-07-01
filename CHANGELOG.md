@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Per-criterion matrix transposed in both comparison HTML reports.**
+  The exploration and optimization comparison reports' "Per-criterion
+  comparison" table now lists variants/iterations as rows and criteria
+  as columns (previously the reverse). Bounds the table's column count
+  to the criteria set instead of letting it grow with every
+  variant/iteration, and aligns row identity with the leaderboard
+  table above it.
+- **Comparison-report renderers de-duplicated.** The Explore and
+  Optimize `HtmlWriter`s shared a near-identical `CriterionResult`
+  record and near-identical per-criterion-matrix, latency-cell,
+  cost-cell, termination-cell, pass-rate-cell, number-formatting, and
+  chart-CSS code. `CriterionResult` and these section renderers now
+  live once in a new `org.mavai.punit.report.ComparisonReportHtml`
+  (alongside the existing shared `ReportHtml`); each report's
+  `HtmlWriter` supplies only what's genuinely report-specific. No
+  behavioural change — output is unchanged.
+
 ### Documentation
 
 - Brought the optimize comparison report's description in the user guide
