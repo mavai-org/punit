@@ -872,10 +872,12 @@ A successful MEASURE writes a single YAML file to the configured
   the full sorted vector of successful-sample latencies.
 - A capture timestamp.
 
-By default the file lives under `src/test/resources/punit/baselines/`
-on the classpath. Override via system property
-(`-Dpunit.baseline.dir=/path/to/baselines`) or the project's
-`gradle.properties`.
+By default the file lives under `src/test/resources/punit/baselines/`,
+a filesystem path relative to the process's working directory (not a
+classpath resource lookup). Override via the `-Dpunit.baseline.dir`
+system property or the `PUNIT_BASELINE_DIR` environment variable
+(checked in that order — see Appendix A), or by setting the property
+in the project's `gradle.properties` for a Gradle-driven run.
 
 ### Asymmetric sampling
 
@@ -1500,6 +1502,44 @@ steps. Verdict XML and (optionally) HTML reports are emitted to a
 configured directory in the same shape as the development-time runs;
 [Part 11](#part-11-reports) covers the report format.
 
+### Baseline file location
+
+The Sentinel's `experiment` subcommand can run `@Experiment` methods
+generally, including MEASURE experiments — a deployed sentinel can
+establish its own baseline in its own environment, exactly as a
+development-time MEASURE run does. The `test` subcommand's
+`@ProbabilisticTest` methods resolve baselines the same way.
+
+Both directions go through the identical resolution mechanism covered
+in [Part 4](#part-4-measuring) and Appendix A:
+the `-Dpunit.baseline.dir` system property, then the `PUNIT_BASELINE_DIR`
+environment variable, then the fixed convention path
+`src/test/resources/punit/baselines`. There is no Sentinel-specific
+configuration surface beyond these two — `SentinelConfiguration` and the
+Sentinel CLI do not expose a baseline-directory-specific flag or builder
+method of their own.
+
+The convention-path fallback assumes a Gradle test-source-tree layout
+that generally does not exist inside a deployed sentinel JAR or
+container, so a real deployment should set one of the two overrides
+explicitly rather than relying on it. Because `-D` flags require control
+of the JVM launch command, the environment variable is often the more
+natural fit for container-orchestrated deployments (Kubernetes, most
+container schedulers) where environment variables are the standard
+configuration channel.
+
+A sentinel that both measures its own baseline (`exp`) and tests against
+it (`test`) must point both invocations at the same directory — nothing
+hands the freshly-written baseline from one run to the other
+automatically. A sentinel that only tests (measuring elsewhere, e.g. in
+CI, and shipping the resulting baseline file(s) as part of the deployment
+artifact) must ensure the shipped baseline directory is what
+`punit.baseline.dir` / `PUNIT_BASELINE_DIR` resolves to at runtime.
+
+See also `docs/SENTINEL-DEPLOYMENT-GUIDE.md`'s "Establish Baselines"
+and "Verify Against Baselines" sections for the full deployment
+walkthrough.
+
 ### Production-only configuration
 
 Some sentinel runs need values not appropriate for development —
@@ -1751,7 +1791,7 @@ PUnit resolves configuration in this order (highest priority first):
 
 | Setting                 | System property              | Env var                     | Default                                            |
 |-------------------------|------------------------------|-----------------------------|----------------------------------------------------|
-| Baseline directory      | `punit.baseline.dir`         | `PUNIT_BASELINE_DIR`        | `src/test/resources/punit/baselines/` (classpath)  |
+| Baseline directory      | `punit.baseline.dir`         | `PUNIT_BASELINE_DIR`        | `src/test/resources/punit/baselines/` (filesystem, relative to CWD) |
 | Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/`                             |
 | Transparent stats       | `punit.stats.transparent`    | `PUNIT_STATS_TRANSPARENT`   | `false`                                            |
 | Confidence level        | `punit.confidence`           | `PUNIT_CONFIDENCE`          | `0.95`                                             |

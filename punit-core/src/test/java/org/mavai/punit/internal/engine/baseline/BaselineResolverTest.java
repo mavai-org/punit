@@ -16,6 +16,7 @@ import org.mavai.punit.api.spec.LatencyStatistics;
 import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -266,5 +267,58 @@ class BaselineResolverTest {
                         PerCriterionPassRateStatistics.of("contract", stats)),
                 profile);
         writer.write(record, dir);
+    }
+
+    @Nested
+    @DisplayName("resolveDir() — baseline directory precedence")
+    class ResolveDirPrecedence {
+
+        @Test
+        @DisplayName("uses the system property when set")
+        void usesSystemPropertyWhenSet() {
+            Path resolved = BaselineResolver.resolveDir("/from/property", null);
+
+            assertThat(resolved).isEqualTo(Path.of("/from/property"));
+        }
+
+        @Test
+        @DisplayName("falls back to the environment variable when the system property is absent")
+        void fallsBackToEnvVarWhenPropertyAbsent() {
+            Path resolved = BaselineResolver.resolveDir(null, "/from/env");
+
+            assertThat(resolved).isEqualTo(Path.of("/from/env"));
+        }
+
+        @Test
+        @DisplayName("falls back to the environment variable when the system property is blank")
+        void fallsBackToEnvVarWhenPropertyBlank() {
+            Path resolved = BaselineResolver.resolveDir("   ", "/from/env");
+
+            assertThat(resolved).isEqualTo(Path.of("/from/env"));
+        }
+
+        @Test
+        @DisplayName("prefers the system property over the environment variable when both are set")
+        void systemPropertyWinsOverEnvVar() {
+            Path resolved = BaselineResolver.resolveDir("/from/property", "/from/env");
+
+            assertThat(resolved).isEqualTo(Path.of("/from/property"));
+        }
+
+        @Test
+        @DisplayName("falls back to the convention path when neither is set")
+        void fallsBackToConventionPathWhenNeitherSet() {
+            Path resolved = BaselineResolver.resolveDir(null, null);
+
+            assertThat(resolved).isEqualTo(Path.of(BaselineResolver.CONVENTION_PATH));
+        }
+
+        @Test
+        @DisplayName("falls back to the convention path when both are blank")
+        void fallsBackToConventionPathWhenBothBlank() {
+            Path resolved = BaselineResolver.resolveDir("  ", "  ");
+
+            assertThat(resolved).isEqualTo(Path.of(BaselineResolver.CONVENTION_PATH));
+        }
     }
 }

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`PUNIT_BASELINE_DIR` environment variable** for baseline-directory
+  resolution (`BaselineResolver.defaultDir()`), checked between the
+  existing `punit.baseline.dir` system property and the fixed convention
+  path. Closes a gap relative to punit's own documented configuration
+  resolution order (system property → environment variable → default);
+  particularly useful for sentinel deployments in containerized
+  environments, where setting an environment variable is typically more
+  natural than controlling the JVM launch command line.
+
+### Documentation
+
+- **Corrected baseline-directory guidance in `SENTINEL-DEPLOYMENT-GUIDE.md`
+  and `USER-GUIDE.md`.** The deployment guide previously told readers to
+  configure the baseline output directory via `-Dpunit.spec.dir` /
+  `PUNIT_SPEC_DIR` — those properties are real, but govern a different,
+  unrelated subsystem (the `ExecutionSpecification`/spec-resolver
+  machinery), not baseline resolution; following the guide's own worked
+  example would not have produced the intended effect. The same section
+  also claimed baseline resolution was "layered" (environment-local first,
+  classpath fallback) — that description applies to specs, not baselines.
+  Both are corrected to name `punit.baseline.dir` / `PUNIT_BASELINE_DIR`
+  and to describe the actual single-tier resolution. `USER-GUIDE.md` Part
+  10 (Sentinels) previously said nothing about baseline file location for
+  deployed sentinels at all; it now has a dedicated subsection covering
+  both the write side (a sentinel running a MEASURE `@Experiment`) and the
+  read side (a sentinel running a `@ProbabilisticTest`). Appendix A's
+  configuration table and Part 4's baseline-location paragraph both
+  previously described the convention-default path as "on the classpath"
+  — it's a filesystem path relative to the working directory, not a
+  classpath resource lookup; corrected in both places.
+
 ### Changed
 
 - **Per-criterion matrix transposed in both comparison HTML reports.**

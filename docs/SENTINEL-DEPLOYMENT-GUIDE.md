@@ -173,13 +173,18 @@ Run measure experiments in the target environment to produce environment-local b
 
 ```bash
 # Run all experiments
-java -Dpunit.spec.dir=/opt/sentinel/baselines -jar sentinel.jar exp
+java -Dpunit.baseline.dir=/opt/sentinel/baselines -jar sentinel.jar exp
 
 # Run experiments for a specific class
-java -Dpunit.spec.dir=/opt/sentinel/baselines -jar sentinel.jar exp --class ShoppingBasketSentinel
+java -Dpunit.baseline.dir=/opt/sentinel/baselines -jar sentinel.jar exp --class ShoppingBasketSentinel
+
+# Equivalent, via environment variable instead of a JVM flag
+PUNIT_BASELINE_DIR=/opt/sentinel/baselines java -jar sentinel.jar exp
 ```
 
-This scans `@Experiment` methods on each registered class, executes the bodies (which call `PUnit.measuring(...).run()` to produce baselines, or `PUnit.exploring(...) / .optimizing(...)` for exploration / optimisation runs), and writes outputs to the configured directories. The baseline output directory is required for measure experiments and can be set via `-Dpunit.spec.dir` or the `PUNIT_SPEC_DIR` environment variable.
+This scans `@Experiment` methods on each registered class, executes the bodies (which call `PUnit.measuring(...).run()` to produce baselines, or `PUnit.exploring(...) / .optimizing(...)` for exploration / optimisation runs), and writes outputs to the configured directories. The baseline output directory can be set via the `-Dpunit.baseline.dir` system property or the `PUNIT_BASELINE_DIR` environment variable (checked in that order; see `BaselineResolver.defaultDir()`). If neither is set, baselines are written to the fixed convention path `src/test/resources/punit/baselines` relative to the process's working directory — a Gradle-test-tree-shaped path that rarely exists or is writable in a deployed container, so a real sentinel deployment should always set one of the two explicitly rather than relying on the fallback.
+
+Note: `-Dpunit.spec.dir` / `PUNIT_SPEC_DIR` are real punit properties, but they configure a different subsystem (the `ExecutionSpecification`/spec-resolver machinery) and have no effect on baseline output location — don't use them here.
 
 ### 3. Verify Against Baselines (Test Mode)
 
@@ -196,7 +201,7 @@ java -jar sentinel.jar test --class PaymentGatewaySentinel
 java -jar sentinel.jar test --verbose
 ```
 
-This scans `@ProbabilisticTest` methods, executes the bodies (which call `PUnit.testing(...).criterion(...).assertPasses()`), resolves baselines via the layered `BaselineProvider` (environment-local first, classpath fallback), derives thresholds, and dispatches verdicts.
+This scans `@ProbabilisticTest` methods, executes the bodies (which call `PUnit.testing(...).criterion(...).assertPasses()`), resolves baselines from the same directory established in step 2 (`punit.baseline.dir` / `PUNIT_BASELINE_DIR`, resolved via the identical `BaselineResolver.defaultDir()` used at write time — not a layered environment-then-classpath search), derives thresholds, and dispatches verdicts. A sentinel that both measures and tests must point both runs at the same directory (or the test run at a directory the measure run's baselines were copied into), since there is no automatic hand-off between them.
 
 ### 4. Verdict Dispatch
 
@@ -226,12 +231,12 @@ The Sentinel's exit code (`SentinelResult.allPassed()`) and verdict dispatch (`V
 
 ## Dependency Summary
 
-| Module           | PUnit Dependency          | JUnit Dependency       | Purpose                                                |
-|------------------|---------------------------|------------------------|--------------------------------------------------------|
-| `app-stochastic` | None                      | None                   | Stochastic service integrations                        |
-| `app-main`       | None                      | None                   | Main application                                       |
-| `app-usecases`   | `punit-core` (production) | None                   | Service contracts + sentinel-deployable classes                |
-| Test suite       | `punit-core` (test) + `punit-report` (test) | `junit-jupiter` (test) | JUnit-driven probabilistic tests, experiments, fixtures|
+| Module           | PUnit Dependency                            | JUnit Dependency       | Purpose                                                 |
+|------------------|---------------------------------------------|------------------------|---------------------------------------------------------|
+| `app-stochastic` | None                                        | None                   | Stochastic service integrations                         |
+| `app-main`       | None                                        | None                   | Main application                                        |
+| `app-usecases`   | `punit-core` (production)                   | None                   | Service contracts + sentinel-deployable classes         |
+| Test suite       | `punit-core` (test) + `punit-report` (test) | `junit-jupiter` (test) | JUnit-driven probabilistic tests, experiments, fixtures |
 
 The sentinel JAR is built by the PUnit Gradle plugin's `createSentinel` task from the main classpath — no dedicated sentinel module is needed. The plugin automatically includes `punit-sentinel` and its transitive dependencies.
 
@@ -239,10 +244,10 @@ The sentinel JAR is built by the PUnit Gradle plugin's `createSentinel` task fro
 
 ## PUnit Artefact Selection
 
-| Consumer                            | Artefact                   | Scope                |
-|-------------------------------------|----------------------------|----------------------|
-| Sentinel-deployable / use-case author | `org.mavai:punit-core`     | `api` (production)   |
-| JUnit test developer                | `org.mavai:punit-core` + `org.mavai:punit-report` + `org.junit.jupiter:junit-jupiter` | `testImplementation` |
-| Verdict-XML / report consumer       | `org.mavai:punit-report`   | as appropriate       |
+| Consumer                              | Artefact                                                                              | Scope                |
+|---------------------------------------|---------------------------------------------------------------------------------------|----------------------|
+| Sentinel-deployable / use-case author | `org.mavai:punit-core`                                                                | `api` (production)   |
+| JUnit test developer                  | `org.mavai:punit-core` + `org.mavai:punit-report` + `org.junit.jupiter:junit-jupiter` | `testImplementation` |
+| Verdict-XML / report consumer         | `org.mavai:punit-report`                                                              | as appropriate       |
 
 The `punit-sentinel` artefact is included automatically by the PUnit Gradle plugin when building the sentinel JAR via `createSentinel`. No manual dependency declaration is needed for sentinel deployment.

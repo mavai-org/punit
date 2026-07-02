@@ -46,15 +46,26 @@ public final class BaselineResolver {
     /** System property used to override the baseline directory. */
     public static final String BASELINE_DIR_PROPERTY = "punit.baseline.dir";
 
+    /**
+     * Environment variable used to override the baseline directory when
+     * {@value #BASELINE_DIR_PROPERTY} is not set. Consulted second, matching
+     * the framework's general configuration resolution order (system
+     * property → environment variable → default) — see punit's project
+     * documentation. Primarily useful for sentinel deployments, where
+     * setting an environment variable at container/process launch is
+     * typically more natural than controlling the JVM command line.
+     */
+    public static final String BASELINE_DIR_ENV_VAR = "PUNIT_BASELINE_DIR";
+
     /** Convention-default directory under the project root. */
     public static final String CONVENTION_PATH = "src/test/resources/punit/baselines";
 
     /**
      * Resolves the baseline directory from {@value #BASELINE_DIR_PROPERTY}
-     * if set, otherwise from the convention path
-     * {@value #CONVENTION_PATH}. The returned path is not required to
-     * exist — callers that read or list it must handle a missing
-     * directory.
+     * if set, otherwise {@value #BASELINE_DIR_ENV_VAR} if set, otherwise
+     * the convention path {@value #CONVENTION_PATH}. The returned path is
+     * not required to exist — callers that read or list it must handle a
+     * missing directory.
      *
      * <p>Exposed for utilities that consume the same baseline directory
      * the test pipeline does (e.g.
@@ -64,9 +75,22 @@ public final class BaselineResolver {
      * implementation.
      */
     public static Path defaultDir() {
-        String prop = System.getProperty(BASELINE_DIR_PROPERTY);
-        if (prop != null && !prop.isBlank()) {
-            return Paths.get(prop.trim());
+        return resolveDir(System.getProperty(BASELINE_DIR_PROPERTY), System.getenv(BASELINE_DIR_ENV_VAR));
+    }
+
+    /**
+     * Pure precedence logic behind {@link #defaultDir()}: system property,
+     * then environment variable, then the convention path. Takes the two
+     * already-read values rather than reading them itself, so the
+     * precedence order is unit-testable without mutating real system
+     * properties or environment variables.
+     */
+    static Path resolveDir(String systemProperty, String envVar) {
+        if (systemProperty != null && !systemProperty.isBlank()) {
+            return Paths.get(systemProperty.trim());
+        }
+        if (envVar != null && !envVar.isBlank()) {
+            return Paths.get(envVar.trim());
         }
         return Paths.get(CONVENTION_PATH);
     }
