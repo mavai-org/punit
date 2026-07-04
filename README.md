@@ -81,7 +81,7 @@ A probabilistic test calls `PUnit.testing(serviceContract).assertPasses()` insid
 
 ```kotlin
 plugins {
-    id("org.mavai.punit") version "0.9.0"
+    id("org.mavai.punit") version "0.9.3"
 }
 
 repositories {
@@ -89,8 +89,8 @@ repositories {
 }
 
 dependencies {
-    testImplementation("org.mavai:punit-core:0.9.0")
-    testImplementation("org.mavai:punit-report:0.9.0")
+    testImplementation("org.mavai:punit-core:0.9.3")
+    testImplementation("org.mavai:punit-report:0.9.3")
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 ```
@@ -101,20 +101,20 @@ dependencies {
 <dependency>
     <groupId>org.mavai</groupId>
     <artifactId>punit-core</artifactId>
-    <version>0.9.0</version>
+    <version>0.9.3</version>
     <scope>test</scope>
 </dependency>
 <dependency>
     <groupId>org.mavai</groupId>
     <artifactId>punit-report</artifactId>
-    <version>0.9.0</version>
+    <version>0.9.3</version>
     <scope>test</scope>
 </dependency>
 ```
 
 Maven users need to configure Surefire/Failsafe — see [MAVEN-CONFIGURATION.md](docs/MAVEN-CONFIGURATION.md).
 
-For sentinel-deployable applications that run probabilistic checks without a test harness, depend on `punit-core` directly (and optionally `punit-sentinel` for the standalone runner). See [Part 9: The Sentinel](docs/USER-GUIDE.md#part-9-the-sentinel) in the user guide.
+For sentinel-deployable applications that run probabilistic checks without a test harness, depend on `punit-core` directly (and optionally `punit-sentinel` for the standalone runner). See [Part 10: Sentinels](docs/USER-GUIDE.md#part-10-sentinels--production-time-execution) in the user guide.
 
 ### 2. Write a Probabilistic Test
 
