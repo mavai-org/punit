@@ -10,7 +10,7 @@
   - [Why probabilistic testing](#why-probabilistic-testing)
   - [What PUnit is](#what-punit-is)
   - [Quick start](#quick-start)
-- [Part 1: The Service Contract — the shared correctness target](#part-1-the-use-case--the-shared-correctness-target)
+- [Part 1: The Service Contract — the shared correctness target](#part-1-the-service-contract--the-shared-correctness-target)
 - [Part 2: The lifecycle](#part-2-the-lifecycle)
 - [Part 3: Testing](#part-3-testing)
 - [Part 4: Measuring](#part-4-measuring)
@@ -106,11 +106,11 @@ companion where a reader wants the proof.
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("org.mavai.punit") version "0.7.0-alpha5"
+    id("org.mavai.punit") version "0.9.3"
 }
 
 dependencies {
-    testImplementation("org.mavai:punit:0.7.0-alpha5")
+    testImplementation("org.mavai:punit-core:0.9.3")
 }
 ```
 
@@ -223,8 +223,6 @@ public class JsonResponseTest {
                         new NoFactors())
                 .assertPasses();
     }
-
-    public record NoFactors() {}
 }
 ```
 
@@ -232,7 +230,8 @@ This test runs the service contract 100 times, counts how many return valid
 JSON, and applies the Wilson-95% lower bound to the observed pass
 rate. It passes if the bound clears the 0.95 threshold. The
 `contractRef` declared on the contract surfaces in the verdict for
-audit traceability.
+audit traceability. `NoFactors` is the empty factor record punit provides
+(`org.mavai.punit.api.NoFactors`) for service contracts with no varying factors.
 
 That is the whole pattern. The rest of this guide unpacks it.
 
@@ -1574,7 +1573,7 @@ report aggregating every verdict from the most recent run:
 ./gradlew test punitReport
 ```
 
-Output: `build/reports/punit/index.html`. The report shows, per test:
+Output: `build/reports/punit/html/index.html`. The report shows, per test:
 
 - The verdict (PASS / FAIL / INCONCLUSIVE) and the contract reference.
 - The criteria evaluated and their individual results.
@@ -1792,7 +1791,7 @@ PUnit resolves configuration in this order (highest priority first):
 | Setting                 | System property              | Env var                     | Default                                            |
 |-------------------------|------------------------------|-----------------------------|----------------------------------------------------|
 | Baseline directory      | `punit.baseline.dir`         | `PUNIT_BASELINE_DIR`        | `src/test/resources/punit/baselines/` (filesystem, relative to CWD) |
-| Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/`                             |
+| Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/xml/` (verdict XML; the HTML report is written beside it under `build/reports/punit/html/`) |
 | Transparent stats       | `punit.stats.transparent`    | `PUNIT_STATS_TRANSPARENT`   | `false`                                            |
 | Confidence level        | `punit.confidence`           | `PUNIT_CONFIDENCE`          | `0.95`                                             |
 | Latency enforcement     | `punit.latency.enforcement`  | `PUNIT_LATENCY_ENFORCEMENT` | `advisory`                                         |
