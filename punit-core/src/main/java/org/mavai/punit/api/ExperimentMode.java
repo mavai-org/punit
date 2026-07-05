@@ -16,9 +16,9 @@ package org.mavai.punit.api;
  * │  Intent:       Precise estimation  │ Factor comparison       │ Iterative factor tuning    │
  * │  Configs:      1 (implicit)        │ N (from factor source)  │ 1 (mutating treatment)     │
  * │  Samples:      1000+ (default)     │ 1+/config (default: 1)  │ 20/iteration (default)     │
- * │  Output:       spec in specs/      │ specs in explorations/  │ history in optimizations/  │
+ * │  Output:       baseline file       │ specs in explorations/  │ history in optimizations/  │
  * │  Decision:     "True success rate?"│ "Which config is best?" │ "What's the best value?"   │
- * │  Task:         ./gradlew measure   │ ./gradlew explore       │ ./gradlew optimize         │
+ * │  Task:         ./gradlew exp -Prun=… (all modes; long form: experiment)                   │
  * └──────────────────────────────────────────────────────────────────────────────────────────┘
  * </pre>
  *
@@ -41,8 +41,8 @@ public enum ExperimentMode {
      * <h3>Typical Configuration</h3>
      * <ul>
      *   <li><b>Samples:</b> 1000+ (default: 1000)</li>
-     *   <li><b>Output:</b> Single spec in {@code src/test/resources/punit/specs/}</li>
-     *   <li><b>Task:</b> {@code ./gradlew measure}</li>
+     *   <li><b>Output:</b> Baseline file in {@code src/test/resources/punit/baselines/}</li>
+     *   <li><b>Task:</b> {@code ./gradlew exp -Prun=<name>}</li>
      * </ul>
      *
      * <h3>Example</h3>
@@ -71,8 +71,8 @@ public enum ExperimentMode {
      * <h3>Typical Configuration</h3>
      * <ul>
      *   <li><b>Samples per config:</b> 1-10 (default: 1)</li>
-     *   <li><b>Output:</b> Multiple specs in {@code src/test/resources/punit/explorations/}</li>
-     *   <li><b>Task:</b> {@code ./gradlew explore}</li>
+     *   <li><b>Output:</b> Multiple specs in {@code build/punit/explorations/}</li>
+     *   <li><b>Task:</b> {@code ./gradlew exp -Prun=<name>}</li>
      * </ul>
      *
      * <h3>Typical Workflow</h3>
@@ -118,8 +118,8 @@ public enum ExperimentMode {
      * <ul>
      *   <li><b>Samples per iteration:</b> 20 (default)</li>
      *   <li><b>Max iterations:</b> 20 (default)</li>
-     *   <li><b>Output:</b> Optimization history in {@code src/test/resources/punit/optimizations/}</li>
-     *   <li><b>Task:</b> {@code ./gradlew optimize}</li>
+     *   <li><b>Output:</b> Optimization history in {@code build/punit/optimizations/}</li>
+     *   <li><b>Task:</b> {@code ./gradlew exp -Prun=<name>}</li>
      * </ul>
      *
      * <h3>Workflow Context</h3>
