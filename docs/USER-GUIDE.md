@@ -199,7 +199,7 @@ public final class JsonResponseServiceContract
 }
 ```
 
-`meeting()` opens a contractual chain. `.passRate(0.95)` declares the
+`NoFactors` is the empty factor record punit provides (`org.mavai.punit.api.NoFactors`) for service contracts with no varying configuration factors. `meeting()` opens a contractual chain. `.passRate(0.95)` declares the
 criterion is a pass-rate target at 0.95. `.contractRef(SLA, "...")`
 names the source category (SLA) and the document reference together.
 `.satisfies(...)` adds the per-sample postcondition.
@@ -217,10 +217,8 @@ public class JsonResponseTest {
 
     @ProbabilisticTest
     void apiMeetsContract() {
-        PUnit.testing(
-                        Sampling.of(f -> new JsonResponseServiceContract(),
-                                100, PROMPTS),
-                        new NoFactors())
+        PUnit.testing(Sampling.of(f -> new JsonResponseServiceContract(),
+                        100, PROMPTS))
                 .assertPasses();
     }
 }
@@ -230,8 +228,10 @@ This test runs the service contract 100 times, counts how many return valid
 JSON, and applies the Wilson-95% lower bound to the observed pass
 rate. It passes if the bound clears the 0.95 threshold. The
 `contractRef` declared on the contract surfaces in the verdict for
-audit traceability. `NoFactors` is the empty factor record punit provides
-(`org.mavai.punit.api.NoFactors`) for service contracts with no varying factors.
+audit traceability. This factor-less `testing(sampling)` form is for
+service contracts whose behaviour does not vary with configuration
+factors; when factors are in play, pass the factor instance explicitly
+via `testing(sampling, factors)`.
 
 That is the whole pattern. The rest of this guide unpacks it.
 
