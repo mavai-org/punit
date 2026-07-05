@@ -44,11 +44,15 @@ import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.api.covariate.Covariate;
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.internal.engine.Engine;
+import org.mavai.punit.internal.engine.baseline.BaselineRecord;
+import org.mavai.punit.internal.engine.baseline.NormativeJudgement;
 import org.mavai.punit.internal.engine.baseline.ProfileBoundBaselineProvider;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
 import org.mavai.punit.internal.engine.criteria.Feasibility;
 import org.mavai.punit.internal.engine.criteria.PassRate;
+import org.mavai.punit.internal.reporting.NormativeJudgementRenderer;
 import org.mavai.punit.internal.reporting.TransparentStatsRenderer;
+import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 import org.mavai.punit.statistics.transparent.TransparentStatsConfig;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.RunMetadata;
@@ -169,9 +173,22 @@ public final class PUnit {
         return new Engine(provider).run(spec);
     }
 
-    private static void driveAndEmit(Experiment experiment) {
+    /**
+     * Drive a MEASURE experiment, persist its baseline artefact, and
+     * render its normative judgements (when the contract declares
+     * normative criteria). Returns the composed baseline record so a
+     * gating terminal can assert on the judgements — strictly after
+     * the artefact is on disk.
+     */
+    private static BaselineRecord driveAndEmit(Experiment experiment) {
         drive(experiment);
-        BaselineEmitter.emit(experiment, BaselineProviderResolver.resolveDir());
+        BaselineRecord record =
+                BaselineEmitter.emit(experiment, BaselineProviderResolver.resolveDir());
+        String judgements = NormativeJudgementRenderer.render(record);
+        if (!judgements.isEmpty()) {
+            System.out.println(judgements);
+        }
+        return record;
     }
 
     private static void driveAndEmitExplore(Experiment experiment) {
@@ -465,12 +482,156 @@ public final class PUnit {
             return delegate.build();
         }
 
+        /**
+         * The neutral terminal. Runs the measure, persists the
+         * baseline artefact (normative-judgement markers included),
+         * and renders any normative judgements prominently in the
+         * experiment's output — but never fails on a failed
+         * judgement. A measure characterises; whether a stipulation
+         * in force at measure time was cleared is reported, not
+         * enforced. Use {@link #assertMeets()} to make the
+         * stipulations binding.
+         */
         public void run() {
             // Measure runs and emits a baseline file when a baseline directory
             // is configured (system property or project convention). The
             // emission is silent when no directory resolves — the run itself
             // succeeded; the artefact just has nowhere to land.
             driveAndEmit(build());
+        }
+
+        /**
+         * The gating terminal — normative judgement at experiment
+         * time, made binding. Mutually exclusive alternative to
+         * {@link #run()}: same run, same persistence, then asserts.
+         * Mirrors {@link TestBuilder#assertPasses()}'s fused
+         * run-and-assert convention — asserting terminals imply
+         * running.
+         *
+         * <p>Judgement-to-outcome mapping (the same opentest4j
+         * mapping {@code assertPasses()} uses):
+         *
+         * <ul>
+         *   <li>every normative criterion met — returns normally;</li>
+         *   <li>any normative criterion failed — throws
+         *       {@link AssertionFailedError};</li>
+         *   <li>any judgement unsupportable at this sample size —
+         *       throws {@link TestAbortedException}, stating the
+         *       feasible minimum sample count.</li>
+         * </ul>
+         *
+         * <p>Persistence strictly precedes assertion: the baseline
+         * artefact is on disk before any throw — a failed stipulation
+         * never costs the baseline. A failed judgement states the
+         * run's relation to the stipulation, not a claim about the
+         * service's validity; opting into this terminal is what makes
+         * that relation binding for the host harness.
+         *
+         * @throws IllegalStateException when the contract declares no
+         *         normative criteria — there is nothing to assert;
+         *         use {@link #run()}. Thrown before any sampling.
+         */
+        public void assertMeets() {
+            Experiment experiment = build();
+            requireNormativeCriteria(experiment);
+            BaselineRecord record = driveAndEmit(experiment);
+            translateJudgements(record);
+        }
+
+        /**
+         * Configuration-defect gate for {@link #assertMeets()}: a
+         * contract with no normative (stipulated pass-rate) criteria
+         * has nothing to assert. Checked before sampling so the
+         * defect surfaces without spending the run's samples.
+         */
+        private static void requireNormativeCriteria(Experiment experiment) {
+            boolean anyNormative = experiment.dispatch(new Spec.Dispatcher<Boolean>() {
+                @Override
+                public <F, I, O> Boolean apply(TypedSpec<F, I, O> typed) {
+                    var configs = typed.configurations();
+                    if (!configs.hasNext()) {
+                        return false;
+                    }
+                    F factors = configs.next().factors();
+                    ServiceContract<F, I, O> serviceContract =
+                            typed.serviceContractFactory().apply(factors);
+                    for (org.mavai.punit.api.criterion.Criterion<O> criterion
+                            : serviceContract.effectiveCriteria()) {
+                        if (criterion.posture().kind()
+                                == org.mavai.punit.api.criterion.CriterionPosture
+                                        .Kind.STATISTICAL_CONTRACTUAL) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            });
+            if (!anyNormative) {
+                throw new IllegalStateException(
+                        "assertMeets() requires at least one normative criterion — "
+                                + "a stipulated pass rate declared via meeting().passRate(...). "
+                                + "This contract declares none, so there is nothing to "
+                                + "assert; use run() to characterise without gating.");
+            }
+        }
+
+        /**
+         * Translate the run's normative judgements into the host
+         * harness's outcome. Failed dominates unsupportable: when both
+         * are present the run is a failure, and the message carries
+         * the unsupportable criteria as context.
+         */
+        private static void translateJudgements(BaselineRecord record) {
+            List<NormativeJudgement> failed = new ArrayList<>();
+            List<NormativeJudgement> unsupportable = new ArrayList<>();
+            for (NormativeJudgement judgement : record.normativeJudgements()) {
+                switch (judgement.judgement().state()) {
+                    case FAILED -> failed.add(judgement);
+                    case UNSUPPORTABLE -> unsupportable.add(judgement);
+                    case MET -> { /* nothing to translate */ }
+                }
+            }
+            if (!failed.isEmpty()) {
+                throw new AssertionFailedError(
+                        judgementMessage(record, failed, unsupportable));
+            }
+            if (!unsupportable.isEmpty()) {
+                throw new TestAbortedException(
+                        judgementMessage(record, failed, unsupportable));
+            }
+        }
+
+        private static String judgementMessage(
+                BaselineRecord record,
+                List<NormativeJudgement> failed,
+                List<NormativeJudgement> unsupportable) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(record.serviceContractId())
+                    .append(": ").append(record.sampleCount()).append(" samples");
+            for (NormativeJudgement judgement : failed) {
+                NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+                sb.append("\n  criterion \"").append(judgement.criterionId())
+                        .append("\" did not clear its stipulated ")
+                        .append(j.stipulatedThreshold());
+                judgement.stipulationRef().ifPresent(ref ->
+                        sb.append(" (").append(ref).append(')'));
+                sb.append(": observed ").append(j.observedRate())
+                        .append(", lower bound ").append(j.lowerBound())
+                        .append(" at confidence ").append(j.confidence());
+            }
+            for (NormativeJudgement judgement : unsupportable) {
+                NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+                sb.append("\n  criterion \"").append(judgement.criterionId())
+                        .append("\" is unsupportable at ").append(record.sampleCount())
+                        .append(" samples: judging the stipulated ")
+                        .append(j.stipulatedThreshold())
+                        .append(" at confidence ").append(j.confidence())
+                        .append(" requires at least ").append(j.feasibleMinimumSamples())
+                        .append(" samples");
+            }
+            sb.append("\n  baseline persisted before this assertion: ")
+                    .append(record.filename());
+            return sb.toString();
         }
     }
 

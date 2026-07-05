@@ -50,6 +50,17 @@ final class BaselineSchema {
     // PassRate / PassRateStatistics
     static final String FIELD_OBSERVED_PASS_RATE = "observedPassRate";
 
+    // Normative judgement at experiment time — additive per-criterion
+    // marker under statistics.bernoulli-pass-rate.criteria.<id>.
+    // Documentary only: records how the measure run's evidence stood
+    // relative to the criterion's stipulated threshold at measure
+    // time. The reader ignores it (resolvers and threshold derivation
+    // never consume it); files without it parse identically.
+    static final String FIELD_NORMATIVE_JUDGEMENT = "normativeJudgement";
+    static final String FIELD_JUDGEMENT_STATE = "state";
+    static final String FIELD_STIPULATED_THRESHOLD = "stipulatedThreshold";
+    static final String FIELD_JUDGEMENT_CONFIDENCE = "confidence";
+
     // PercentileLatency / LatencyStatistics
     static final String FIELD_PERCENTILES = "percentiles";
     static final String PERCENTILE_KEY_P50 = "p50";
