@@ -8,6 +8,7 @@ import java.util.Objects;
 
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.api.spec.BaselineStatistics;
+import org.mavai.punit.api.spec.NormativeJudgement;
 
 /**
  * In-memory shape of a baseline file. Carries the identity keys the

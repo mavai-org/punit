@@ -1,4 +1,4 @@
-package org.mavai.punit.internal.engine.baseline;
+package org.mavai.punit.api.spec;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -21,7 +21,7 @@ import org.mavai.punit.statistics.NormativeJudgementEvaluator.Judgement;
  * later reader of the file sees not only what was measured but how
  * the measurement stood relative to a stipulation in force at
  * measure time. The marker is additive and purely documentary:
- * {@link BaselineResolver} and threshold derivation ignore it.
+ * baseline resolution and threshold derivation ignore it.
  *
  * @param criterionId    the judged criterion's stable identifier
  * @param judgement      the statistical judgement

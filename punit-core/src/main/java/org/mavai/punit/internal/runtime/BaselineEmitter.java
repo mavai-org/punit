@@ -32,12 +32,14 @@ import org.mavai.punit.api.spec.SampleSummary;
 import org.mavai.punit.api.spec.Spec;
 import org.mavai.punit.api.spec.TypedSpec;
 import org.mavai.punit.api.criterion.CriterionPosture;
+import org.mavai.punit.api.spec.MeasuredBaseline;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.internal.engine.baseline.BaselineRecord;
 import org.mavai.punit.internal.engine.baseline.BaselineWriter;
 import org.mavai.punit.internal.engine.baseline.FactorsFingerprint;
 import org.mavai.punit.internal.engine.baseline.LatencyIndicator;
-import org.mavai.punit.internal.engine.baseline.NormativeJudgement;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
+import org.mavai.punit.internal.reporting.NormativeJudgementRenderer;
 import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 import org.mavai.punit.statistics.StatisticalDefaults;
 
@@ -75,9 +77,17 @@ public final class BaselineEmitter {
 
     private BaselineEmitter() { }
 
-    public static BaselineRecord emit(Experiment experiment, Path baselineDir) {
+    /**
+     * Emit the baseline artefact to {@code baselineDir} and return the
+     * emission summary the measure terminals consume: artefact
+     * identity, the run's normative judgements, and their console
+     * rendering. The artefact is on disk before this method returns —
+     * the terminals render and, under the gating terminal, assert
+     * strictly after persistence.
+     */
+    public static MeasuredBaseline emit(Experiment experiment, Path baselineDir) {
         Objects.requireNonNull(baselineDir, "baselineDir");
-        return emit(experiment, (relativePath, content) -> {
+        BaselineRecord record = emit(experiment, (relativePath, content) -> {
             try {
                 Files.createDirectories(baselineDir);
                 Path target = baselineDir.resolve(relativePath);
@@ -87,6 +97,12 @@ public final class BaselineEmitter {
                         "Failed to write baseline " + relativePath + " under " + baselineDir, e);
             }
         });
+        return new MeasuredBaseline(
+                record.serviceContractId(),
+                record.sampleCount(),
+                record.filename(),
+                record.normativeJudgements(),
+                NormativeJudgementRenderer.render(record));
     }
 
     /**

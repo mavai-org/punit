@@ -36,6 +36,8 @@ import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.FactorsStepper;
 import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.FailureExemplar;
+import org.mavai.punit.api.spec.MeasuredBaseline;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PerCriterionEvaluation;
 import org.mavai.punit.api.spec.ProbabilisticTest;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
@@ -44,13 +46,10 @@ import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.api.covariate.Covariate;
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.internal.engine.Engine;
-import org.mavai.punit.internal.engine.baseline.BaselineRecord;
-import org.mavai.punit.internal.engine.baseline.NormativeJudgement;
 import org.mavai.punit.internal.engine.baseline.ProfileBoundBaselineProvider;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
 import org.mavai.punit.internal.engine.criteria.Feasibility;
 import org.mavai.punit.internal.engine.criteria.PassRate;
-import org.mavai.punit.internal.reporting.NormativeJudgementRenderer;
 import org.mavai.punit.internal.reporting.TransparentStatsRenderer;
 import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 import org.mavai.punit.statistics.transparent.TransparentStatsConfig;
@@ -176,19 +175,18 @@ public final class PUnit {
     /**
      * Drive a MEASURE experiment, persist its baseline artefact, and
      * render its normative judgements (when the contract declares
-     * normative criteria). Returns the composed baseline record so a
-     * gating terminal can assert on the judgements — strictly after
-     * the artefact is on disk.
+     * normative criteria). Returns the emission summary so a gating
+     * terminal can assert on the judgements — strictly after the
+     * artefact is on disk.
      */
-    private static BaselineRecord driveAndEmit(Experiment experiment) {
+    private static MeasuredBaseline driveAndEmit(Experiment experiment) {
         drive(experiment);
-        BaselineRecord record =
+        MeasuredBaseline emission =
                 BaselineEmitter.emit(experiment, BaselineProviderResolver.resolveDir());
-        String judgements = NormativeJudgementRenderer.render(record);
-        if (!judgements.isEmpty()) {
-            System.out.println(judgements);
+        if (!emission.judgementRendering().isEmpty()) {
+            System.out.println(emission.judgementRendering());
         }
-        return record;
+        return emission;
     }
 
     private static void driveAndEmitExplore(Experiment experiment) {
@@ -534,8 +532,8 @@ public final class PUnit {
         public void assertMeets() {
             Experiment experiment = build();
             requireNormativeCriteria(experiment);
-            BaselineRecord record = driveAndEmit(experiment);
-            translateJudgements(record);
+            MeasuredBaseline emission = driveAndEmit(experiment);
+            translateJudgements(emission);
         }
 
         /**
@@ -581,10 +579,10 @@ public final class PUnit {
          * are present the run is a failure, and the message carries
          * the unsupportable criteria as context.
          */
-        private static void translateJudgements(BaselineRecord record) {
+        private static void translateJudgements(MeasuredBaseline emission) {
             List<NormativeJudgement> failed = new ArrayList<>();
             List<NormativeJudgement> unsupportable = new ArrayList<>();
-            for (NormativeJudgement judgement : record.normativeJudgements()) {
+            for (NormativeJudgement judgement : emission.normativeJudgements()) {
                 switch (judgement.judgement().state()) {
                     case FAILED -> failed.add(judgement);
                     case UNSUPPORTABLE -> unsupportable.add(judgement);
@@ -593,21 +591,21 @@ public final class PUnit {
             }
             if (!failed.isEmpty()) {
                 throw new AssertionFailedError(
-                        judgementMessage(record, failed, unsupportable));
+                        judgementMessage(emission, failed, unsupportable));
             }
             if (!unsupportable.isEmpty()) {
                 throw new TestAbortedException(
-                        judgementMessage(record, failed, unsupportable));
+                        judgementMessage(emission, failed, unsupportable));
             }
         }
 
         private static String judgementMessage(
-                BaselineRecord record,
+                MeasuredBaseline emission,
                 List<NormativeJudgement> failed,
                 List<NormativeJudgement> unsupportable) {
             StringBuilder sb = new StringBuilder();
-            sb.append(record.serviceContractId())
-                    .append(": ").append(record.sampleCount()).append(" samples");
+            sb.append(emission.serviceContractId())
+                    .append(": ").append(emission.sampleCount()).append(" samples");
             for (NormativeJudgement judgement : failed) {
                 NormativeJudgementEvaluator.Judgement j = judgement.judgement();
                 sb.append("\n  criterion \"").append(judgement.criterionId())
@@ -622,7 +620,7 @@ public final class PUnit {
             for (NormativeJudgement judgement : unsupportable) {
                 NormativeJudgementEvaluator.Judgement j = judgement.judgement();
                 sb.append("\n  criterion \"").append(judgement.criterionId())
-                        .append("\" is unsupportable at ").append(record.sampleCount())
+                        .append("\" is unsupportable at ").append(emission.sampleCount())
                         .append(" samples: judging the stipulated ")
                         .append(j.stipulatedThreshold())
                         .append(" at confidence ").append(j.confidence())
@@ -630,7 +628,7 @@ public final class PUnit {
                         .append(" samples");
             }
             sb.append("\n  baseline persisted before this assertion: ")
-                    .append(record.filename());
+                    .append(emission.filename());
             return sb.toString();
         }
     }

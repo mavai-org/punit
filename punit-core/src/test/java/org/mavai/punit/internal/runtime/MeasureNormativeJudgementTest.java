@@ -22,7 +22,7 @@ import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.internal.engine.Engine;
 import org.mavai.punit.internal.engine.baseline.BaselineReader;
 import org.mavai.punit.internal.engine.baseline.BaselineRecord;
-import org.mavai.punit.internal.engine.baseline.NormativeJudgement;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.statistics.NormativeJudgementEvaluator.State;
 import org.yaml.snakeyaml.Yaml;
 

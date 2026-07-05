@@ -6,10 +6,10 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.mavai.punit.api.spec.BaselineStatistics;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.internal.engine.baseline.BaselineRecord;
-import org.mavai.punit.internal.engine.baseline.NormativeJudgement;
 import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 
 /**

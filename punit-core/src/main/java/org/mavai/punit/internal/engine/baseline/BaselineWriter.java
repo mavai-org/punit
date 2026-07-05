@@ -34,6 +34,7 @@ import java.util.Objects;
 import org.mavai.punit.api.LatencyResult;
 import org.mavai.punit.api.spec.BaselineStatistics;
 import org.mavai.punit.api.spec.LatencyStatistics;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.yaml.snakeyaml.DumperOptions;
