@@ -568,11 +568,11 @@ public final class PUnit {
                 }
             });
             if (!anyNormative) {
-                throw new IllegalStateException(
-                        "assertMeets() requires at least one normative criterion — "
-                                + "a stipulated pass rate declared via meeting().passRate(...). "
-                                + "This contract declares none, so there is nothing to "
-                                + "assert; use run() to characterise without gating.");
+                throw new IllegalStateException("""
+                        assertMeets() requires at least one normative criterion — \
+                        a stipulated pass rate declared via meeting().passRate(...). \
+                        This contract declares none, so there is nothing to \
+                        assert; use run() to characterise without gating.""");
             }
         }
 
@@ -606,33 +606,44 @@ public final class PUnit {
                 MeasuredBaseline emission,
                 List<NormativeJudgement> failed,
                 List<NormativeJudgement> unsupportable) {
-            StringBuilder sb = new StringBuilder();
-            sb.append(emission.serviceContractId())
-                    .append(": ").append(emission.sampleCount()).append(" samples");
-            for (NormativeJudgement judgement : failed) {
-                NormativeJudgementEvaluator.Judgement j = judgement.judgement();
-                sb.append("\n  criterion \"").append(judgement.criterionId())
-                        .append("\" did not clear its stipulated ")
-                        .append(j.stipulatedThreshold());
-                judgement.stipulationRef().ifPresent(ref ->
-                        sb.append(" (").append(ref).append(')'));
-                sb.append(": observed ").append(j.observedRate())
-                        .append(", lower bound ").append(j.lowerBound())
-                        .append(" at confidence ").append(j.confidence());
-            }
-            for (NormativeJudgement judgement : unsupportable) {
-                NormativeJudgementEvaluator.Judgement j = judgement.judgement();
-                sb.append("\n  criterion \"").append(judgement.criterionId())
-                        .append("\" is unsupportable at ").append(emission.sampleCount())
-                        .append(" samples: judging the stipulated ")
-                        .append(j.stipulatedThreshold())
-                        .append(" at confidence ").append(j.confidence())
-                        .append(" requires at least ").append(j.feasibleMinimumSamples())
-                        .append(" samples");
-            }
-            sb.append("\n  baseline persisted before this assertion: ")
-                    .append(emission.filename());
+            StringBuilder sb = new StringBuilder(String.format(
+                    "%s: %d samples",
+                    emission.serviceContractId(), emission.sampleCount()));
+            failed.forEach(judgement -> sb.append(failedLine(judgement)));
+            unsupportable.forEach(judgement ->
+                    sb.append(unsupportableLine(judgement, emission.sampleCount())));
+            sb.append(String.format(
+                    "%n  baseline persisted before this assertion: %s",
+                    emission.filename()));
             return sb.toString();
+        }
+
+        private static String failedLine(NormativeJudgement judgement) {
+            NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+            return String.format(
+                    "%n  criterion \"%s\" did not clear its stipulated %s%s: "
+                            + "observed %s, lower bound %s at confidence %s",
+                    judgement.criterionId(), j.stipulatedThreshold(),
+                    stipulationSource(judgement),
+                    j.observedRate(), j.lowerBound(), j.confidence());
+        }
+
+        private static String unsupportableLine(
+                NormativeJudgement judgement, int sampleCount) {
+            NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+            return String.format(
+                    "%n  criterion \"%s\" is unsupportable at %d samples: "
+                            + "judging the stipulated %s at confidence %s "
+                            + "requires at least %d samples",
+                    judgement.criterionId(), sampleCount,
+                    j.stipulatedThreshold(), j.confidence(),
+                    j.feasibleMinimumSamples());
+        }
+
+        private static String stipulationSource(NormativeJudgement judgement) {
+            return judgement.stipulationRef()
+                    .map(ref -> " (" + ref + ")")
+                    .orElse("");
         }
     }
 

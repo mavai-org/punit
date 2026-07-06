@@ -241,37 +241,55 @@ public final class BaselineEmitter {
      */
     private static <FT, IT, OT> List<NormativeJudgement> judgeNormativeCriteria(
             ServiceContract<FT, IT, OT> serviceContract, SampleSummary<?> summary) {
-        Map<String, CriterionSampleCounts> countsByCriterionId = new LinkedHashMap<>();
-        for (CriterionSampleCounts counts : summary.criterionSampleCounts()) {
-            countsByCriterionId.put(counts.criterionId(), counts);
-        }
+        Map<String, CriterionSampleCounts> countsByCriterionId =
+                countsByCriterionId(summary);
         List<NormativeJudgement> judgements = new ArrayList<>();
         for (org.mavai.punit.api.criterion.Criterion<OT> criterion
                 : serviceContract.effectiveCriteria()) {
-            CriterionPosture posture = criterion.posture();
-            if (posture.kind() != CriterionPosture.Kind.STATISTICAL_CONTRACTUAL
-                    || posture.threshold().isEmpty()) {
-                continue;
-            }
-            CriterionSampleCounts counts = countsByCriterionId.get(criterion.id());
-            if (counts == null || counts.total() == 0) {
-                // No per-criterion evidence recorded for this criterion —
-                // nothing to judge. Unreachable in practice: the zero-sample
-                // guard above rejects empty runs before composition.
-                continue;
-            }
-            double confidence = posture.confidenceFloor()
-                    .orElse(StatisticalDefaults.DEFAULT_CONFIDENCE);
-            NormativeJudgementEvaluator.Judgement judgement =
-                    NormativeJudgementEvaluator.judge(
-                            counts.pass(),
-                            counts.total(),
-                            posture.threshold().getAsDouble(),
-                            confidence);
-            judgements.add(new NormativeJudgement(
-                    criterion.id(), judgement, contractRefFor(posture)));
+            judgeCriterion(criterion, countsByCriterionId)
+                    .ifPresent(judgements::add);
         }
         return judgements;
+    }
+
+    private static Map<String, CriterionSampleCounts> countsByCriterionId(
+            SampleSummary<?> summary) {
+        Map<String, CriterionSampleCounts> byCriterionId = new LinkedHashMap<>();
+        for (CriterionSampleCounts counts : summary.criterionSampleCounts()) {
+            byCriterionId.put(counts.criterionId(), counts);
+        }
+        return byCriterionId;
+    }
+
+    /**
+     * Judge one criterion, or return empty when there is nothing to
+     * judge: the criterion is not normative (no stipulated pass-rate
+     * posture), or no per-criterion evidence was recorded for it —
+     * the latter unreachable in practice, since the zero-sample guard
+     * rejects empty runs before composition.
+     */
+    private static <OT> Optional<NormativeJudgement> judgeCriterion(
+            org.mavai.punit.api.criterion.Criterion<OT> criterion,
+            Map<String, CriterionSampleCounts> countsByCriterionId) {
+        CriterionPosture posture = criterion.posture();
+        if (posture.kind() != CriterionPosture.Kind.STATISTICAL_CONTRACTUAL
+                || posture.threshold().isEmpty()) {
+            return Optional.empty();
+        }
+        CriterionSampleCounts counts = countsByCriterionId.get(criterion.id());
+        if (counts == null || counts.total() == 0) {
+            return Optional.empty();
+        }
+        double confidence = posture.confidenceFloor()
+                .orElse(StatisticalDefaults.DEFAULT_CONFIDENCE);
+        NormativeJudgementEvaluator.Judgement judgement =
+                NormativeJudgementEvaluator.judge(
+                        counts.pass(),
+                        counts.total(),
+                        posture.threshold().getAsDouble(),
+                        confidence);
+        return Optional.of(new NormativeJudgement(
+                criterion.id(), judgement, contractRefFor(posture)));
     }
 
     private static Optional<String> contractRefFor(CriterionPosture posture) {

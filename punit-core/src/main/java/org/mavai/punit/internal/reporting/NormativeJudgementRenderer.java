@@ -48,23 +48,29 @@ public final class NormativeJudgementRenderer {
             return "";
         }
         Map<String, PassRateStatistics> characterisation = passRateByCriterion(record);
-        StringBuilder sb = new StringBuilder();
-        sb.append("[PUNIT-MEASURE] ").append(record.serviceContractId())
-                .append(": ").append(record.sampleCount()).append(" samples\n");
+        StringBuilder sb = new StringBuilder(String.format(
+                "[PUNIT-MEASURE] %s: %d samples%n",
+                record.serviceContractId(), record.sampleCount()));
         for (NormativeJudgement judgement : record.normativeJudgements()) {
-            PassRateStatistics observed = characterisation.get(judgement.criterionId());
-            sb.append("  criterion \"").append(judgement.criterionId()).append("\": ");
-            if (observed != null) {
-                sb.append("observed ").append(rate(observed.observedPassRate()))
-                        .append(" (").append(observed.sampleCount()).append(" samples)");
-            } else {
-                sb.append("observed ").append(rate(judgement.judgement().observedRate()));
-            }
-            sb.append('\n');
-            sb.append("  ").append(judgementLine(judgement)).append('\n');
+            sb.append(criterionBlock(
+                    judgement, characterisation.get(judgement.criterionId())));
         }
-        sb.append("  baseline: ").append(record.filename());
+        sb.append(String.format("  baseline: %s", record.filename()));
         return sb.toString();
+    }
+
+    /**
+     * One criterion's two-line block: the measured characterisation,
+     * then the judgement rendered against it.
+     */
+    private static String criterionBlock(
+            NormativeJudgement judgement, PassRateStatistics observed) {
+        String characterisation = observed != null
+                ? String.format("observed %s (%d samples)",
+                        rate(observed.observedPassRate()), observed.sampleCount())
+                : String.format("observed %s", rate(judgement.judgement().observedRate()));
+        return String.format("  criterion \"%s\": %s%n  %s%n",
+                judgement.criterionId(), characterisation, judgementLine(judgement));
     }
 
     private static String judgementLine(NormativeJudgement entry) {
@@ -73,19 +79,18 @@ public final class NormativeJudgementRenderer {
                 .map(ref -> " (" + ref + ")")
                 .orElse("");
         return switch (j.state()) {
-            case MET -> "normative judgement: met — "
-                    + confidencePercent(j.confidence()) + "-confident lower bound "
-                    + rate(j.lowerBound()) + " clears the stipulated "
-                    + rate(j.stipulatedThreshold()) + source;
-            case FAILED -> "NORMATIVE JUDGEMENT: FAILED — stipulated "
-                    + rate(j.stipulatedThreshold()) + source + "; "
-                    + confidencePercent(j.confidence()) + "-confident lower bound "
-                    + rate(j.lowerBound()) + " does not clear the stipulation";
-            case UNSUPPORTABLE -> "NORMATIVE JUDGEMENT: UNSUPPORTABLE at this sample size — "
-                    + "judging the stipulated " + rate(j.stipulatedThreshold()) + source
-                    + " at " + confidencePercent(j.confidence())
-                    + " confidence requires at least " + j.feasibleMinimumSamples()
-                    + " samples; no judgement rendered";
+            case MET -> String.format(
+                    "normative judgement: met — %s-confident lower bound %s clears the stipulated %s%s",
+                    confidencePercent(j.confidence()), rate(j.lowerBound()),
+                    rate(j.stipulatedThreshold()), source);
+            case FAILED -> String.format(
+                    "NORMATIVE JUDGEMENT: FAILED — stipulated %s%s; %s-confident lower bound %s does not clear the stipulation",
+                    rate(j.stipulatedThreshold()), source,
+                    confidencePercent(j.confidence()), rate(j.lowerBound()));
+            case UNSUPPORTABLE -> String.format(
+                    "NORMATIVE JUDGEMENT: UNSUPPORTABLE at this sample size — judging the stipulated %s%s at %s confidence requires at least %d samples; no judgement rendered",
+                    rate(j.stipulatedThreshold()), source,
+                    confidencePercent(j.confidence()), j.feasibleMinimumSamples());
         };
     }
 
