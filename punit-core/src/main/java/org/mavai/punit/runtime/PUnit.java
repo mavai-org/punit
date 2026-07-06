@@ -42,6 +42,7 @@ import org.mavai.punit.api.spec.PerCriterionEvaluation;
 import org.mavai.punit.api.spec.ProbabilisticTest;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Scorer;
+import org.mavai.punit.api.spec.UnsupportableJudgementException;
 import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.api.covariate.Covariate;
 import org.mavai.punit.api.covariate.CovariateProfile;
@@ -514,8 +515,10 @@ public final class PUnit {
          *   <li>any normative criterion failed — throws
          *       {@link AssertionFailedError};</li>
          *   <li>any judgement unsupportable at this sample size —
-         *       throws {@link TestAbortedException}, stating the
-         *       feasible minimum sample count.</li>
+         *       throws {@link UnsupportableJudgementException} (a
+         *       {@link TestAbortedException}, so the harness aborts
+         *       rather than fails), stating the feasible minimum
+         *       sample count.</li>
          * </ul>
          *
          * <p>Persistence strictly precedes assertion: the baseline
@@ -594,7 +597,7 @@ public final class PUnit {
                         judgementMessage(emission, failed, unsupportable));
             }
             if (!unsupportable.isEmpty()) {
-                throw new TestAbortedException(
+                throw new UnsupportableJudgementException(
                         judgementMessage(emission, failed, unsupportable));
             }
         }

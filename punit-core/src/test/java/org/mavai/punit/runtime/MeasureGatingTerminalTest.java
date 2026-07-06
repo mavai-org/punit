@@ -26,6 +26,7 @@ import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.internal.engine.baseline.BaselineResolver;
 import org.opentest4j.AssertionFailedError;
+import org.mavai.punit.api.spec.UnsupportableJudgementException;
 import org.opentest4j.TestAbortedException;
 
 /**
@@ -122,15 +123,17 @@ class MeasureGatingTerminalTest {
     }
 
     @Test
-    @DisplayName("throws TestAbortedException, stating the feasible minimum, on an "
-            + "unsupportable judgement — after the baseline artefact is on disk")
+    @DisplayName("throws UnsupportableJudgementException (aborting the harness), stating "
+            + "the feasible minimum, on an unsupportable judgement — after the baseline "
+            + "artefact is on disk")
     void abortsOnUnsupportableJudgementWithBaselinePersisted() throws IOException {
         var uc = contract("GatedUndersizedMeasure",
                 meeting().<String>passRate(0.99)
                         .satisfies("value is even", MeasureGatingTerminalTest::even));
 
-        assertThatExceptionOfType(TestAbortedException.class)
+        assertThatExceptionOfType(UnsupportableJudgementException.class)
                 .isThrownBy(() -> PUnit.measuring(sampling(uc, 2, 4)).assertMeets())
+                .isInstanceOf(TestAbortedException.class)
                 .withMessageContaining("unsupportable at 8 samples")
                 .withMessageContaining("requires at least");
         assertThat(baselineFileCount()).isEqualTo(1);

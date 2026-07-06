@@ -22,8 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   completion semantics are unchanged — it never fails on a failed
   judgement; the new `assertMeets()` terminal (mutually exclusive with
   `run()`) performs the same run and persistence, then throws
-  `AssertionFailedError` on a failed judgement and `TestAbortedException`
-  on an unsupportable one, with the baseline artefact on disk before any
+  `AssertionFailedError` on a failed judgement and
+  `UnsupportableJudgementException` (a `TestAbortedException` subtype,
+  identifying the cause for listeners and report tooling) on an
+  unsupportable one, with the baseline artefact on disk before any
   throw.
 - **`PUNIT_BASELINE_DIR` environment variable** for baseline-directory
   resolution (`BaselineResolver.defaultDir()`), checked between the

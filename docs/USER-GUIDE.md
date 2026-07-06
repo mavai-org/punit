@@ -893,7 +893,7 @@ void measurePaymentGatewayGated() {
 }
 ```
 
-`assertMeets()` performs the same run and the same baseline persistence — the artefact is on disk before any throw — then translates the judgements with the same opentest4j mapping `assertPasses()` uses: a failed judgement throws `AssertionFailedError`, an unsupportable one throws `TestAbortedException` (stating the feasible minimum). Calling it on a contract with no normative criteria is a configuration defect (`IllegalStateException`), detected before any sampling.
+`assertMeets()` performs the same run and the same baseline persistence — the artefact is on disk before any throw — then translates the judgements with the same opentest4j mapping `assertPasses()` uses: a failed judgement throws `AssertionFailedError`, an unsupportable one throws `UnsupportableJudgementException` — a `TestAbortedException` subtype, so the harness aborts rather than fails — stating the feasible minimum. Calling it on a contract with no normative criteria is a configuration defect (`IllegalStateException`), detected before any sampling.
 
 ### Asymmetric sampling
 
