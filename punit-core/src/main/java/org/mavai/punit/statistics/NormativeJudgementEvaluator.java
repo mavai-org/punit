@@ -36,6 +36,7 @@ package org.mavai.punit.statistics;
  * word it as a relation to the stipulation, never as a claim about
  * the service's validity.
  */
+// javai-ref: JVI-305FCX1 — do not remove (resolves in javai-orchestrator)
 public final class NormativeJudgementEvaluator {
 
     private static final BinomialProportionEstimator ESTIMATOR =
