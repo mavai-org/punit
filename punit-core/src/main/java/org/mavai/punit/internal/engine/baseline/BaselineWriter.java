@@ -34,6 +34,7 @@ import java.util.Objects;
 import org.mavai.punit.api.LatencyResult;
 import org.mavai.punit.api.spec.BaselineStatistics;
 import org.mavai.punit.api.spec.LatencyStatistics;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.yaml.snakeyaml.DumperOptions;
@@ -121,11 +122,15 @@ public final class BaselineWriter {
         // PercentileLatency criterion's lookup; the reader
         // re-synthesises it from the top-level block on load.
         Map<String, Object> stats = new LinkedHashMap<>();
+        Map<String, NormativeJudgement> judgementsByCriterionId = new LinkedHashMap<>();
+        for (NormativeJudgement judgement : record.normativeJudgements()) {
+            judgementsByCriterionId.put(judgement.criterionId(), judgement);
+        }
         record.statisticsByCriterionName().forEach((name, value) -> {
             if (value instanceof LatencyStatistics) {
                 return; // suppressed; lives in the latency: block instead
             }
-            stats.put(name, serialiseStatisticsEntry(name, value));
+            stats.put(name, serialiseStatisticsEntry(name, value, judgementsByCriterionId));
         });
         root.put(FIELD_STATISTICS, stats);
 
@@ -155,9 +160,10 @@ public final class BaselineWriter {
     }
 
     private Map<String, Object> serialiseStatisticsEntry(
-            String criterionName, BaselineStatistics statistics) {
+            String criterionName, BaselineStatistics statistics,
+            Map<String, NormativeJudgement> judgementsByCriterionId) {
         if (statistics instanceof PerCriterionPassRateStatistics perCriterion) {
-            return serialisePerCriterionPassRate(perCriterion);
+            return serialisePerCriterionPassRate(perCriterion, judgementsByCriterionId);
         }
         if (statistics instanceof LatencyStatistics latency) {
             return serialiseLatency(latency);
@@ -169,17 +175,41 @@ public final class BaselineWriter {
     }
 
     private Map<String, Object> serialisePerCriterionPassRate(
-            PerCriterionPassRateStatistics stats) {
+            PerCriterionPassRateStatistics stats,
+            Map<String, NormativeJudgement> judgementsByCriterionId) {
         Map<String, Object> criteriaBlock = new LinkedHashMap<>();
         for (Map.Entry<String, PassRateStatistics> e : stats.byCriterion().entrySet()) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put(FIELD_OBSERVED_PASS_RATE, e.getValue().observedPassRate());
             entry.put(FIELD_SAMPLE_COUNT, e.getValue().sampleCount());
+            // Additive, documentary marker: the measure run's
+            // judgement of this criterion against its stipulated
+            // threshold. Emitted only for normative criteria; the
+            // reader (and thus every resolver / derivation consumer)
+            // ignores it. Positioned inside the criterion row, before
+            // the appended contentFingerprint, so it falls under the
+            // integrity hash like every other written field.
+            NormativeJudgement judgement = judgementsByCriterionId.get(e.getKey());
+            if (judgement != null) {
+                entry.put(BaselineSchema.FIELD_NORMATIVE_JUDGEMENT,
+                        serialiseNormativeJudgement(judgement));
+            }
             criteriaBlock.put(e.getKey(), entry);
         }
         Map<String, Object> outer = new LinkedHashMap<>();
         outer.put(BaselineSchema.FIELD_CRITERIA, criteriaBlock);
         return outer;
+    }
+
+    private Map<String, Object> serialiseNormativeJudgement(NormativeJudgement judgement) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put(BaselineSchema.FIELD_JUDGEMENT_STATE,
+                judgement.judgement().state().name().toLowerCase(java.util.Locale.ROOT));
+        entry.put(BaselineSchema.FIELD_STIPULATED_THRESHOLD,
+                judgement.judgement().stipulatedThreshold());
+        entry.put(BaselineSchema.FIELD_JUDGEMENT_CONFIDENCE,
+                judgement.judgement().confidence());
+        return entry;
     }
 
     private Map<String, Object> serialiseLatency(LatencyStatistics stats) {

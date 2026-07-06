@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Normative judgement at experiment time.** A measure experiment over
+  a contract that declares normative criteria (`meeting().passRate(...)`)
+  now judges each one against its stipulated threshold using the run's
+  own samples — the Wilson one-sided lower confidence bound at the run's
+  sample count, at the criterion's confidence. The judgement (met /
+  failed / unsupportable-with-feasible-minimum) is rendered in the
+  experiment's console output and recorded per criterion in the baseline
+  file as an additive `normativeJudgement` marker that resolvers and
+  threshold derivation ignore; existing baseline files parse unchanged.
+  Empirical criteria remain unjudged at experiment time. `run()`'s
+  completion semantics are unchanged — it never fails on a failed
+  judgement; the new `assertMeets()` terminal (mutually exclusive with
+  `run()`) performs the same run and persistence, then throws
+  `AssertionFailedError` on a failed judgement and
+  `UnsupportableJudgementException` (a `TestAbortedException` subtype,
+  identifying the cause for listeners and report tooling) on an
+  unsupportable one, with the baseline artefact on disk before any
+  throw.
 - **`PUNIT_BASELINE_DIR` environment variable** for baseline-directory
   resolution (`BaselineResolver.defaultDir()`), checked between the
   existing `punit.baseline.dir` system property and the fixed convention

@@ -6,11 +6,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 
 import org.mavai.punit.api.FactorBundle;
@@ -29,11 +31,17 @@ import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.api.spec.SampleSummary;
 import org.mavai.punit.api.spec.Spec;
 import org.mavai.punit.api.spec.TypedSpec;
+import org.mavai.punit.api.criterion.CriterionPosture;
+import org.mavai.punit.api.spec.MeasuredBaseline;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.internal.engine.baseline.BaselineRecord;
 import org.mavai.punit.internal.engine.baseline.BaselineWriter;
 import org.mavai.punit.internal.engine.baseline.FactorsFingerprint;
 import org.mavai.punit.internal.engine.baseline.LatencyIndicator;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
+import org.mavai.punit.internal.reporting.NormativeJudgementRenderer;
+import org.mavai.punit.statistics.NormativeJudgementEvaluator;
+import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
  * Translates a completed MEASURE {@link Experiment} into a
@@ -69,9 +77,17 @@ public final class BaselineEmitter {
 
     private BaselineEmitter() { }
 
-    public static void emit(Experiment experiment, Path baselineDir) {
+    /**
+     * Emit the baseline artefact to {@code baselineDir} and return the
+     * emission summary the measure terminals consume: artefact
+     * identity, the run's normative judgements, and their console
+     * rendering. The artefact is on disk before this method returns —
+     * the terminals render and, under the gating terminal, assert
+     * strictly after persistence.
+     */
+    public static MeasuredBaseline emit(Experiment experiment, Path baselineDir) {
         Objects.requireNonNull(baselineDir, "baselineDir");
-        emit(experiment, (relativePath, content) -> {
+        BaselineRecord record = emit(experiment, (relativePath, content) -> {
             try {
                 Files.createDirectories(baselineDir);
                 Path target = baselineDir.resolve(relativePath);
@@ -81,6 +97,12 @@ public final class BaselineEmitter {
                         "Failed to write baseline " + relativePath + " under " + baselineDir, e);
             }
         });
+        return new MeasuredBaseline(
+                record.serviceContractId(),
+                record.sampleCount(),
+                record.filename(),
+                record.normativeJudgements(),
+                NormativeJudgementRenderer.render(record));
     }
 
     /**
@@ -88,8 +110,13 @@ public final class BaselineEmitter {
      * scrutinise the YAML without touching disk. The sink receives a
      * single {@code (relativePath, yamlContent)} pair where
      * {@code relativePath} is the canonical baseline filename.
+     *
+     * @return the composed {@link BaselineRecord}, including the run's
+     *         normative judgements — the caller (the measure terminal)
+     *         renders and, under the gating terminal, asserts on them
+     *         strictly after the artefact has been handed to the sink.
      */
-    public static void emit(Experiment experiment, BiConsumer<String, String> sink) {
+    public static BaselineRecord emit(Experiment experiment, BiConsumer<String, String> sink) {
         Objects.requireNonNull(experiment, "experiment");
         Objects.requireNonNull(sink, "sink");
         if (experiment.kind() != Experiment.Kind.MEASURE) {
@@ -121,6 +148,7 @@ public final class BaselineEmitter {
             }
         });
         sink.accept(record.filename(), new BaselineWriter().toYaml(record));
+        return record;
     }
 
     @SuppressWarnings("unchecked")
@@ -191,7 +219,87 @@ public final class BaselineEmitter {
                 stats,
                 profile,
                 latencyIndicator,
-                expiresInDays);
+                expiresInDays,
+                judgeNormativeCriteria(serviceContract, summary));
+    }
+
+    /**
+     * Normative judgement at experiment time: for each normative
+     * criterion the contract declares (the {@code meeting(...)}
+     * pass-rate posture — a stipulated minimum acceptable rate whose
+     * validity does not depend on any baseline), judge the run's own
+     * evidence against the stipulated threshold at the criterion's
+     * confidence. The judgement machinery — Wilson lower bound at the
+     * run's sample count plus the supportability gate — lives in
+     * {@link NormativeJudgementEvaluator}; this method only routes
+     * counts and posture metadata into it.
+     *
+     * <p>Empirical criteria are never judged at experiment time: their
+     * bar does not exist until a baseline supplies it. Zero-failures
+     * and latency postures are likewise out of scope — the judgement
+     * is defined over the stipulated pass-rate form only.
+     */
+    private static <FT, IT, OT> List<NormativeJudgement> judgeNormativeCriteria(
+            ServiceContract<FT, IT, OT> serviceContract, SampleSummary<?> summary) {
+        Map<String, CriterionSampleCounts> countsByCriterionId =
+                countsByCriterionId(summary);
+        List<NormativeJudgement> judgements = new ArrayList<>();
+        for (org.mavai.punit.api.criterion.Criterion<OT> criterion
+                : serviceContract.effectiveCriteria()) {
+            judgeCriterion(criterion, countsByCriterionId)
+                    .ifPresent(judgements::add);
+        }
+        return judgements;
+    }
+
+    private static Map<String, CriterionSampleCounts> countsByCriterionId(
+            SampleSummary<?> summary) {
+        Map<String, CriterionSampleCounts> byCriterionId = new LinkedHashMap<>();
+        for (CriterionSampleCounts counts : summary.criterionSampleCounts()) {
+            byCriterionId.put(counts.criterionId(), counts);
+        }
+        return byCriterionId;
+    }
+
+    /**
+     * Judge one criterion, or return empty when there is nothing to
+     * judge: the criterion is not normative (no stipulated pass-rate
+     * posture), or no per-criterion evidence was recorded for it —
+     * the latter unreachable in practice, since the zero-sample guard
+     * rejects empty runs before composition.
+     */
+    private static <OT> Optional<NormativeJudgement> judgeCriterion(
+            org.mavai.punit.api.criterion.Criterion<OT> criterion,
+            Map<String, CriterionSampleCounts> countsByCriterionId) {
+        CriterionPosture posture = criterion.posture();
+        if (posture.kind() != CriterionPosture.Kind.STATISTICAL_CONTRACTUAL
+                || posture.threshold().isEmpty()) {
+            return Optional.empty();
+        }
+        CriterionSampleCounts counts = countsByCriterionId.get(criterion.id());
+        if (counts == null || counts.total() == 0) {
+            return Optional.empty();
+        }
+        double confidence = posture.confidenceFloor()
+                .orElse(StatisticalDefaults.DEFAULT_CONFIDENCE);
+        NormativeJudgementEvaluator.Judgement judgement =
+                NormativeJudgementEvaluator.judge(
+                        counts.pass(),
+                        counts.total(),
+                        posture.threshold().getAsDouble(),
+                        confidence);
+        return Optional.of(new NormativeJudgement(
+                criterion.id(), judgement, contractRefFor(posture)));
+    }
+
+    private static Optional<String> contractRefFor(CriterionPosture posture) {
+        Optional<String> ref = posture.contractRef();
+        Optional<String> originName = posture.origin().map(Enum::name);
+        if (ref.isPresent() && originName.isPresent()
+                && !"UNSPECIFIED".equals(originName.get())) {
+            return Optional.of(originName.get() + ", " + ref.get());
+        }
+        return ref.isPresent() ? ref : Optional.empty();
     }
 
     /**

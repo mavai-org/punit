@@ -2,11 +2,13 @@ package org.mavai.punit.internal.engine.baseline;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.api.spec.BaselineStatistics;
+import org.mavai.punit.api.spec.NormativeJudgement;
 
 /**
  * In-memory shape of a baseline file. Carries the identity keys the
@@ -43,6 +45,13 @@ import org.mavai.punit.api.spec.BaselineStatistics;
  *        declared {@code .expiresInDays(n)}; the writer emits it and the
  *        derived {@code expiresAt} into the baseline so a paired test can
  *        evaluate staleness.
+ * @param normativeJudgements the measure run's judgement of each
+ *        normative criterion against its stipulated threshold, in
+ *        contract declaration order. Empty when the contract declares
+ *        no normative criteria. Serialised as an additive per-criterion
+ *        marker in the baseline YAML; documentary only — the
+ *        {@link BaselineResolver} and threshold derivation ignore it,
+ *        and {@link BaselineReader} does not reconstitute it on load.
  */
 public record BaselineRecord(
         String serviceContractId,
@@ -54,7 +63,8 @@ public record BaselineRecord(
         Map<String, BaselineStatistics> statisticsByCriterionName,
         CovariateProfile covariateProfile,
         LatencyIndicator latencyIndicator,
-        int expiresInDays) {
+        int expiresInDays,
+        List<NormativeJudgement> normativeJudgements) {
 
     public BaselineRecord {
         Objects.requireNonNull(serviceContractId, "serviceContractId");
@@ -65,6 +75,7 @@ public record BaselineRecord(
         Objects.requireNonNull(statisticsByCriterionName, "statisticsByCriterionName");
         Objects.requireNonNull(covariateProfile, "covariateProfile");
         Objects.requireNonNull(latencyIndicator, "latencyIndicator");
+        Objects.requireNonNull(normativeJudgements, "normativeJudgements");
         if (serviceContractId.isBlank()) {
             throw new IllegalArgumentException("serviceContractId must not be blank");
         }
@@ -88,6 +99,28 @@ public record BaselineRecord(
                             + "criterion entries is not consumable by any empirical criterion");
         }
         statisticsByCriterionName = Map.copyOf(new LinkedHashMap<>(statisticsByCriterionName));
+        normativeJudgements = List.copyOf(normativeJudgements);
+    }
+
+    /**
+     * Convenience constructor matching the pre-normative-judgement
+     * canonical signature; defaults {@link #normativeJudgements()} to
+     * an empty list (no normative criteria judged).
+     */
+    public BaselineRecord(
+            String serviceContractId,
+            String methodName,
+            String factorsFingerprint,
+            String inputsIdentity,
+            int sampleCount,
+            Instant generatedAt,
+            Map<String, BaselineStatistics> statisticsByCriterionName,
+            CovariateProfile covariateProfile,
+            LatencyIndicator latencyIndicator,
+            int expiresInDays) {
+        this(serviceContractId, methodName, factorsFingerprint, inputsIdentity,
+                sampleCount, generatedAt, statisticsByCriterionName,
+                covariateProfile, latencyIndicator, expiresInDays, List.of());
     }
 
     /**
@@ -107,7 +140,7 @@ public record BaselineRecord(
             LatencyIndicator latencyIndicator) {
         this(serviceContractId, methodName, factorsFingerprint, inputsIdentity,
                 sampleCount, generatedAt, statisticsByCriterionName,
-                covariateProfile, latencyIndicator, 0);
+                covariateProfile, latencyIndicator, 0, List.of());
     }
 
     /**

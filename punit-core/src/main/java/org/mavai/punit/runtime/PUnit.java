@@ -36,10 +36,13 @@ import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.FactorsStepper;
 import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.FailureExemplar;
+import org.mavai.punit.api.spec.MeasuredBaseline;
+import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PerCriterionEvaluation;
 import org.mavai.punit.api.spec.ProbabilisticTest;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Scorer;
+import org.mavai.punit.api.spec.UnsupportableJudgementException;
 import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.api.covariate.Covariate;
 import org.mavai.punit.api.covariate.CovariateProfile;
@@ -49,6 +52,7 @@ import org.mavai.punit.internal.engine.covariate.CovariateResolver;
 import org.mavai.punit.internal.engine.criteria.Feasibility;
 import org.mavai.punit.internal.engine.criteria.PassRate;
 import org.mavai.punit.internal.reporting.TransparentStatsRenderer;
+import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 import org.mavai.punit.statistics.transparent.TransparentStatsConfig;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.RunMetadata;
@@ -169,9 +173,21 @@ public final class PUnit {
         return new Engine(provider).run(spec);
     }
 
-    private static void driveAndEmit(Experiment experiment) {
+    /**
+     * Drive a MEASURE experiment, persist its baseline artefact, and
+     * render its normative judgements (when the contract declares
+     * normative criteria). Returns the emission summary so a gating
+     * terminal can assert on the judgements — strictly after the
+     * artefact is on disk.
+     */
+    private static MeasuredBaseline driveAndEmit(Experiment experiment) {
         drive(experiment);
-        BaselineEmitter.emit(experiment, BaselineProviderResolver.resolveDir());
+        MeasuredBaseline emission =
+                BaselineEmitter.emit(experiment, BaselineProviderResolver.resolveDir());
+        if (!emission.judgementRendering().isEmpty()) {
+            System.out.println(emission.judgementRendering());
+        }
+        return emission;
     }
 
     private static void driveAndEmitExplore(Experiment experiment) {
@@ -465,12 +481,169 @@ public final class PUnit {
             return delegate.build();
         }
 
+        /**
+         * The neutral terminal. Runs the measure, persists the
+         * baseline artefact (normative-judgement markers included),
+         * and renders any normative judgements prominently in the
+         * experiment's output — but never fails on a failed
+         * judgement. A measure characterises; whether a stipulation
+         * in force at measure time was cleared is reported, not
+         * enforced. Use {@link #assertMeets()} to make the
+         * stipulations binding.
+         */
         public void run() {
             // Measure runs and emits a baseline file when a baseline directory
             // is configured (system property or project convention). The
             // emission is silent when no directory resolves — the run itself
             // succeeded; the artefact just has nowhere to land.
             driveAndEmit(build());
+        }
+
+        /**
+         * The gating terminal — normative judgement at experiment
+         * time, made binding. Mutually exclusive alternative to
+         * {@link #run()}: same run, same persistence, then asserts.
+         * Mirrors {@link TestBuilder#assertPasses()}'s fused
+         * run-and-assert convention — asserting terminals imply
+         * running.
+         *
+         * <p>Judgement-to-outcome mapping (the same opentest4j
+         * mapping {@code assertPasses()} uses):
+         *
+         * <ul>
+         *   <li>every normative criterion met — returns normally;</li>
+         *   <li>any normative criterion failed — throws
+         *       {@link AssertionFailedError};</li>
+         *   <li>any judgement unsupportable at this sample size —
+         *       throws {@link UnsupportableJudgementException} (a
+         *       {@link TestAbortedException}, so the harness aborts
+         *       rather than fails), stating the feasible minimum
+         *       sample count.</li>
+         * </ul>
+         *
+         * <p>Persistence strictly precedes assertion: the baseline
+         * artefact is on disk before any throw — a failed stipulation
+         * never costs the baseline. A failed judgement states the
+         * run's relation to the stipulation, not a claim about the
+         * service's validity; opting into this terminal is what makes
+         * that relation binding for the host harness.
+         *
+         * @throws IllegalStateException when the contract declares no
+         *         normative criteria — there is nothing to assert;
+         *         use {@link #run()}. Thrown before any sampling.
+         */
+        public void assertMeets() {
+            Experiment experiment = build();
+            requireNormativeCriteria(experiment);
+            MeasuredBaseline emission = driveAndEmit(experiment);
+            translateJudgements(emission);
+        }
+
+        /**
+         * Configuration-defect gate for {@link #assertMeets()}: a
+         * contract with no normative (stipulated pass-rate) criteria
+         * has nothing to assert. Checked before sampling so the
+         * defect surfaces without spending the run's samples.
+         */
+        private static void requireNormativeCriteria(Experiment experiment) {
+            boolean anyNormative = experiment.dispatch(new Spec.Dispatcher<Boolean>() {
+                @Override
+                public <F, I, O> Boolean apply(TypedSpec<F, I, O> typed) {
+                    var configs = typed.configurations();
+                    if (!configs.hasNext()) {
+                        return false;
+                    }
+                    F factors = configs.next().factors();
+                    ServiceContract<F, I, O> serviceContract =
+                            typed.serviceContractFactory().apply(factors);
+                    for (org.mavai.punit.api.criterion.Criterion<O> criterion
+                            : serviceContract.effectiveCriteria()) {
+                        if (criterion.posture().kind()
+                                == org.mavai.punit.api.criterion.CriterionPosture
+                                        .Kind.STATISTICAL_CONTRACTUAL) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            });
+            if (!anyNormative) {
+                throw new IllegalStateException("""
+                        assertMeets() requires at least one normative criterion — \
+                        a stipulated pass rate declared via meeting().passRate(...). \
+                        This contract declares none, so there is nothing to \
+                        assert; use run() to characterise without gating.""");
+            }
+        }
+
+        /**
+         * Translate the run's normative judgements into the host
+         * harness's outcome. Failed dominates unsupportable: when both
+         * are present the run is a failure, and the message carries
+         * the unsupportable criteria as context.
+         */
+        private static void translateJudgements(MeasuredBaseline emission) {
+            List<NormativeJudgement> failed = new ArrayList<>();
+            List<NormativeJudgement> unsupportable = new ArrayList<>();
+            for (NormativeJudgement judgement : emission.normativeJudgements()) {
+                switch (judgement.judgement().state()) {
+                    case FAILED -> failed.add(judgement);
+                    case UNSUPPORTABLE -> unsupportable.add(judgement);
+                    case MET -> { /* nothing to translate */ }
+                }
+            }
+            if (!failed.isEmpty()) {
+                throw new AssertionFailedError(
+                        judgementMessage(emission, failed, unsupportable));
+            }
+            if (!unsupportable.isEmpty()) {
+                throw new UnsupportableJudgementException(
+                        judgementMessage(emission, failed, unsupportable));
+            }
+        }
+
+        private static String judgementMessage(
+                MeasuredBaseline emission,
+                List<NormativeJudgement> failed,
+                List<NormativeJudgement> unsupportable) {
+            StringBuilder sb = new StringBuilder(String.format(
+                    "%s: %d samples",
+                    emission.serviceContractId(), emission.sampleCount()));
+            failed.forEach(judgement -> sb.append(failedLine(judgement)));
+            unsupportable.forEach(judgement ->
+                    sb.append(unsupportableLine(judgement, emission.sampleCount())));
+            sb.append(String.format(
+                    "%n  baseline persisted before this assertion: %s",
+                    emission.filename()));
+            return sb.toString();
+        }
+
+        private static String failedLine(NormativeJudgement judgement) {
+            NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+            return String.format(
+                    "%n  criterion \"%s\" did not clear its stipulated %s%s: "
+                            + "observed %s, lower bound %s at confidence %s",
+                    judgement.criterionId(), j.stipulatedThreshold(),
+                    stipulationSource(judgement),
+                    j.observedRate(), j.lowerBound(), j.confidence());
+        }
+
+        private static String unsupportableLine(
+                NormativeJudgement judgement, int sampleCount) {
+            NormativeJudgementEvaluator.Judgement j = judgement.judgement();
+            return String.format(
+                    "%n  criterion \"%s\" is unsupportable at %d samples: "
+                            + "judging the stipulated %s at confidence %s "
+                            + "requires at least %d samples",
+                    judgement.criterionId(), sampleCount,
+                    j.stipulatedThreshold(), j.confidence(),
+                    j.feasibleMinimumSamples());
+        }
+
+        private static String stipulationSource(NormativeJudgement judgement) {
+            return judgement.stipulationRef()
+                    .map(ref -> " (" + ref + ")")
+                    .orElse("");
         }
     }
 
