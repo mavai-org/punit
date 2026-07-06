@@ -878,6 +878,23 @@ system property or the `PUNIT_BASELINE_DIR` environment variable
 (checked in that order — see Appendix A), or by setting the property
 in the project's `gradle.properties` for a Gradle-driven run.
 
+### Normative judgement at experiment time
+
+When the measured contract declares normative criteria (`meeting().passRate(...)`), the measure experiment judges each one against its stipulated threshold using the run's own samples: the criterion is **met** when the Wilson one-sided lower confidence bound of its observed rate — at the run's sample count, at the criterion's confidence — clears the stipulation, **failed** when it does not, and **unsupportable** when the run's sample count cannot support the stipulated threshold at that confidence even with a perfect observation (the output states the feasible minimum sample count). Empirical criteria are never judged at experiment time — their bar does not exist until a baseline supplies it.
+
+The judgement is rendered in the experiment's console output alongside the measured characterisation, and recorded per criterion in the baseline file as an additive `normativeJudgement` marker (state, stipulated threshold, confidence) inside the criterion's statistics row. Baseline resolution and threshold derivation ignore the marker entirely — it is a durable record for later readers of the file. The judgement states a relation to the stipulation, nothing more: a failed judgement at measure time can be entirely expected — an aspirational bar measured mid-development, a fresh configuration characterised before tuning.
+
+`run()` never fails on a failed judgement. To make the stipulations binding, finish the builder with `assertMeets()` instead of `run()` — the two are mutually exclusive terminals:
+
+```java
+@Experiment
+void measurePaymentGatewayGated() {
+    PUnit.measuring(PaymentGatewayServiceContract.sampling(1000)).assertMeets();
+}
+```
+
+`assertMeets()` performs the same run and the same baseline persistence — the artefact is on disk before any throw — then translates the judgements with the same opentest4j mapping `assertPasses()` uses: a failed judgement throws `AssertionFailedError`, an unsupportable one throws `TestAbortedException` (stating the feasible minimum). Calling it on a contract with no normative criteria is a configuration defect (`IllegalStateException`), detected before any sampling.
+
 ### Asymmetric sampling
 
 The standard pattern measures with high statistical power and tests
