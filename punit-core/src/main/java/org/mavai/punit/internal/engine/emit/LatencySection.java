@@ -33,8 +33,13 @@ public final class LatencySection {
     /** The only currently defined population basis. */
     public static final String BASIS_PASSING_SAMPLES = "passing-samples";
 
-    /** Minimum contributing samples required to emit each percentile. */
-    public static final int MIN_SAMPLES_P50 = 1;
+    /**
+     * Minimum contributing samples required to emit each percentile —
+     * the non-degeneracy gate of Statistical Companion §12.5.2,
+     * conformance-locked to the mavai-R
+     * {@code latency_percentile_minimums} fixture.
+     */
+    public static final int MIN_SAMPLES_P50 = 5;
     public static final int MIN_SAMPLES_P90 = 10;
     public static final int MIN_SAMPLES_P95 = 20;
     public static final int MIN_SAMPLES_P99 = 100;
@@ -127,7 +132,7 @@ public final class LatencySection {
         block.put("contributingSamples", contributingSamples);
         block.put("totalSamples", totalSamples);
         // Omit each percentile key when contributingSamples is below
-        // that percentile's minimum (1 / 10 / 20 / 100 for p50 / p90 /
+        // that percentile's minimum (5 / 10 / 20 / 100 for p50 / p90 /
         // p95 / p99). The artefact carries only the percentiles that
         // can be estimated reliably.
         if (isPercentileEmittable("p50", contributingSamples)) {

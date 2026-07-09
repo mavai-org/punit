@@ -145,7 +145,7 @@ public final class BaselineWriter {
         // indicator. Emitted top-level (not under statistics). The
         // block is omitted entirely when zero samples passed;
         // individual percentiles within it are omitted per the
-        // minimum-samples rule (1 / 10 / 20 / 100 for p50 / p90 /
+        // minimum-samples rule (5 / 10 / 20 / 100 for p50 / p90 /
         // p95 / p99).
         LatencyIndicator latency = record.latencyIndicator();
         if (latency.hasData()) {

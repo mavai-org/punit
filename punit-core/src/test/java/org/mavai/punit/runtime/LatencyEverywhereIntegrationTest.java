@@ -72,7 +72,7 @@ class LatencyEverywhereIntegrationTest {
                 .<F, String, Integer>builder()
                 .serviceContractFactory(f -> new EvenLengthServiceContract())
                 .inputs(MIXED_INPUTS)
-                .samples(6)
+                .samples(12)
                 .build();
         Experiment experiment = Experiment.exploring(sampling)
                 .grid(List.of(new F("only")))
@@ -90,18 +90,18 @@ class LatencyEverywhereIntegrationTest {
                 .as("EXPLORE row must carry latency block when at least one sample passed")
                 .isNotNull();
         assertThat(latency).containsEntry("basis", "passing-samples");
-        assertThat(latency).containsEntry("totalSamples", 6);
-        // 4 of 6 inputs are even-length → expect ~4 contributing samples.
+        assertThat(latency).containsEntry("totalSamples", 12);
+        // 4 of 6 inputs are even-length, cycled twice → 8 contributing.
         assertThat((Integer) latency.get("contributingSamples"))
                 .as("contributingSamples must be ≤ totalSamples and > 0")
                 .isPositive()
-                .isLessThanOrEqualTo(6);
-        // Minimum-samples rule: with ≤ 6 contributing samples,
-        // only p50Ms (needs ≥ 1) is emittable. p90 / p95 / p99 keys
-        // are correctly absent — explore is the canonical
-        // small-sample case the rule protects.
+                .isLessThanOrEqualTo(12);
+        // Minimum-samples rule: with 8 contributing samples, only
+        // p50Ms (needs ≥ 5) is emittable. p90 / p95 / p99 keys are
+        // correctly absent — explore is the canonical small-sample
+        // case the rule protects.
         assertThat(latency).containsKey("p50Ms");
-        assertThat(latency).doesNotContainKeys("p95Ms", "p99Ms");
+        assertThat(latency).doesNotContainKeys("p90Ms", "p95Ms", "p99Ms");
     }
 
     @Test
@@ -152,7 +152,7 @@ class LatencyEverywhereIntegrationTest {
                 .<F, String, Integer>builder()
                 .serviceContractFactory(f -> new EvenLengthServiceContract())
                 .inputs(MIXED_INPUTS)
-                .samples(6)
+                .samples(12)
                 .build();
         Experiment experiment = Experiment.measuring(sampling, new F("only")).build();
         new Engine().run(experiment);
@@ -170,9 +170,9 @@ class LatencyEverywhereIntegrationTest {
         assertThat(latency).containsEntry("basis", "passing-samples");
         assertThat(latency).containsKey("contributingSamples");
         assertThat(latency).containsKey("totalSamples");
-        // 6 samples, ≤ 6 contributing → only p50Ms emits.
+        // 12 samples, 8 contributing → only p50Ms (needs ≥ 5) emits.
         assertThat(latency).containsKey("p50Ms");
-        assertThat(latency).doesNotContainKeys("p95Ms", "p99Ms");
+        assertThat(latency).doesNotContainKeys("p90Ms", "p95Ms", "p99Ms");
     }
 
     @Test
