@@ -65,10 +65,27 @@ class LatencySectionTest {
                 18);
 
         Map<String, Object> block = LatencySection.blockFor(passing, 18, 20).orElseThrow();
-        // p50 needs ≥ 1, p90 needs ≥ 10 — both met at 18.
+        // p50 needs ≥ 5, p90 needs ≥ 10 — both met at 18.
         assertThat(block).containsKeys("p50Ms", "p90Ms");
         // p95 needs ≥ 20, p99 needs ≥ 100 — both unmet at 18.
         assertThat(block).doesNotContainKeys("p95Ms", "p99Ms");
+    }
+
+    @Test
+    @DisplayName("minimum-sample rule: 4 passing → no percentile keys at all")
+    void omitsMedianBelowNonDegeneracyMinimum() {
+        LatencyResult passing = new LatencyResult(
+                Duration.ofMillis(42),
+                Duration.ofMillis(78),
+                Duration.ofMillis(95),
+                Duration.ofMillis(150),
+                4);
+
+        Map<String, Object> block = LatencySection.blockFor(passing, 4, 10).orElseThrow();
+        // The indicator triple is still present — the block itself emits.
+        assertThat(block).containsEntry("contributingSamples", 4);
+        // p50 needs ≥ 5: below the non-degeneracy minimum nothing is emitted.
+        assertThat(block).doesNotContainKeys("p50Ms", "p90Ms", "p95Ms", "p99Ms");
     }
 
     @Test
@@ -89,9 +106,10 @@ class LatencySectionTest {
     }
 
     @Test
-    @DisplayName("isPercentileEmittable encodes the thresholds (1 / 10 / 20 / 100)")
+    @DisplayName("isPercentileEmittable encodes the thresholds (5 / 10 / 20 / 100)")
     void thresholdRule() {
-        assertThat(LatencySection.isPercentileEmittable("p50", 1)).isTrue();
+        assertThat(LatencySection.isPercentileEmittable("p50", 4)).isFalse();
+        assertThat(LatencySection.isPercentileEmittable("p50", 5)).isTrue();
         assertThat(LatencySection.isPercentileEmittable("p90", 9)).isFalse();
         assertThat(LatencySection.isPercentileEmittable("p90", 10)).isTrue();
         assertThat(LatencySection.isPercentileEmittable("p95", 19)).isFalse();

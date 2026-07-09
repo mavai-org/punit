@@ -200,11 +200,15 @@ class ReportGeneratorTest {
         @DisplayName("marks equally-reliable variants within the latency margin as too close to call")
         void nearTieMarksAdjacentVariants() throws IOException {
             Path service = tempDir.resolve("explorations").resolve("svc");
-            // Both all-pass; p50 1010 vs 1040 -> ~2.9% apart, within the 5% margin.
+            // Both all-pass; p50 1010 vs 1040 -> ~2.9% apart, within the 5%
+            // margin. Five passing samples each: a median needs >= 5
+            // contributing samples to be reported at all.
             writeVariant(service, "a.yaml",
-                    allPassVariant("svc", "model-a", new long[]{1000, 1010, 1020}, 1010));
+                    allPassVariant("svc", "model-a",
+                            new long[]{1000, 1005, 1010, 1015, 1020}, 1010));
             writeVariant(service, "b.yaml",
-                    allPassVariant("svc", "model-b", new long[]{1030, 1040, 1050}, 1040));
+                    allPassVariant("svc", "model-b",
+                            new long[]{1030, 1035, 1040, 1045, 1050}, 1040));
 
             String html = generate(tempDir.resolve("explorations"));
 
@@ -221,9 +225,11 @@ class ReportGeneratorTest {
             Path service = tempDir.resolve("explorations").resolve("svc");
             // p50 1010 vs 1510 -> ~33% apart, well beyond 5%.
             writeVariant(service, "a.yaml",
-                    allPassVariant("svc", "model-a", new long[]{1000, 1010, 1020}, 1010));
+                    allPassVariant("svc", "model-a",
+                            new long[]{1000, 1005, 1010, 1015, 1020}, 1010));
             writeVariant(service, "c.yaml",
-                    allPassVariant("svc", "model-c", new long[]{1500, 1510, 1520}, 1510));
+                    allPassVariant("svc", "model-c",
+                            new long[]{1500, 1505, 1510, 1515, 1520}, 1510));
 
             String html = generate(tempDir.resolve("explorations"));
 
@@ -236,9 +242,11 @@ class ReportGeneratorTest {
             Path service = tempDir.resolve("explorations").resolve("svc");
             // Close medians, but different pass rates: not a near-tie (no proportion test).
             writeVariant(service, "a.yaml",
-                    allPassVariant("svc", "model-a", new long[]{1000, 1010, 1020}, 1010));
+                    allPassVariant("svc", "model-a",
+                            new long[]{1000, 1005, 1010, 1015, 1020}, 1010));
             writeVariant(service, "d.yaml", variant("svc", factors("model-d"),
-                    0.667, 2, 1, "COMPLETED", new long[]{1005, 1015, 1025}, 1015));
+                    0.833, 5, 1, "COMPLETED",
+                    new long[]{1005, 1010, 1015, 1020, 1025}, 1015));
 
             String html = generate(tempDir.resolve("explorations"));
 
