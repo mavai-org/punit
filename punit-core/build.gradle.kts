@@ -69,15 +69,15 @@ dependencies {
     api("org.mavai:outcome:1.0.0-alpha1")
 
     // Logging
-    implementation("org.apache.logging.log4j:log4j-api:2.26.0")
-    runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.0")
-    runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
+    implementation("org.apache.logging.log4j:log4j-api:2.26.1")
+    runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.1")
+    runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
-    testImplementation("org.apache.logging.log4j:log4j-core:2.26.0")
-    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
+    testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
+    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;
     // emission tests assert on the XML output reaching disk.
     testImplementation(project(":punit-report"))

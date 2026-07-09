@@ -77,17 +77,17 @@ subprojects {
     // Resolved locally via composite build (settings.gradle.kts), or from Maven Central on CI
     api("org.mavai:outcome:1.0.0-alpha1")
 
-    implementation("org.apache.logging.log4j:log4j-api:2.26.0")
-    runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.0")
+    implementation("org.apache.logging.log4j:log4j-api:2.26.1")
+    runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.1")
     // Bridge SLF4J to Log4j2 (some dependencies use SLF4J)
-    runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
+    runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
 
     // Test dependencies
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.platform:junit-platform-testkit")
     testImplementation("org.assertj:assertj-core:3.27.7")
-    testImplementation("org.apache.logging.log4j:log4j-core:2.26.0")
-    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
+    testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
+    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.4.2")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
