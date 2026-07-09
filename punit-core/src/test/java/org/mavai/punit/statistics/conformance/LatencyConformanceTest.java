@@ -18,6 +18,7 @@ import org.mavai.punit.api.spec.PercentileLatency;
 import org.mavai.punit.api.spec.SampleSummary;
 import org.mavai.punit.api.spec.TerminationReason;
 import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.statistics.LatencyStatistics;
 import org.mavai.punit.statistics.LatencyThresholdDeriver;
 import org.junit.jupiter.api.DisplayName;
@@ -452,6 +453,74 @@ class LatencyConformanceTest {
                 out[i] = node.get(i).asLong();
             }
             return out;
+        }
+    }
+
+    @Nested
+    @DisplayName("latency_percentile_minimums — per-percentile minimum sample sizes")
+    class PercentileMinimums {
+
+        @TestFactory
+        @DisplayName("Emission non-degeneracy minimums match the published standard")
+        Collection<DynamicTest> emissionMinimums() {
+            JsonNode suite = loadSuite("latency_percentile_minimums.json");
+
+            var tests = new ArrayList<DynamicTest>();
+            for (JsonNode c : suite.get("cases")) {
+                if (!"emission_non_degeneracy".equals(c.get("approach").asText())) {
+                    continue;
+                }
+                String name = c.get("name").asText();
+                double p = c.get("inputs").get("percentile").asDouble();
+                int expected = c.get("expected").get("minimum_contributing_samples").asInt();
+
+                tests.add(DynamicTest.dynamicTest(name, () -> {
+                    String label = "p" + Math.round(p * 100);
+                    assertThat(LatencySection.minimumSamplesFor(label))
+                            .as("emission minimum for %s", label)
+                            .isEqualTo(expected);
+                }));
+            }
+            assertThat(tests).as("emission cases in the suite").hasSize(4);
+            return tests;
+        }
+
+        @TestFactory
+        @DisplayName("Bound-existence minimums mark the deriver's saturation boundary")
+        Collection<DynamicTest> boundExistenceMinimums() {
+            JsonNode suite = loadSuite("latency_percentile_minimums.json");
+
+            var tests = new ArrayList<DynamicTest>();
+            for (JsonNode c : suite.get("cases")) {
+                if (!"bound_existence".equals(c.get("approach").asText())) {
+                    continue;
+                }
+                String name = c.get("name").asText();
+                double p = c.get("inputs").get("percentile").asDouble();
+                double confidence = c.get("inputs").get("confidence").asDouble();
+                int minimum = c.get("expected").get("minimum_baseline_samples").asInt();
+
+                tests.add(DynamicTest.dynamicTest(name, () -> {
+                    assertThat(LatencyThresholdDeriver.derive(ascending(minimum), p, confidence)
+                            .saturated())
+                            .as("non-saturated bound at the published minimum n=%d", minimum)
+                            .isFalse();
+                    assertThat(LatencyThresholdDeriver.derive(ascending(minimum - 1), p, confidence)
+                            .saturated())
+                            .as("saturation just below the published minimum, n=%d", minimum - 1)
+                            .isTrue();
+                }));
+            }
+            assertThat(tests).as("bound-existence cases in the suite").hasSize(8);
+            return tests;
+        }
+
+        private double[] ascending(int n) {
+            double[] values = new double[n];
+            for (int i = 0; i < n; i++) {
+                values[i] = i + 1;
+            }
+            return values;
         }
     }
 
