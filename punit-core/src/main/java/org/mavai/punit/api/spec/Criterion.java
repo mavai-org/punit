@@ -105,4 +105,20 @@ public interface Criterion<OT, S extends BaselineStatistics> {
     default OptionalDouble earlyTerminationPassRate() {
         return OptionalDouble.empty();
     }
+
+    /**
+     * The confidence of the declared-threshold comparison backing
+     * {@link #earlyTerminationPassRate()}, if any. The engine's
+     * guaranteed-success short-circuit derives its required success
+     * count from the same statistical rule the criterion will apply at
+     * evaluate time — the Wilson lower bound at this confidence
+     * clearing the threshold — so a short-circuited run can never lock
+     * in a verdict the full run would have refused.
+     *
+     * @return the comparison confidence in (0, 1), or empty when the
+     *         criterion exposes no up-front threshold
+     */
+    default OptionalDouble earlyTerminationConfidence() {
+        return OptionalDouble.empty();
+    }
 }

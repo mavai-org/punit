@@ -83,8 +83,8 @@ Regardless of which paradigm you use, you must decide **how to parameterize** yo
 
 > **Where the threshold comes from, and how the comparison is decided.** The pass-rate criterion has two modes, declared via `Criteria.meeting()` or `Criteria.empirical()` on the service contract's `criteria()`:
 >
-> - **Empirical** (`empirical().passRate()`) — the threshold is the observed pass rate read at runtime from the matched baseline spec (produced by a prior MEASURE experiment). The verdict applies a one-sided **Wilson score lower bound** to the run's observed rate at the configured confidence (default 0.95) and passes iff that lower bound clears the baseline rate. Approaches 1 and 2 below use this mode.
-> - **Contractual** (`meeting().passRate(threshold).contractRef(origin, ref)`) — the threshold is an externally-fixed number declared in code (an SLA, SLO, or policy figure). The verdict is a **deterministic** `observed >= threshold` comparison. No Wilson margin: an SLA is an external commitment to a specific number, not a statistical claim against a baseline. Approach 3 uses this mode.
+> - **Empirical** (`empirical().passRate()`) — the threshold is derived at runtime from the matched baseline spec (produced by a prior MEASURE experiment): the one-sided **Wilson score lower bound** of the baseline rate at the test's sample size and configured confidence (default 0.95). The binding decision is discrete — the derivation's **integer cutoff** `c = ⌈n·p*⌉` — and the run passes iff the raw observed success count `K ≥ c`. Approaches 1 and 2 below use this mode.
+> - **Contractual** (`meeting().passRate(threshold).contractRef(origin, ref)`) — the threshold is an externally-fixed number declared in code (an SLA, SLO, or policy figure). The verdict compares the **run's own Wilson lower bound** (at the default confidence) against the declared threshold: the commitment is met when the sample provides confidence-grade evidence for it, not when the point estimate happens to graze it. Approach 3 uses this mode.
 >
 > What the three approaches differ in is which knob the author fixes first.
 
@@ -159,14 +159,14 @@ void thresholdFirst() {
 
 **What happens:**
 - The threshold and its provenance (`SLA`, `SLO`, or `POLICY`) are declared in code; no baseline is involved.
-- PUnit runs the chosen samples and applies a **deterministic** `observed >= threshold` comparison — no Wilson margin.
+- PUnit runs the chosen samples and passes iff the **run's own Wilson lower bound** clears the declared threshold — the sample must provide confidence-grade evidence for the commitment.
 - The threshold's provenance and the optional `contractRef` are recorded on the verdict for audit traceability.
 
-**Trade-off:** No statistical buffer. With a small N relative to a strict threshold, declare `.intent(TestIntent.SMOKE)` to mark the run as a sentinel rather than a verification claim; otherwise PUnit's pre-flight feasibility gate may reject the configuration as undersized for verification.
+**Trade-off:** Evidence costs samples. The Wilson comparison means a strict threshold needs a sample size that can actually support it (even a perfect run of 30 samples only evidences ≈ 0.917); with a small N relative to a strict threshold, declare `.intent(TestIntent.SMOKE)` to mark the run as a sentinel rather than a verification claim; otherwise PUnit's pre-flight feasibility gate rejects the configuration as undersized for verification.
 
 **Best for:** SLA-style verification of services with externally-committed reliability targets.
 
-> **Antipattern: pinning a contractual threshold to a baseline's observed rate.** Reading a baseline file by eye and pasting its observed rate into `meeting().passRate(0.935).contractRef(EMPIRICAL, ...)` looks like the empirical-pair pattern but isn't. The contractual path is deterministic — `observed >= 0.935` — and natural sampling variance puts the next run's observed rate below 0.935 roughly half the time even when the SUT is performing exactly at baseline. Result: ~50% false-fail rate. The proper baseline-comparison path is `empirical().passRate()`, which resolves the baseline at runtime, applies the Wilson lower bound at the configured confidence, and gives the test the statistical buffer that the hardcoded contractual approach is missing.
+> **Antipattern: pinning a contractual threshold to a baseline's observed rate.** Reading a baseline file by eye and pasting its observed rate into `meeting().passRate(0.935).contractRef(EMPIRICAL, ...)` looks like the empirical-pair pattern but isn't. The contractual path demands confidence-grade evidence *for that number*: the run's Wilson lower bound must clear 0.935, which a service performing exactly at the 0.935 baseline essentially never provides at test-scale sample counts. Result: near-permanent false-fail. The proper baseline-comparison path is `empirical().passRate()`, which resolves the baseline at runtime, derives the sample-size-aware threshold and integer cutoff from it, and gives the test the statistical margin that the hardcoded contractual approach is missing.
 
 ### Choosing Your Approach
 

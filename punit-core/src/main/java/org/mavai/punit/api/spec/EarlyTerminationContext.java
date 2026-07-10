@@ -19,10 +19,17 @@ package org.mavai.punit.api.spec;
  *                              until the normal approximation is meaningful.
  *                              Zero disables the floor (failure-inevitable
  *                              termination never needs it).
+ * @param confidence            the confidence of the criterion's declared-
+ *                              threshold Wilson comparison (companion
+ *                              §3.2/§3.6). The engine derives the guaranteed-
+ *                              success count from it: a success count is only
+ *                              "locked in" when its Wilson lower bound at this
+ *                              confidence already clears {@code minPassRate}.
  */
 public record EarlyTerminationContext(
         double minPassRate,
-        int minSamplesForValidity) {
+        int minSamplesForValidity,
+        double confidence) {
 
     public EarlyTerminationContext {
         if (Double.isNaN(minPassRate) || minPassRate < 0.0 || minPassRate > 1.0) {
@@ -32,6 +39,10 @@ public record EarlyTerminationContext(
         if (minSamplesForValidity < 0) {
             throw new IllegalArgumentException(
                     "minSamplesForValidity must be non-negative, got: " + minSamplesForValidity);
+        }
+        if (Double.isNaN(confidence) || confidence <= 0.0 || confidence >= 1.0) {
+            throw new IllegalArgumentException(
+                    "confidence must be in (0, 1), got: " + confidence);
         }
     }
 }

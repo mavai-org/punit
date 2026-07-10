@@ -246,8 +246,9 @@ public final class CriterionPosture {
      * Returns a copy of this posture with the given confidence floor.
      * Rejects composition with zero-failures (explicit or implicit)
      * — the statistical math is undefined at the threshold boundary.
-     * Rejects composition with {@code .meeting(...)} — threshold-first
-     * is deterministic and accepts no rigour adjuncts.
+     * Rejects composition with {@code .meeting(...)} — a declared
+     * threshold is judged at the framework's default confidence and
+     * accepts no per-criterion rigour adjuncts.
      */
     public CriterionPosture withConfidenceFloor(double confidence) {
         rejectRigourAdjunct("atConfidence");
@@ -360,8 +361,9 @@ public final class CriterionPosture {
                             + "statistical math is undefined at the threshold boundary");
             case STATISTICAL_CONTRACTUAL -> throw new IllegalStateException(
                     "." + methodName + "(...) cannot compose with .meeting(...) — "
-                            + "threshold-first is deterministic and accepts no rigour adjuncts; "
-                            + "switch to .empirical() if you want a statistical comparison");
+                            + "a declared threshold is judged at the framework's default "
+                            + "confidence and accepts no per-criterion rigour adjuncts; "
+                            + "switch to .empirical() if you want a baseline-derived comparison");
             case LATENCY_CONTRACTUAL -> throw new IllegalStateException(
                     "." + methodName + "(...) does not apply to contractual latency — "
                             + "the ceiling is the threshold; nothing to estimate");

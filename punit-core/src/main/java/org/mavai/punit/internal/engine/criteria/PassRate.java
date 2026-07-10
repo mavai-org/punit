@@ -45,17 +45,20 @@ import org.mavai.punit.statistics.ThresholdDeriver;
  * <p>The empirical paths derive a threshold by applying the one-sided
  * Wilson lower bound at the test sample size to the baseline rate
  * (with a perfect-baseline two-step refinement when {@code k = n};
- * statistical companion §3.4 / §4.3.2), and PASS iff the observed
- * pass rate respects that derived threshold (§5.1). The underlying
- * statistical machinery is {@link BinomialProportionEstimator}; this
- * criterion holds no statistical code of its own — that's the punit
- * design rule (statistics live only in
- * {@code org.mavai.punit.statistics}). See {@code CLAUDE.md}
- * §"Statistics isolation rule".
+ * statistical companion §3.4 / §4.3.2), and PASS iff the raw observed
+ * success count meets the derivation's integer cutoff
+ * {@code c = ⌈n_test · p*⌉} — the companion's binding decision
+ * artefact. The underlying statistical machinery is
+ * {@link BinomialProportionEstimator}; this criterion holds no
+ * statistical code of its own — that's the punit design rule
+ * (statistics live only in {@code org.mavai.punit.statistics}). See
+ * {@code CLAUDE.md} §"Statistics isolation rule".
  *
- * <p>The contractual path keeps a deterministic
- * {@code observed >= threshold} check: an SLA-style threshold is an
- * external commitment, not a statistical claim against a baseline.
+ * <p>The contractual (declared-threshold) path judges the test
+ * sample's own one-sided Wilson lower bound against the declared
+ * threshold (companion §3.2/§3.6): a declared commitment is met when
+ * the sample provides confidence-grade evidence for it, not when the
+ * point estimate happens to graze it.
  *
  * <p>Lives in {@code punit-core} rather than {@code api package} because
  * the empirical path needs {@code BinomialProportionEstimator} and
@@ -69,6 +72,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     private static final String NAME = "bernoulli-pass-rate";
     private static final double DEFAULT_CONFIDENCE = 0.95;
     private static final ThresholdDeriver DERIVER = new ThresholdDeriver();
+    private static final BinomialProportionEstimator ESTIMATOR = new BinomialProportionEstimator();
 
     private enum Mode { CONTRACTUAL, EMPIRICAL_DEFAULT, EMPIRICAL_PINNED, ZERO_FAILURES }
 
@@ -263,6 +267,13 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     }
 
     @Override
+    public OptionalDouble earlyTerminationConfidence() {
+        return mode == Mode.CONTRACTUAL
+                ? OptionalDouble.of(confidence)
+                : OptionalDouble.empty();
+    }
+
+    @Override
     public Map<String, Object> empiricalDetail() {
         if (mode == Mode.CONTRACTUAL || mode == Mode.ZERO_FAILURES) {
             return Map.of();
@@ -345,6 +356,17 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         Map<String, Double> thresholdsByCriterion = new LinkedHashMap<>();
         Map<String, Double> observedByCriterion = new LinkedHashMap<>();
         Map<String, PassRateStatistics> resolvedBaselineByCriterion = new LinkedHashMap<>();
+        // The judged three-valued verdict per methodology criterion —
+        // published on the result detail so downstream aggregation
+        // (PerCriterionVerdicts) reuses the criterion's own judgement
+        // instead of re-deriving one from observed vs threshold.
+        Map<String, String> verdictsByCriterion = new LinkedHashMap<>();
+        // Declared-threshold path: the test sample's Wilson lower bound
+        // per criterion (companion §3.2/§3.6 decision artefact).
+        Map<String, Double> wilsonLowerByCriterion = new LinkedHashMap<>();
+        // Empirical path: the derivation carrying the integer cutoff and
+        // achieved size (companion §3.4 decision artefacts).
+        Map<String, DerivedThreshold> decisionByCriterion = new LinkedHashMap<>();
         List<String> perCriterionExplanations = new ArrayList<>();
         ThresholdOrigin resolvedOrigin = isEmpirical()
                 ? ThresholdOrigin.EMPIRICAL
@@ -395,13 +417,25 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                 double pThreshold = posture.threshold().getAsDouble();
                 ThresholdOrigin pOrigin = posture.origin().orElseThrow();
                 thresholdsByCriterion.put(counts.criterionId(), pThreshold);
-                Verdict pv = criterionTotal == 0
-                        ? Verdict.INCONCLUSIVE
-                        : (observed >= pThreshold ? Verdict.PASS : Verdict.FAIL);
+                Verdict pv;
+                if (criterionTotal == 0) {
+                    pv = Verdict.INCONCLUSIVE;
+                } else {
+                    // Declared threshold (companion §3.2/§3.6): the test
+                    // sample's own Wilson lower bound must clear it.
+                    double wilsonLower = ESTIMATOR.lowerBound(
+                            counts.pass(), criterionTotal, confidence);
+                    wilsonLowerByCriterion.put(counts.criterionId(), wilsonLower);
+                    pv = wilsonLower >= pThreshold ? Verdict.PASS : Verdict.FAIL;
+                }
                 perCriterionVerdicts.add(pv);
+                verdictsByCriterion.put(counts.criterionId(), pv.name());
                 perCriterionExplanations.add(String.format(
-                        "%s: observed=%.4f vs threshold=%.4f (origin=%s) over %d samples → %s",
-                        counts.criterionId(), observed, pThreshold, pOrigin, criterionTotal, pv));
+                        "%s: observed=%.4f, Wilson-%.0f%% lower=%.4f vs threshold=%.4f "
+                                + "(origin=%s) over %d samples → %s",
+                        counts.criterionId(), observed, confidence * 100.0,
+                        wilsonLowerByCriterion.getOrDefault(counts.criterionId(), Double.NaN),
+                        pThreshold, pOrigin, criterionTotal, pv));
                 continue;
             }
             // zero-failures fires when the contract committed explicitly
@@ -427,6 +461,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                     pv = Verdict.FAIL;
                 }
                 perCriterionVerdicts.add(pv);
+                verdictsByCriterion.put(counts.criterionId(), pv.name());
                 perCriterionExplanations.add(String.format(
                         "%s: zero-failures (origin=%s); failures=%d "
                                 + "(of which transform/no-value=%d) over %d samples → %s",
@@ -439,6 +474,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             double criterionThreshold;
             Double baselineRate = null;
             Integer baselineSampleCount = null;
+            DerivedThreshold derived = null;
             if (mode == Mode.CONTRACTUAL) {
                 criterionThreshold = threshold;
             } else {
@@ -460,6 +496,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                         return EmpiricalChecks.noBaseline(NAME, empiricalDetail());
                     }
                     perCriterionVerdicts.add(Verdict.INCONCLUSIVE);
+                    verdictsByCriterion.put(counts.criterionId(), Verdict.INCONCLUSIVE.name());
                     perCriterionExplanations.add(String.format(
                             "%s: INCONCLUSIVE (no baseline entry for this criterion)",
                             counts.criterionId()));
@@ -475,6 +512,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                         return sizeViolation.get();
                     }
                     perCriterionVerdicts.add(sizeViolation.get().verdict());
+                    verdictsByCriterion.put(
+                            counts.criterionId(), sizeViolation.get().verdict().name());
                     perCriterionExplanations.add(
                             counts.criterionId() + ": " + sizeViolation.get().explanation());
                     thresholdsByCriterion.put(counts.criterionId(), Double.NaN);
@@ -483,8 +522,9 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                 resolvedBaselineByCriterion.put(counts.criterionId(), criterionBaseline);
                 int baselineSuccesses = (int) Math.round(
                         criterionBaseline.observedPassRate() * criterionBaseline.sampleCount());
-                DerivedThreshold derived = DERIVER.deriveSampleSizeFirst(
+                derived = DERIVER.deriveSampleSizeFirst(
                         criterionBaseline.sampleCount(), baselineSuccesses, criterionTotal, confidence);
+                decisionByCriterion.put(counts.criterionId(), derived);
                 criterionThreshold = derived.value();
                 baselineRate = criterionBaseline.observedPassRate();
                 baselineSampleCount = criterionBaseline.sampleCount();
@@ -494,19 +534,36 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             Verdict v;
             if (criterionTotal == 0) {
                 v = Verdict.INCONCLUSIVE;
+            } else if (mode == Mode.CONTRACTUAL) {
+                // Declared threshold (companion §3.2/§3.6): the test
+                // sample's own Wilson lower bound must clear it.
+                double wilsonLower = ESTIMATOR.lowerBound(
+                        counts.pass(), criterionTotal, confidence);
+                wilsonLowerByCriterion.put(counts.criterionId(), wilsonLower);
+                v = wilsonLower >= criterionThreshold ? Verdict.PASS : Verdict.FAIL;
             } else {
-                v = observed >= criterionThreshold ? Verdict.PASS : Verdict.FAIL;
+                // Baseline-derived threshold (companion §3.4): the binding
+                // decision artefact is the derivation's integer cutoff —
+                // PASS iff the raw observed success count K meets it.
+                v = counts.pass() >= derived.cutoff().orElseThrow()
+                        ? Verdict.PASS : Verdict.FAIL;
             }
             perCriterionVerdicts.add(v);
+            verdictsByCriterion.put(counts.criterionId(), v.name());
             if (mode == Mode.CONTRACTUAL) {
                 perCriterionExplanations.add(String.format(
-                        "%s: observed=%.4f vs threshold=%.4f over %d samples → %s",
-                        counts.criterionId(), observed, criterionThreshold, criterionTotal, v));
+                        "%s: observed=%.4f, Wilson-%.0f%% lower=%.4f vs threshold=%.4f "
+                                + "over %d samples → %s",
+                        counts.criterionId(), observed, confidence * 100.0,
+                        wilsonLowerByCriterion.getOrDefault(counts.criterionId(), Double.NaN),
+                        criterionThreshold, criterionTotal, v));
             } else {
                 perCriterionExplanations.add(String.format(
-                        "%s: observed=%.4f vs threshold=%.4f "
-                                + "(Wilson-%.0f%% lower of baseline rate %.4f at n=%d) → %s",
-                        counts.criterionId(), observed, criterionThreshold,
+                        "%s: successes=%d vs cutoff=%d (threshold=%.4f, "
+                                + "Wilson-%.0f%% lower of baseline rate %.4f at n=%d) → %s",
+                        counts.criterionId(), counts.pass(),
+                        derived == null ? -1 : derived.cutoff().orElse(-1),
+                        criterionThreshold,
                         confidence * 100.0, baselineRate, criterionTotal, v));
             }
         }
@@ -536,6 +593,23 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                 detail.put("confidence", confidence);
                 detail.put("baselineSampleCount", b == null ? null : b.sampleCount());
                 detail.put("baselineRate", b == null ? null : b.observedPassRate());
+                DerivedThreshold decision = decisionByCriterion.get(only.criterionId());
+                if (decision != null) {
+                    // Companion §3.4 report obligations: the integer cutoff
+                    // is the decision artefact; the displayed rate (c/n) and
+                    // achieved size accompany it.
+                    decision.cutoff().ifPresent(c -> detail.put("cutoff", c));
+                    decision.displayedRate().ifPresent(r -> detail.put("displayedRate", r));
+                    decision.achievedSize().ifPresent(a -> detail.put("achievedSize", a));
+                }
+            } else {
+                Double wilsonLower = wilsonLowerByCriterion.get(only.criterionId());
+                if (wilsonLower != null) {
+                    // Companion §3.2/§3.6: the declared-threshold decision
+                    // artefact is the test sample's Wilson lower bound.
+                    detail.put("wilsonLower", wilsonLower);
+                    detail.put("confidence", confidence);
+                }
             }
             CriterionPosture onlyPosture = ctx.criterionPostures().getOrDefault(
                     only.criterionId(), CriterionPosture.implicit());
@@ -550,7 +624,14 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             }
             detail.put("thresholdsByCriterion", Map.copyOf(thresholdsByCriterion));
             detail.put("observedByCriterion", Map.copyOf(observedByCriterion));
+            if (!wilsonLowerByCriterion.isEmpty()) {
+                detail.put("wilsonLowerByCriterion", Map.copyOf(wilsonLowerByCriterion));
+            }
         }
+        // The criterion's own judged verdicts — consumed by the spec
+        // layer's per-criterion aggregation so the decision rule is
+        // applied exactly once, here.
+        detail.put("verdictsByCriterion", Map.copyOf(verdictsByCriterion));
 
         String explanation;
         if (methodologyCriteria.size() == 1) {

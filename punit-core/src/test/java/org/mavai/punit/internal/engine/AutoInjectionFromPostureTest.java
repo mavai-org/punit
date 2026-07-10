@@ -40,7 +40,11 @@ class AutoInjectionFromPostureTest {
                 return Outcome.ok(true);
             }
             @Override public Criteria<Boolean> criteria() {
-                return meeting().passRate(0.95);
+                // 0.8 is clearable at n=20: the declared-threshold rule
+                // judges the sample's Wilson lower bound (20/20 at 95%
+                // ≈ 0.88) against the threshold; 0.95 would need n ≥ 52
+                // even from a perfect run.
+                return meeting().passRate(0.8);
             }
         };
 

@@ -99,7 +99,7 @@ public final class LatencyThresholdDeriver {
 
         double baselinePercentile = LatencyStatistics.nearestRankPercentile(sorted, p);
 
-        return new Threshold(k, threshold, baselinePercentile, n, saturated);
+        return new Threshold(k, threshold, baselinePercentile, n, saturated, kRaw);
     }
 
     /**
@@ -112,9 +112,19 @@ public final class LatencyThresholdDeriver {
      * @param saturated          {@code true} when {@code k_raw > n} — the
      *                           {@code threshold} is the advisory {@code t_{(n)}},
      *                           not an exact bound at the configured confidence
+     * @param kRaw               the unclamped confidence rank
+     *                           {@code qbinom(1 − α; n, p) + 1}; exceeds
+     *                           {@code n} exactly when {@code saturated}
      */
     public record Threshold(
-            int rank, double threshold, double baselinePercentile, int n, boolean saturated) {
+            int rank, double threshold, double baselinePercentile, int n, boolean saturated,
+            int kRaw) {
+
+        /** Back-compat constructor: the unclamped rank defaults to the clamped one. */
+        public Threshold(
+                int rank, double threshold, double baselinePercentile, int n, boolean saturated) {
+            this(rank, threshold, baselinePercentile, n, saturated, rank);
+        }
 
         /** Back-compat constructor: non-saturated form. */
         public Threshold(int rank, double threshold, double baselinePercentile, int n) {
