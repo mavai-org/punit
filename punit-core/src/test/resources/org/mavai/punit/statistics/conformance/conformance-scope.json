@@ -1,0 +1,9 @@
+{
+  "description": "punit's conformance scope beyond the oracle's family-mandatory tier. Extend-only: suites listed here are additional obligations; nothing here can subtract from the manifest's familyMandatory roster. A suite absent from both tiers is reported as unaddressed by every conformance run, never silently skipped.",
+  "suites": [
+    "feasibility",
+    "power_analysis",
+    "latency_percentile_minimums",
+    "latency_threshold_bootstrap"
+  ]
+}
