@@ -88,7 +88,19 @@ public class ThresholdDeriver {
         DerivationContext context = new DerivationContext(
             baselineRate, baselineSamples, testSamples, thresholdConfidence);
 
-        return new DerivedThreshold(threshold, OperationalApproach.SAMPLE_SIZE_FIRST, context, true);
+        // The binding decision artefacts (companion §3.4): the integer
+        // cutoff c = ⌈n_test · p_threshold⌉ — PASS iff the raw observed
+        // success count K ≥ c — and the achieved size, the exact
+        // probability of a false degradation signal under the effective
+        // baseline rate: P(K < c) = BinomialCDF(c − 1; n_test, p_eff).
+        int cutoff = (int) Math.ceil(testSamples * threshold);
+        double achievedSize = estimator.binomialCdf(
+                cutoff - 1, testSamples, effectiveBaselineRate);
+
+        return new DerivedThreshold(
+                threshold, OperationalApproach.SAMPLE_SIZE_FIRST, context, true,
+                java.util.OptionalInt.of(cutoff),
+                java.util.OptionalDouble.of(achievedSize));
     }
 
     /**

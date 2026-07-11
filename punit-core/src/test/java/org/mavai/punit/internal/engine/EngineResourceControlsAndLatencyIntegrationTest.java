@@ -456,7 +456,10 @@ class EngineResourceControlsAndLatencyIntegrationTest {
     void reportOnlyLatencyExcludedFromComposition() {
         ServiceContract<Factors, Integer, Boolean> slow = new ServiceContract<>() {
             @Override public Criteria<Boolean> criteria() {
-                return meeting().passRate(0.95);
+                // 0.5 is clearable at n=5: the declared-threshold rule
+                // judges the sample's Wilson lower bound (5/5 at 95%
+                // ≈ 0.65) against the threshold.
+                return meeting().passRate(0.5);
             }
             @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
                 sleep(50);

@@ -47,10 +47,10 @@ class EarlyTerminationIntegrationTest {
         }
     }
 
-    /** Always-pass variant whose contract posture is meeting(0.20, SLA). */
+    /** Always-pass variant whose contract posture is meeting(0.05, SLA). */
     private static class AlwaysPassLowThreshold implements ServiceContract<Factors, Integer, Boolean> {
         @Override public Criteria<Boolean> criteria() {
-            return meeting().passRate(0.20);
+            return meeting().passRate(0.05);
         }
         @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
             return Outcome.ok(Boolean.TRUE);
@@ -87,7 +87,7 @@ class EarlyTerminationIntegrationTest {
         private int seen = 0;
         FailsThenPasses(int failsFirst) { this.failsFirst = failsFirst; }
         @Override public Criteria<Boolean> criteria() {
-            return meeting().passRate(0.80);
+            return meeting().passRate(0.5);
         }
         @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
             return ++seen <= failsFirst
@@ -109,7 +109,7 @@ class EarlyTerminationIntegrationTest {
     // ── Failure-inevitable short-circuit ─────────────────────────────
 
     @Test
-    @DisplayName("failure-inevitable: all-fail with 0.95 threshold terminates at sample 6 of 100")
+    @DisplayName("failure-inevitable: all-fail with 0.95 threshold terminates at sample 2 of 100")
     void failureInevitableTerminatesEarly() {
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(f -> new AlwaysFail(), 100), new Factors())
@@ -117,9 +117,10 @@ class EarlyTerminationIntegrationTest {
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        // requiredSuccesses = ceil(100 * 0.95) = 95. After sample 6 the
-        // failure count is 6 → max-possible-successes = 94 < 95 → fire.
-        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(6);
+        // requiredSuccesses = the smallest K whose Wilson lower bound at
+        // 95% confidence clears 0.95 at n=100 → 99. After sample 2 the
+        // failure count is 2 → max-possible-successes = 98 < 99 → fire.
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(2);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.IMPOSSIBILITY);
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
@@ -128,12 +129,15 @@ class EarlyTerminationIntegrationTest {
     @Test
     @DisplayName("failure-inevitable: mixed mid-run failures that remain recoverable do not terminate")
     void failureInevitableNoFireWhenRecoverable() {
-        // threshold 0.80, samples 20, three failures up front. Required =
-        // ceil(16) = 16; after 3 failures the max-possible-successes is
-        // 17 ≥ 16, so the failure-inevitable shortcut never fires and the
-        // run completes. Verdict is PASS (17 successes / 20 = 85%).
+        // threshold 0.5, samples 20 → required = 14 (smallest K whose
+        // Wilson lower bound at 95% clears 0.5 at n=20). Six failures up
+        // front leave max-possible-successes at 14 ≥ 14, so the
+        // failure-inevitable shortcut never fires; the 14th success only
+        // lands on the final sample, so the success-guaranteed shortcut
+        // (which needs remaining > 0) never fires either, and the run
+        // completes. Verdict is PASS (Wilson lower of 14/20 ≈ 0.52 ≥ 0.5).
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(f -> new FailsThenPasses(3), 20), new Factors())
+                .testing(sampling(f -> new FailsThenPasses(6), 20), new Factors())
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
@@ -149,17 +153,18 @@ class EarlyTerminationIntegrationTest {
     @Test
     @DisplayName("success-guaranteed: all-pass at 0.5 threshold with floor met terminates early")
     void successGuaranteedTerminatesAtThresholdCross() {
-        // threshold 0.5, samples 100 → required = 50, validity floor =
-        // ceil(5 / min(0.5, 0.5)) = 10. With all-pass, both conditions
+        // threshold 0.5, samples 100 → required = 59 (smallest K whose
+        // Wilson lower bound at 95% clears 0.5 at n=100), validity floor
+        // = ceil(5 / min(0.5, 0.5)) = 10. With all-pass, both conditions
         // (successes >= required AND total >= floor) become true at
-        // sample 50 → fire.
+        // sample 59 → fire.
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(f -> new AlwaysPass(), 100), new Factors())
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(50);
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(59);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.SUCCESS_GUARANTEED);
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
@@ -168,17 +173,18 @@ class EarlyTerminationIntegrationTest {
     @Test
     @DisplayName("success-guaranteed: validity floor delays termination past threshold-cross")
     void successGuaranteedFloorDelaysTermination() {
-        // threshold 0.20, samples 100 → required = 20, validity floor =
-        // ceil(5 / min(0.20, 0.80)) = 25. With all-pass, successes >=
-        // required at sample 20 but total < floor; the run continues to
-        // sample 25 where the floor is met and the short-circuit fires.
+        // threshold 0.05, samples 200 → required = 16 (smallest K whose
+        // Wilson lower bound at 95% clears 0.05 at n=200), validity floor
+        // = ceil(5 / min(0.05, 0.95)) = 100. With all-pass, successes >=
+        // required at sample 16 but total < floor; the run continues to
+        // sample 100 where the floor is met and the short-circuit fires.
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(f -> new AlwaysPassLowThreshold(), 100), new Factors())
+                .testing(sampling(f -> new AlwaysPassLowThreshold(), 200), new Factors())
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(25);
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(100);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.SUCCESS_GUARANTEED);
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);

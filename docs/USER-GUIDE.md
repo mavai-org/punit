@@ -527,17 +527,20 @@ A criterion's threshold comes from one of two places, selected by the
 factory that opens its declaration on the contract:
 
 - **Contractual** (`meeting().passRate(...)`, `meeting().atMost(...)`)
-  — a fixed value declared by an SLA, SLO, or policy. PUnit applies a
-  deterministic `observed >= threshold` comparison. No baseline is
-  consulted; no statistical margin is applied.
+  — a fixed value declared by an SLA, SLO, or policy. No baseline is
+  consulted; PUnit passes the run iff its own Wilson-95% lower bound
+  clears the declared threshold — the sample must provide
+  confidence-grade evidence for the commitment, not merely a point
+  estimate that grazes it.
   ```java
   return meeting().passRate(0.99).contractRef(SLA, "Acme SLA v3 §2.1")
           .satisfies(...);
   ```
 - **Empirical** (`empirical().passRate()`, `empirical().atMost(...)`)
-  — derived at runtime from a recorded baseline file. PUnit applies
-  the Wilson-95% lower bound to the run's observed rate and passes
-  if that bound clears the baseline rate.
+  — derived at runtime from a recorded baseline file. PUnit derives
+  the threshold as the Wilson-95% lower bound of the baseline rate at
+  the test's sample size, and passes iff the raw observed success
+  count meets the derivation's integer cutoff `c = ⌈n·p*⌉`.
   ```java
   return empirical().<O>passRate().satisfies(...);
   ```

@@ -215,14 +215,26 @@ public final class Engine {
             this.tracker = tracker;
             this.plannedSamples = plannedSamples;
             this.earlyTermination = earlyTermination;
-            // Cached once: required-successes = ceil(plannedSamples * minPassRate),
-            // and the statistical-validity floor below which a guaranteed-success
-            // short-circuit must not fire. Both zero when no context is supplied
-            // (measure / explore / optimize / empirical / opt-out paths).
+            // Cached once: required-successes = the smallest success count
+            // whose Wilson lower bound at the context's confidence clears
+            // the declared threshold — the same rule the criterion applies
+            // at evaluate time (companion §3.2/§3.6), so neither
+            // short-circuit can disagree with the eventual verdict:
+            // success-guaranteed fires only on a count the criterion will
+            // pass; failure-inevitable fires when even all-remaining-pass
+            // stays below it. plannedSamples + 1 (never guaranteed;
+            // failure inevitable from the outset) when a perfect run
+            // cannot clear the threshold at this sample count. Also cached:
+            // the statistical-validity floor below which a guaranteed-
+            // success short-circuit must not fire. Both zero when no
+            // context is supplied (measure / explore / optimize /
+            // empirical / opt-out paths).
             if (earlyTermination.isPresent()) {
                 EarlyTerminationContext ctx = earlyTermination.get();
                 this.requiredSuccesses =
-                        (int) Math.ceil(plannedSamples * ctx.minPassRate());
+                        new org.mavai.punit.statistics.BinomialProportionEstimator()
+                                .minimumSuccessesToClear(
+                                        ctx.minPassRate(), plannedSamples, ctx.confidence());
                 this.minSamplesForValidity = ctx.minSamplesForValidity();
             } else {
                 this.requiredSuccesses = 0;

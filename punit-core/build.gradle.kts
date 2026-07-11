@@ -98,7 +98,30 @@ val fetchConformanceData by tasks.registering {
     outputs.dir(conformanceResourcesDir)
     outputs.upToDateWhen { false }
 
+    // Local-directory override: -PconformanceCasesDir=/path/to/mavai-R/inst/cases
+    // sources the fixture JSON from a local checkout instead of the latest
+    // GitHub release. Intended for working against fixture content that is
+    // merged upstream but not yet tagged/released; the default fetch-latest
+    // behaviour is unchanged when the property is absent.
+    val conformanceCasesDirOverride = providers.gradleProperty("conformanceCasesDir")
+
     doLast {
+        val overrideDir = conformanceCasesDirOverride.orNull
+        if (overrideDir != null) {
+            val srcDir = file(overrideDir)
+            require(srcDir.isDirectory) {
+                "conformanceCasesDir does not resolve to a directory: $srcDir"
+            }
+            val destDir = conformanceResourcesDir.get().asFile.resolve("conformance")
+            if (destDir.exists()) destDir.deleteRecursively()
+            destDir.mkdirs()
+            copy {
+                from(srcDir) { include("*.json") }
+                into(destDir)
+            }
+            logger.lifecycle("Using local mavai-R conformance fixtures: $srcDir")
+            return@doLast
+        }
         val latestUrl = URI(
             "https://github.com/mavai-org/mavai-R/releases/latest"
         ).toURL()

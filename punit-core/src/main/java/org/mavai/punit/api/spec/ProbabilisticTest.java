@@ -449,7 +449,13 @@ public final class ProbabilisticTest implements Spec {
                     double rate = threshold.getAsDouble();
                     int floor = new org.mavai.punit.statistics.BinomialProportionEstimator()
                             .minSamplesForNormalApproximation(rate);
-                    return Optional.of(new EarlyTerminationContext(rate, floor));
+                    // The confidence of the criterion's Wilson comparison —
+                    // the guaranteed-success count must be derived under the
+                    // same rule the criterion applies at evaluate time.
+                    double confidence = entry.criterion().earlyTerminationConfidence()
+                            .orElse(org.mavai.punit.statistics.StatisticalDefaults
+                                    .DEFAULT_CONFIDENCE);
+                    return Optional.of(new EarlyTerminationContext(rate, floor, confidence));
                 }
             }
             return Optional.empty();

@@ -119,16 +119,19 @@ class CriterionResultDetailTest {
     }
 
     @Test
-    @DisplayName("PassRate's contractual detail carries observed/threshold/origin/successes/failures/total")
+    @DisplayName("PassRate's contractual detail carries observed/threshold/origin/successes/failures/total"
+            + " plus the Wilson decision artefacts")
     void bernoulliContractualDetailKeys() {
         var result = PassRate.<Integer>meeting(ThresholdOrigin.SLA, 0.5)
                 .evaluate(ctx(summaryWithLatency(LatencyResult.empty()), Optional.empty()));
 
         assertThat(result.detail()).containsKeys(
                 "observed", "threshold", "origin", "successes", "failures", "total");
-        // Contractual variants do not record the confidence — that knob is only meaningful
-        // for the empirical Wilson-score-aware comparison Stage 4 will wire in.
-        assertThat(result.detail()).doesNotContainKey("confidence");
+        // The declared-threshold comparison is the test sample's Wilson
+        // lower bound clearing the threshold (companion §3.2/§3.6); the
+        // bound and the confidence it was computed at are the decision
+        // artefacts a conformant result surfaces.
+        assertThat(result.detail()).containsKeys("wilsonLower", "confidence");
     }
 
     @Test

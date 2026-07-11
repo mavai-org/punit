@@ -186,6 +186,13 @@ class LatencyEverywhereIntegrationTest {
                 .build();
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling, new F("only"))
+                // Every declared sample must run: this test asserts the
+                // descriptive latency block over the full mixed pass/fail
+                // population, and under the Wilson-based declared-threshold
+                // rule the two scripted failures make 0.5 unreachable at
+                // n=6, which would otherwise trip the failure-inevitable
+                // short-circuit before the last sample.
+                .disableEarlyTermination()
                 .build();
         ProbabilisticTestResult result = (ProbabilisticTestResult) new Engine().run(spec);
         ProbabilisticTestVerdict verdict = VerdictAdapter.adapt(

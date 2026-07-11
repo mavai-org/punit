@@ -247,6 +247,79 @@ public class BinomialProportionEstimator {
         return (int) Math.ceil(5.0 / tighter);
     }
 
+    /**
+     * The exact binomial cumulative distribution function
+     * {@code P(K ≤ k)} for {@code trials} Bernoulli trials at success
+     * probability {@code p}. Used for the achieved size of the
+     * integer-cutoff decision rule (statistical companion §3.4):
+     * {@code achievedSize = P(K < c) = binomialCdf(c − 1, n, p)}.
+     *
+     * @param k      the (inclusive) upper success count; {@code k < 0}
+     *               yields {@code 0.0}, {@code k ≥ trials} yields {@code 1.0}
+     * @param trials the number of trials, positive
+     * @param p      the per-trial success probability in [0, 1]
+     * @return {@code P(K ≤ k)}
+     */
+    public double binomialCdf(int k, int trials, double p) {
+        if (trials <= 0) {
+            throw new IllegalArgumentException("Trials must be positive, got: " + trials);
+        }
+        if (Double.isNaN(p) || p < 0.0 || p > 1.0) {
+            throw new IllegalArgumentException("Probability must be in [0, 1], got: " + p);
+        }
+        if (k < 0) {
+            return 0.0;
+        }
+        if (k >= trials) {
+            return 1.0;
+        }
+        return org.apache.commons.statistics.distribution.BinomialDistribution
+                .of(trials, p)
+                .cumulativeProbability(k);
+    }
+
+    /**
+     * The smallest success count {@code K} whose one-sided Wilson lower
+     * bound at the given confidence clears the threshold — the
+     * declared-threshold (compliance) analogue of the empirical
+     * procedure's integer cutoff. The Wilson lower bound is monotone in
+     * the success count, so the answer is found by binary search.
+     *
+     * <p>Used by the engine's guaranteed-success early termination: a
+     * run whose success count has reached this value cannot fail the
+     * declared-threshold comparison however the remaining samples land.
+     *
+     * @param threshold       the declared threshold in [0, 1]
+     * @param trials          the planned sample count, positive
+     * @param confidenceLevel the confidence of the Wilson comparison, in (0, 1)
+     * @return the minimal clearing success count in {@code [0, trials]},
+     *         or {@code trials + 1} when even a perfect run cannot clear
+     *         the threshold at this sample count
+     */
+    public int minimumSuccessesToClear(double threshold, int trials, double confidenceLevel) {
+        if (trials <= 0) {
+            throw new IllegalArgumentException("Trials must be positive, got: " + trials);
+        }
+        if (Double.isNaN(threshold) || threshold < 0.0 || threshold > 1.0) {
+            throw new IllegalArgumentException("Threshold must be in [0, 1], got: " + threshold);
+        }
+        validateConfidenceLevel(confidenceLevel);
+        if (lowerBound(trials, trials, confidenceLevel) < threshold) {
+            return trials + 1;
+        }
+        int lo = 0;
+        int hi = trials;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (lowerBound(mid, trials, confidenceLevel) >= threshold) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return lo;
+    }
+
     private void validateInputs(int successes, int trials) {
         if (trials <= 0) {
             throw new IllegalArgumentException("Trials must be positive, got: " + trials);
