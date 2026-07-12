@@ -74,6 +74,17 @@ class ProportionConformanceTest {
     }
 
     @Nested
+    @DisplayName("risk_driven_sizing")
+    class RiskDrivenSizing {
+
+        @TestFactory
+        @DisplayName("Sizing against the moving acceptance floor")
+        Collection<DynamicTest> cases() {
+            return dynamicTests(ConformanceCatalog.riskDrivenSizing());
+        }
+    }
+
+    @Nested
     @DisplayName("feasibility")
     class Feasibility {
 

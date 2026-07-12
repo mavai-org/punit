@@ -13,6 +13,7 @@ import org.mavai.punit.statistics.DerivedThreshold;
 import org.mavai.punit.statistics.LatencyStatistics;
 import org.mavai.punit.statistics.LatencyThresholdDeriver;
 import org.mavai.punit.statistics.OperationalApproach;
+import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
 import org.mavai.punit.statistics.SampleSizeCalculator;
 import org.mavai.punit.statistics.SampleSizeRequirement;
 import org.mavai.punit.statistics.TestVerdictEvaluator;
@@ -61,6 +62,7 @@ final class ConformanceCatalog {
     private static final BinomialProportionEstimator ESTIMATOR = new BinomialProportionEstimator();
     private static final ThresholdDeriver THRESHOLD_DERIVER = new ThresholdDeriver();
     private static final SampleSizeCalculator SAMPLE_SIZE_CALCULATOR = new SampleSizeCalculator();
+    private static final RiskDrivenSizingCalculator RISK_DRIVEN_SIZING = new RiskDrivenSizingCalculator();
     private static final TestVerdictEvaluator VERDICT_EVALUATOR = new TestVerdictEvaluator();
 
     private ConformanceCatalog() { }
@@ -72,6 +74,7 @@ final class ConformanceCatalog {
         checks.addAll(wilsonLower());
         checks.addAll(thresholdDerivation());
         checks.addAll(powerAnalysis());
+        checks.addAll(riskDrivenSizing());
         checks.addAll(feasibility());
         checks.addAll(verdict());
         checks.addAll(latencyPercentileValues());
@@ -201,6 +204,65 @@ final class ConformanceCatalog {
                         result.requiredSamples(), baselineRate, minDetectableEffect, confidence);
                 assertOracle(recorder, "power_analysis", c, "achieved_power",
                         achievedPower, tolerance);
+            }));
+        }
+        return checks;
+    }
+
+    // ── risk_driven_sizing ──────────────────────────────────────────
+
+    /**
+     * Sizing against the moving acceptance floor. Three case groups,
+     * discriminated by the {@code approach} field: required-n cases bind
+     * the minimal sample size plus the floor and achieved power at that
+     * size; power-at cases bind the floor and self-consistent power at a
+     * fixed candidate size; detectable-rate cases bind the inversion.
+     * The floor is asserted through the same Wilson-from-rate machinery
+     * the calculator itself reuses, so the shared-z requirement is
+     * exercised on the production path.
+     */
+    static List<CaseCheck> riskDrivenSizing() {
+        JsonNode suite = ConformanceFixtures.load("risk_driven_sizing.json");
+        double tolerance = suite.get("tolerance").asDouble();
+        List<CaseCheck> checks = new ArrayList<>();
+        for (JsonNode c : suite.get("cases")) {
+            String approach = c.get("approach").asText();
+            checks.add(new CaseCheck("risk_driven_sizing", c.get("name").asText(), recorder -> {
+                var inputs = c.get("inputs");
+                double baselineRate = inputs.get("baseline_rate").asDouble();
+                double confidence = inputs.get("confidence").asDouble();
+
+                if ("required_n".equals(approach)) {
+                    double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
+                    double targetPower = inputs.get("target_power").asDouble();
+                    int requiredSamples = RISK_DRIVEN_SIZING.requiredSamples(
+                            baselineRate, minimumAcceptableRate, confidence, targetPower);
+                    assertOracle(recorder, "risk_driven_sizing", c, "required_n",
+                            requiredSamples);
+                    assertOracle(recorder, "risk_driven_sizing", c, "floor",
+                            ESTIMATOR.lowerBoundFromRate(baselineRate, requiredSamples, confidence),
+                            tolerance);
+                    assertOracle(recorder, "risk_driven_sizing", c, "achieved_power",
+                            RISK_DRIVEN_SIZING.powerAt(requiredSamples, baselineRate,
+                                    minimumAcceptableRate, confidence),
+                            tolerance);
+                } else if ("power_at".equals(approach)) {
+                    double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
+                    int testSamples = inputs.get("test_samples").asInt();
+                    assertOracle(recorder, "risk_driven_sizing", c, "floor",
+                            ESTIMATOR.lowerBoundFromRate(baselineRate, testSamples, confidence),
+                            tolerance);
+                    assertOracle(recorder, "risk_driven_sizing", c, "power",
+                            RISK_DRIVEN_SIZING.powerAt(testSamples, baselineRate,
+                                    minimumAcceptableRate, confidence),
+                            tolerance);
+                } else if ("detectable_rate".equals(approach)) {
+                    assertOracle(recorder, "risk_driven_sizing", c, "detectable_rate",
+                            RISK_DRIVEN_SIZING.detectableRate(
+                                    inputs.get("test_samples").asInt(), baselineRate,
+                                    confidence, inputs.get("target_power").asDouble()),
+                            tolerance);
+                }
             }));
         }
         return checks;
