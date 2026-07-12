@@ -4,6 +4,7 @@
     "feasibility",
     "power_analysis",
     "latency_percentile_minimums",
-    "latency_threshold_bootstrap"
+    "latency_threshold_bootstrap",
+    "risk_driven_sizing"
   ]
 }
