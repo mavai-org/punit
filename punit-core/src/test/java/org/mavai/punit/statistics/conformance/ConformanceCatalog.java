@@ -226,46 +226,68 @@ final class ConformanceCatalog {
         double tolerance = suite.get("tolerance").asDouble();
         List<CaseCheck> checks = new ArrayList<>();
         for (JsonNode c : suite.get("cases")) {
-            String approach = c.get("approach").asText();
-            checks.add(new CaseCheck("risk_driven_sizing", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                double baselineRate = inputs.get("baseline_rate").asDouble();
-                double confidence = inputs.get("confidence").asDouble();
-
-                if ("required_n".equals(approach)) {
-                    double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
-                    double targetPower = inputs.get("target_power").asDouble();
-                    int requiredSamples = RISK_DRIVEN_SIZING.requiredSamples(
-                            baselineRate, minimumAcceptableRate, confidence, targetPower);
-                    assertOracle(recorder, "risk_driven_sizing", c, "required_n",
-                            requiredSamples);
-                    assertOracle(recorder, "risk_driven_sizing", c, "floor",
-                            ESTIMATOR.lowerBoundFromRate(baselineRate, requiredSamples, confidence),
-                            tolerance);
-                    assertOracle(recorder, "risk_driven_sizing", c, "achieved_power",
-                            RISK_DRIVEN_SIZING.powerAt(requiredSamples, baselineRate,
-                                    minimumAcceptableRate, confidence),
-                            tolerance);
-                } else if ("power_at".equals(approach)) {
-                    double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
-                    int testSamples = inputs.get("test_samples").asInt();
-                    assertOracle(recorder, "risk_driven_sizing", c, "floor",
-                            ESTIMATOR.lowerBoundFromRate(baselineRate, testSamples, confidence),
-                            tolerance);
-                    assertOracle(recorder, "risk_driven_sizing", c, "power",
-                            RISK_DRIVEN_SIZING.powerAt(testSamples, baselineRate,
-                                    minimumAcceptableRate, confidence),
-                            tolerance);
-                } else if ("detectable_rate".equals(approach)) {
-                    assertOracle(recorder, "risk_driven_sizing", c, "detectable_rate",
-                            RISK_DRIVEN_SIZING.detectableRate(
-                                    inputs.get("test_samples").asInt(), baselineRate,
-                                    confidence, inputs.get("target_power").asDouble()),
-                            tolerance);
-                }
-            }));
+            checks.add(new CaseCheck("risk_driven_sizing", c.get("name").asText(),
+                    recorder -> assertRiskDrivenSizingCase(recorder, c, tolerance)));
         }
         return checks;
+    }
+
+    private static void assertRiskDrivenSizingCase(
+            ConformanceRecorder recorder, JsonNode c, double tolerance) {
+        switch (c.get("approach").asText()) {
+            case "required_n" -> assertRequiredSampleSizeCase(recorder, c, tolerance);
+            case "power_at" -> assertPowerAtCandidateSizeCase(recorder, c, tolerance);
+            case "detectable_rate" -> assertDetectableRateInversionCase(recorder, c, tolerance);
+            default -> throw new IllegalStateException(
+                    "unknown sizing approach '%s' in case '%s'".formatted(
+                            c.get("approach").asText(), c.get("name").asText()));
+        }
+    }
+
+    private static void assertRequiredSampleSizeCase(
+            ConformanceRecorder recorder, JsonNode c, double tolerance) {
+        var inputs = c.get("inputs");
+        double baselineRate = inputs.get("baseline_rate").asDouble();
+        double confidence = inputs.get("confidence").asDouble();
+        double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
+        int requiredSamples = RISK_DRIVEN_SIZING.requiredSamples(
+                baselineRate, minimumAcceptableRate, confidence,
+                inputs.get("target_power").asDouble());
+        assertOracle(recorder, "risk_driven_sizing", c, "required_n", requiredSamples);
+        assertOracle(recorder, "risk_driven_sizing", c, "floor",
+                ESTIMATOR.lowerBoundFromRate(baselineRate, requiredSamples, confidence),
+                tolerance);
+        assertOracle(recorder, "risk_driven_sizing", c, "achieved_power",
+                RISK_DRIVEN_SIZING.powerAt(requiredSamples, baselineRate,
+                        minimumAcceptableRate, confidence),
+                tolerance);
+    }
+
+    private static void assertPowerAtCandidateSizeCase(
+            ConformanceRecorder recorder, JsonNode c, double tolerance) {
+        var inputs = c.get("inputs");
+        double baselineRate = inputs.get("baseline_rate").asDouble();
+        double confidence = inputs.get("confidence").asDouble();
+        int testSamples = inputs.get("test_samples").asInt();
+        assertOracle(recorder, "risk_driven_sizing", c, "floor",
+                ESTIMATOR.lowerBoundFromRate(baselineRate, testSamples, confidence),
+                tolerance);
+        assertOracle(recorder, "risk_driven_sizing", c, "power",
+                RISK_DRIVEN_SIZING.powerAt(testSamples, baselineRate,
+                        inputs.get("minimum_acceptable_rate").asDouble(), confidence),
+                tolerance);
+    }
+
+    private static void assertDetectableRateInversionCase(
+            ConformanceRecorder recorder, JsonNode c, double tolerance) {
+        var inputs = c.get("inputs");
+        assertOracle(recorder, "risk_driven_sizing", c, "detectable_rate",
+                RISK_DRIVEN_SIZING.detectableRate(
+                        inputs.get("test_samples").asInt(),
+                        inputs.get("baseline_rate").asDouble(),
+                        inputs.get("confidence").asDouble(),
+                        inputs.get("target_power").asDouble()),
+                tolerance);
     }
 
     // ── feasibility ─────────────────────────────────────────────────
