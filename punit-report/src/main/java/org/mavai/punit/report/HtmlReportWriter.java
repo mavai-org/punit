@@ -167,6 +167,9 @@ final class HtmlReportWriter {
             appendMisalignmentGuidance(html, verdict);
         }
 
+        // Run design: the sizing-transparency disclosures
+        appendRunDesign(html, verdict);
+
         // Level 3: full statistical analysis (nested details)
         html.append("<details>\n");
         html.append("<summary>Statistical Analysis</summary>\n");
@@ -361,6 +364,132 @@ final class HtmlReportWriter {
         }
         html.append("</div>\n");
         html.append("</details>\n");
+    }
+
+    /**
+     * The canonical operational-approach glosses, in the plain register.
+     * The confidence-first entries are rendered when a run's configuration
+     * declares that approach — the vocabulary is ready ahead of the
+     * authoring surface that will produce it.
+     */
+    private static final Map<String, String> APPROACH_GLOSSES = Map.of(
+            "sample-size-first",
+            "the sample size was chosen first; the acceptance bar was derived honestly at that size",
+            "threshold-first",
+            "the pass bar is externally stipulated; the run judges the evidence against it",
+            "confidence-first",
+            "the run size was computed from the declared confidence, detectable effect, and power",
+            "confidence-first (risk-driven)",
+            "the run size was computed from the declared tolerance and confidence, "
+                    + "priced against the acceptance bar this very size derives");
+
+    /**
+     * The declared-parameter rows of the run-design block, in display
+     * order: entry key, label, and whether the value renders as a
+     * percentage. Rows whose entry is absent are skipped, so the block
+     * extends additively as future approaches declare more parameters.
+     */
+    private static final String[][] RUN_DESIGN_FACTS = {
+            {"sizing-declared-samples", "Declared samples", "plain"},
+            {"sizing-tolerated-rate", "Tolerated rate", "percent"},
+            {"sizing-declared-min-pass-rate", "Minimum pass rate", "percent"},
+            {"sizing-declared-min-detectable-effect", "Minimum detectable effect", "plain"},
+            {"sizing-declared-confidence", "Confidence", "percent"},
+            {"sizing-declared-power", "Target power", "percent"},
+            {"sizing-computed-samples", "Computed sample size", "plain"},
+    };
+
+    /**
+     * Renders the run-design block: the operational approach that shaped
+     * the run's size and — for a run sized below its baseline's own
+     * measurement — the paired downsizing and efficiency disclosures.
+     * All values arrive computed on the verdict's environment entries;
+     * this renderer only formats. Omitted for records that carry no
+     * sizing facts (verdicts predating the disclosures).
+     */
+    private static void appendRunDesign(StringBuilder html, ProbabilisticTestVerdict verdict) {
+        Map<String, String> env = verdict.environmentMetadata();
+        String approach = env.get("sizing-approach");
+        if (approach == null) {
+            return;
+        }
+        html.append("<details>\n<summary>Run design</summary>\n");
+        html.append("<div class=\"per-criterion\">\n<div class=\"criterion-block\">\n");
+        html.append("<p><strong>Approach:</strong> ").append(escape(approach));
+        String gloss = APPROACH_GLOSSES.get(approach);
+        if (gloss != null) {
+            html.append(" &mdash; ").append(escape(gloss));
+        }
+        html.append("</p>\n<dl>\n");
+        for (String[] fact : RUN_DESIGN_FACTS) {
+            String value = env.get(fact[0]);
+            if (value == null) {
+                continue;
+            }
+            String rendered = "percent".equals(fact[2]) ? percent(value) : escape(value);
+            html.append("<dt>").append(fact[1]).append("</dt><dd>")
+                    .append(rendered).append("</dd>\n");
+        }
+        html.append("</dl>\n");
+        appendSizingTrade(html, verdict, env);
+        html.append("</div>\n</div>\n</details>\n");
+    }
+
+    /**
+     * The downsizing disclosure and its paired efficiency estimate — one
+     * trade, two sides, presented together. Present iff the verdict
+     * carries the computed detectable rate and its baseline summary.
+     */
+    private static void appendSizingTrade(
+            StringBuilder html, ProbabilisticTestVerdict verdict, Map<String, String> env) {
+        String detectableRate = env.get("sizing-detectable-rate");
+        var baseline = verdict.statistics().baseline();
+        if (detectableRate == null || baseline.isEmpty()) {
+            return;
+        }
+        int planned = verdict.execution().plannedSamples();
+        int baselineSamples = baseline.get().baselineSamples();
+        html.append("<p>This test was sized at ").append(planned)
+                .append(" samples against a baseline measured over ").append(baselineSamples)
+                .append(". With ").append(planned)
+                .append(" samples, this test would only catch a drop below ")
+                .append(percent(detectableRate)).append(' ')
+                .append(powerPhrase(env.get("sizing-detectable-power"))).append(".</p>\n");
+
+        String savedFraction = env.get("sizing-saved-fraction");
+        String timeSavedMs = env.get("sizing-time-saved-ms");
+        String tokensSaved = env.get("sizing-tokens-saved");
+        html.append("<p>Estimated saving versus a run at the baseline's ")
+                .append(baselineSamples).append(" samples: about ")
+                .append(percent(savedFraction));
+        if (tokensSaved != null) {
+            html.append(" less execution time and tokens (roughly ")
+                    .append(seconds(timeSavedMs)).append(" and ").append(escape(tokensSaved))
+                    .append(" tokens, from this run's own per-sample averages). Estimates only.");
+        } else {
+            html.append(" less execution time (roughly ").append(seconds(timeSavedMs))
+                    .append(", from this run's own per-sample average). Estimates only; ")
+                    .append("no token figures are recorded for this run.");
+        }
+        html.append("</p>\n");
+    }
+
+    /** Plain language for the disclosed power; the default reads as odds. */
+    private static String powerPhrase(String targetPower) {
+        double power = Double.parseDouble(targetPower);
+        if (Math.abs(power - 0.8) < 1e-9) {
+            return "four times out of five";
+        }
+        return "about " + percent(targetPower) + " of the time";
+    }
+
+    private static String percent(String fraction) {
+        return Math.round(Double.parseDouble(fraction) * 100) + "%";
+    }
+
+    private static String seconds(String milliseconds) {
+        return String.format(java.util.Locale.ROOT, "%.1f seconds",
+                Double.parseDouble(milliseconds) / 1000.0);
     }
 
     private static String escape(String text) {

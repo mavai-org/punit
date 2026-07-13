@@ -340,15 +340,31 @@ public class ProbabilisticTestVerdictBuilder {
         Termination termination = buildTermination();
         PUnitVerdict punitVerdict = derivePUnitVerdict(covariates);
         String verdictReason = deriveVerdictReason(punitVerdict, covariates);
+        Map<String, String> environment = environmentWithSizingDisclosure();
 
         return new ProbabilisticTestVerdict(
                 id, Instant.now(),
                 identity, execution, functional, latency, statistics,
                 covariates, cost, pacing, provenance, termination,
-                environmentMetadata, junitPassed, punitVerdict, verdictReason,
+                environment, junitPassed, punitVerdict, verdictReason,
                 postconditionFailures,
                 perCriterion
         );
+    }
+
+    /**
+     * The verdict's environment entries: the caller-supplied metadata plus
+     * the sizing-transparency facts the report's run-design block renders —
+     * computed here, formatted there. The facts ride the schema's free-form
+     * environment entries, so the verdict XML schema is unchanged.
+     */
+    private Map<String, String> environmentWithSizingDisclosure() {
+        Map<String, String> environment =
+                new java.util.LinkedHashMap<>(environmentMetadata);
+        environment.putAll(SizingDisclosure.entries(
+                thresholdOrigin, plannedSamples, samplesExecuted, minPassRate,
+                resolvedConfidence, baseline, elapsedMs, methodTokensConsumed));
+        return java.util.Collections.unmodifiableMap(environment);
     }
 
     private static String newCorrelationId() {

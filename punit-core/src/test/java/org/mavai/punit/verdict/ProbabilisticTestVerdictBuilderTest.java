@@ -594,10 +594,38 @@ class ProbabilisticTestVerdictBuilderTest {
         }
 
         @Test
-        void environmentMetadataIsEmptyByDefault() {
+        void everyVerdictCarriesTheSizingDisclosureEntries() {
             ProbabilisticTestVerdict verdict = minimalBuilder().build();
 
-            assertThat(verdict.environmentMetadata()).isEmpty();
+            assertThat(verdict.environmentMetadata())
+                    .containsEntry("sizing-approach", "threshold-first")
+                    .containsEntry("sizing-declared-samples", "100")
+                    .containsEntry("sizing-declared-min-pass-rate", "0.9");
+        }
+
+        @Test
+        void empiricalProvenanceDisclosesTheSampleSizeFirstApproach() {
+            ProbabilisticTestVerdict verdict = minimalBuilder()
+                    .provenance(ThresholdOrigin.EMPIRICAL, null, "svc.yaml")
+                    .build();
+
+            assertThat(verdict.environmentMetadata())
+                    .containsEntry("sizing-approach", "sample-size-first")
+                    .containsEntry("sizing-declared-confidence", "0.95");
+        }
+
+        @Test
+        void aDownsizedRunDisclosesTheTradeAgainstItsBaseline() {
+            ProbabilisticTestVerdict verdict = minimalBuilder()
+                    .provenance(ThresholdOrigin.EMPIRICAL, null, "svc.yaml")
+                    .baseline(new BaselineData("svc.yaml",
+                            Instant.parse("2026-07-01T00:00:00Z"), 1000, 960))
+                    .build();
+
+            assertThat(verdict.environmentMetadata())
+                    .containsKey("sizing-detectable-rate")
+                    .containsEntry("sizing-saved-fraction", "0.9")
+                    .containsKey("sizing-time-saved-ms");
         }
 
         @Test
@@ -608,7 +636,8 @@ class ProbabilisticTestVerdictBuilderTest {
 
             assertThat(verdict.environmentMetadata())
                     .containsEntry("host", "prod-01")
-                    .containsEntry("region", "eu-west-1");
+                    .containsEntry("region", "eu-west-1")
+                    .containsEntry("sizing-approach", "threshold-first");
         }
     }
 

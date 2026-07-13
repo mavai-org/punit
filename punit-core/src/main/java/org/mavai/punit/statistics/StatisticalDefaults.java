@@ -94,6 +94,16 @@ public final class StatisticalDefaults {
      */
     public static final double SOUNDNESS_FLOOR_CONFIDENCE = 0.80;
 
+    /**
+     * Default target power: 80%.
+     *
+     * <p>The probability of detecting a genuine degradation; 0.80 is the
+     * conventional choice. The report's sensitivity statements — what drop
+     * a smaller-than-baseline run would actually catch — are made at this
+     * power for runs whose sizing did not declare one.
+     */
+    public static final double DEFAULT_TARGET_POWER = 0.80;
+
     private StatisticalDefaults() {
         // utility class
     }

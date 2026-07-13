@@ -601,7 +601,107 @@ class HtmlReportWriterTest {
         }
     }
 
+    @Nested
+    @DisplayName("Run design block")
+    class RunDesignBlock {
+
+        @Test
+        @DisplayName("discloses the approach and the paired sizing trade")
+        void disclosesApproachAndSizingTrade() {
+            Map<String, String> env = new LinkedHashMap<>();
+            env.put("sizing-approach", "sample-size-first");
+            env.put("sizing-declared-samples", "100");
+            env.put("sizing-declared-confidence", "0.95");
+            env.put("sizing-detectable-rate", "0.876");
+            env.put("sizing-detectable-power", "0.8");
+            env.put("sizing-saved-fraction", "0.9");
+            env.put("sizing-time-saved-ms", "45000");
+            env.put("sizing-tokens-saved", "1080000");
+
+            String html = HtmlReportWriter.generate(List.of(downsizedVerdict(env)));
+
+            assertThat(html).contains("<summary>Run design</summary>");
+            assertThat(html).contains("sample-size-first &mdash; the sample size was chosen first");
+            assertThat(html).contains("<dt>Declared samples</dt><dd>100</dd>");
+            assertThat(html).contains("<dt>Confidence</dt><dd>95%</dd>");
+            assertThat(html).contains(
+                    "This test was sized at 100 samples against a baseline measured over 1000.");
+            assertThat(html).contains(
+                    "would only catch a drop below 88% four times out of five.");
+            assertThat(html).contains("about 90% less execution time and tokens");
+            assertThat(html).contains("roughly 45.0 seconds and 1080000 tokens");
+            assertThat(html).contains("Estimates only.");
+        }
+
+        @Test
+        @DisplayName("degrades the efficiency disclosure to time-only without token costs")
+        void degradesToTimeOnlyWithoutTokenCosts() {
+            Map<String, String> env = new LinkedHashMap<>();
+            env.put("sizing-approach", "sample-size-first");
+            env.put("sizing-declared-samples", "100");
+            env.put("sizing-declared-confidence", "0.95");
+            env.put("sizing-detectable-rate", "0.876");
+            env.put("sizing-detectable-power", "0.8");
+            env.put("sizing-saved-fraction", "0.9");
+            env.put("sizing-time-saved-ms", "45000");
+
+            String html = HtmlReportWriter.generate(List.of(downsizedVerdict(env)));
+
+            assertThat(html).contains("about 90% less execution time (roughly 45.0 seconds");
+            assertThat(html).contains("no token figures are recorded for this run.");
+            assertThat(html).doesNotContain("less execution time and tokens");
+        }
+
+        @Test
+        @DisplayName("the approach stands alone on a full-size run")
+        void approachStandsAloneOnFullSizeRun() {
+            Map<String, String> env = new LinkedHashMap<>();
+            env.put("sizing-approach", "threshold-first");
+            env.put("sizing-declared-samples", "100");
+            env.put("sizing-declared-min-pass-rate", "0.9");
+
+            String html = HtmlReportWriter.generate(List.of(downsizedVerdict(env)));
+
+            assertThat(html).contains("<summary>Run design</summary>");
+            assertThat(html).contains("threshold-first &mdash; the pass bar is externally stipulated");
+            assertThat(html).contains("<dt>Minimum pass rate</dt><dd>90%</dd>");
+            assertThat(html).doesNotContain("would only catch a drop below");
+            assertThat(html).doesNotContain("Estimated saving");
+        }
+
+        @Test
+        @DisplayName("omits the block for verdicts carrying no sizing facts")
+        void omitsBlockWithoutSizingFacts() {
+            String html = HtmlReportWriter.generate(List.of(passingVerdict()));
+
+            assertThat(html).doesNotContain("Run design");
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * A verdict carrying the given environment entries and a resolved
+     * baseline measured over 1,000 samples — the shape a downsized
+     * spec-driven run records.
+     */
+    private ProbabilisticTestVerdict downsizedVerdict(Map<String, String> env) {
+        ProbabilisticTestVerdict base = passingVerdict();
+        StatisticalAnalysis stats = new StatisticalAnalysis(
+                0.95, 0.0218, 0.8948,
+                Optional.of(2.29), Optional.of(0.011),
+                Optional.of("Wilson"),
+                Optional.of(new ProbabilisticTestVerdict.BaselineSummary(
+                        "svc.yaml", Instant.parse("2026-07-01T00:00:00Z"),
+                        1000, 960, 0.96, 0.9)),
+                List.of());
+        return new ProbabilisticTestVerdict(
+                base.correlationId(), base.timestamp(), base.identity(), base.execution(),
+                base.functional(), base.latency(), stats, base.covariates(),
+                base.cost(), base.pacing(), base.provenance(), base.termination(),
+                env, base.junitPassed(), base.punitVerdict(),
+                base.verdictReason(), base.postconditionFailures(), base.perCriterion());
+    }
 
     private ProbabilisticTestVerdict verdictWithPerCriterion(PerCriterionStructure pc) {
         ProbabilisticTestVerdict base = passingVerdict();
