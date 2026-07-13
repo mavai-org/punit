@@ -1,0 +1,145 @@
+package org.mavai.punit.report;
+
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.mavai.outcome.Outcome;
+import org.mavai.punit.api.NoFactors;
+import org.mavai.punit.api.Sampling;
+import org.mavai.punit.api.ServiceContract;
+import org.mavai.punit.api.TokenTracker;
+import org.mavai.punit.api.criterion.Criteria;
+import org.mavai.punit.internal.engine.baseline.BaselineResolver;
+import org.mavai.punit.runtime.PUnit;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+/**
+ * Hands-on demo of the report's run-design disclosures. Not part of the
+ * regression suite — a scratch driver to eyeball the rendered HTML.
+ *
+ * <p>Measures a baseline over 200 samples at a 96% rate, runs a downsized
+ * empirical test (50 samples, token costs recorded: the full sizing
+ * trade) and a declared-threshold test (approach disclosure alone), then
+ * renders the HTML report from the emitted verdict XML. Each run is its
+ * own test method so each verdict lands in its own XML file.
+ *
+ * <p>Run with
+ * {@code ./gradlew :punit-report:test --tests RunDesignReportDemo}
+ * and open {@code punit-report/build/run-design-demo/html/index.html}.
+ */
+@DisplayName("Run-design report demo (scratch, not a regression test)")
+@TestMethodOrder(OrderAnnotation.class)
+class RunDesignReportDemo {
+
+    private static final Path DEMO_DIR = Path.of("build/run-design-demo");
+
+    @BeforeAll
+    static void routeArtifactsToDemoDir() {
+        System.setProperty(BaselineResolver.BASELINE_DIR_PROPERTY,
+                DEMO_DIR.resolve("baselines").toString());
+        System.setProperty("punit.report.dir", DEMO_DIR.resolve("xml").toString());
+    }
+
+    @AfterAll
+    static void restoreProperties() {
+        System.clearProperty(BaselineResolver.BASELINE_DIR_PROPERTY);
+        System.clearProperty("punit.report.dir");
+    }
+
+    /** Passes exactly the first {@code passing} invocations, and records
+     *  a plausible token cost per sample. */
+    private static ServiceContract<NoFactors, Integer, Boolean> demoServiceContract(
+            String id, int passing, Criteria<Boolean> criteria) {
+        AtomicInteger invoked = new AtomicInteger();
+        return new ServiceContract<>() {
+            @Override public Criteria<Boolean> criteria() {
+                return criteria;
+            }
+            @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+                tracker.recordTokens(1200);
+                // Failures are criterion-level (a judged output), not
+                // apply-level, so they count into the baseline's tally.
+                return Outcome.ok(invoked.getAndIncrement() < passing);
+            }
+            @Override public String id() { return id; }
+        };
+    }
+
+    /** An empirical pass-rate criterion that judges the invocation output. */
+    private static Criteria<Boolean> judgedPassRate() {
+        return Criteria.empirical().<Boolean>passRate()
+                .satisfies("output is true", out ->
+                        out ? Outcome.ok(out) : Outcome.fail("demo", "scripted failure"));
+    }
+
+    private static Sampling<NoFactors, Integer, Boolean> sampling(
+            String id, int samples, int passing, Criteria<Boolean> criteria) {
+        return Sampling.<NoFactors, Integer, Boolean>builder()
+                .serviceContractFactory(f -> demoServiceContract(id, passing, criteria))
+                .inputs(1, 2, 3)
+                .samples(samples)
+                .build();
+    }
+
+    @Test
+    @Order(1)
+    @DisplayName("baseline: 200 samples at a 96% observed rate")
+    void measureBaseline() {
+        PUnit.measuring(sampling("demo-sized", 200, 192, judgedPassRate()))
+                .experimentId("demoBaseline")
+                .run();
+    }
+
+    @Test
+    @Order(2)
+    @DisplayName("a downsized run's verdict XML carries the full sizing trade, both cost halves")
+    void downsizedRun() throws Exception {
+        PUnit.testing(sampling("demo-sized", 80, Integer.MAX_VALUE, judgedPassRate()))
+                .assertPasses();
+
+        String xml = java.nio.file.Files.readString(
+                DEMO_DIR.resolve("xml/demo-sized.demo-sized.xml"));
+        assertThat(xml)
+                .contains("key=\"sizing-approach\" value=\"sample-size-first\"")
+                .contains("key=\"sizing-baseline-samples\"")
+                .contains("key=\"sizing-detectable-rate\"")
+                .contains("key=\"sizing-time-saved-ms\"")
+                .contains("key=\"sizing-tokens-saved\"");
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("a declared-threshold run's verdict XML discloses the approach alone")
+    void declaredThresholdRun() throws Exception {
+        PUnit.testing(sampling("demo-declared", 60, Integer.MAX_VALUE, Criteria.meeting().passRate(0.9)))
+                .assertPasses();
+
+        String xml = java.nio.file.Files.readString(
+                DEMO_DIR.resolve("xml/demo-declared.demo-declared.xml"));
+        assertThat(xml)
+                .contains("key=\"sizing-approach\" value=\"threshold-first\"")
+                .doesNotContain("sizing-detectable-rate");
+    }
+
+    @Test
+    @Order(4)
+    @DisplayName("the HTML report renders the run-design block from the emitted XML")
+    void renderReport() throws Exception {
+        new ReportGenerator().generate(DEMO_DIR.resolve("xml"), DEMO_DIR.resolve("html"));
+        String html = java.nio.file.Files.readString(DEMO_DIR.resolve("html/index.html"));
+        assertThat(html)
+                .contains("Run design")
+                .contains("would only catch a drop below")
+                .contains("less execution time and tokens");
+        System.out.println("report written to "
+                + DEMO_DIR.resolve("html/index.html").toAbsolutePath());
+    }
+}

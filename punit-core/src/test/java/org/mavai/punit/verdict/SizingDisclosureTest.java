@@ -1,12 +1,10 @@
 package org.mavai.punit.verdict;
 
-import java.time.Instant;
 import java.util.Map;
 
 import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
 import org.mavai.punit.statistics.StatisticalDefaults;
-import org.mavai.punit.statistics.transparent.BaselineData;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -15,16 +13,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SizingDisclosureTest {
 
-    private static final Instant GENERATED = Instant.parse("2026-07-01T00:00:00Z");
-
-    private BaselineData baseline(int samples, int successes) {
-        return new BaselineData("svc.yaml", GENERATED, samples, successes);
-    }
-
     private Map<String, String> entries(
-            ThresholdOrigin origin, int planned, BaselineData baseline, long tokens) {
+            ThresholdOrigin origin, int planned, Integer baselineSamples,
+            Double baselineRate, long tokens) {
         return SizingDisclosure.entries(
-                origin, planned, planned, 0.90, 0.95, baseline, 5000, tokens);
+                origin, planned, planned, 0.90, 0.95,
+                baselineSamples, baselineRate, 5000, tokens);
     }
 
     @Nested
@@ -34,7 +28,7 @@ class SizingDisclosureTest {
         @Test
         void empiricalOriginDisclosesSampleSizeFirstWithDeclaredParameters() {
             Map<String, String> entries =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(100, 96), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 100, 0.96, 0);
 
             assertThat(entries)
                     .containsEntry("sizing-approach", "sample-size-first")
@@ -45,7 +39,7 @@ class SizingDisclosureTest {
 
         @Test
         void declaredThresholdOriginDisclosesThresholdFirstWithTheDeclaredBar() {
-            Map<String, String> entries = entries(ThresholdOrigin.SLA, 100, null, 0);
+            Map<String, String> entries = entries(ThresholdOrigin.SLA, 100, null, null, 0);
 
             assertThat(entries)
                     .containsEntry("sizing-approach", "threshold-first")
@@ -56,7 +50,7 @@ class SizingDisclosureTest {
 
         @Test
         void absentOriginStillDisclosesTheThresholdFirstDesign() {
-            Map<String, String> entries = entries(null, 100, null, 0);
+            Map<String, String> entries = entries(null, 100, null, null, 0);
 
             assertThat(entries).containsEntry("sizing-approach", "threshold-first");
         }
@@ -69,26 +63,27 @@ class SizingDisclosureTest {
         @Test
         void appearIffTheRunWasSizedBelowTheBaselinesOwnMeasurement() {
             Map<String, String> downsized =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(1000, 960), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 0.96, 0);
             assertThat(downsized)
                     .containsKey("sizing-detectable-rate")
+                    .containsEntry("sizing-baseline-samples", "1000")
                     .containsKey("sizing-saved-fraction");
 
             Map<String, String> fullSize =
-                    entries(ThresholdOrigin.EMPIRICAL, 1000, baseline(1000, 960), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 1000, 1000, 0.96, 0);
             assertThat(fullSize)
                     .doesNotContainKey("sizing-detectable-rate")
                     .doesNotContainKey("sizing-saved-fraction");
 
             Map<String, String> baselineLess =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, null, 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, null, null, 0);
             assertThat(baselineLess).doesNotContainKey("sizing-detectable-rate");
         }
 
         @Test
         void detectableRateComesFromTheSizingCalculator() {
             Map<String, String> entries =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(1000, 960), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 0.96, 0);
 
             double disclosed = Double.parseDouble(entries.get("sizing-detectable-rate"));
             double expected = new RiskDrivenSizingCalculator().detectableRate(
@@ -102,7 +97,7 @@ class SizingDisclosureTest {
             // 100 samples over 5,000 ms and 120,000 tokens: 50 ms and 1,200
             // tokens per sample; 900 saved samples versus the baseline's 1,000.
             Map<String, String> entries =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(1000, 960), 120_000);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 0.96, 120_000);
 
             assertThat(entries)
                     .containsEntry("sizing-saved-fraction", "0.9")
@@ -113,7 +108,7 @@ class SizingDisclosureTest {
         @Test
         void tokenHalfDegradesAwayWhenNoTokensAreRecorded() {
             Map<String, String> entries =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(1000, 960), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 0.96, 0);
 
             assertThat(entries)
                     .containsKey("sizing-time-saved-ms")
@@ -123,7 +118,7 @@ class SizingDisclosureTest {
         @Test
         void aPerfectBaselineRateSuppressesTheDownsizingPair() {
             Map<String, String> entries =
-                    entries(ThresholdOrigin.EMPIRICAL, 100, baseline(1000, 1000), 0);
+                    entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 1.0, 0);
 
             assertThat(entries)
                     .containsEntry("sizing-approach", "sample-size-first")

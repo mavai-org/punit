@@ -629,6 +629,19 @@ class ProbabilisticTestVerdictBuilderTest {
         }
 
         @Test
+        void adapterSuppliedSizingBaselineFeedsTheDownsizingDisclosure() {
+            ProbabilisticTestVerdict verdict = minimalBuilder()
+                    .provenance(ThresholdOrigin.EMPIRICAL, null, "svc.yaml")
+                    .sizingBaseline(1000, 0.96)
+                    .build();
+
+            assertThat(verdict.environmentMetadata())
+                    .containsEntry("sizing-baseline-samples", "1000")
+                    .containsKey("sizing-detectable-rate")
+                    .containsEntry("sizing-saved-fraction", "0.9");
+        }
+
+        @Test
         void capturesEnvironmentMetadata() {
             ProbabilisticTestVerdict verdict = minimalBuilder()
                     .environmentMetadata(Map.of("host", "prod-01", "region", "eu-west-1"))

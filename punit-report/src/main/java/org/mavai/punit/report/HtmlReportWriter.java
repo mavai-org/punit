@@ -438,19 +438,19 @@ final class HtmlReportWriter {
     /**
      * The downsizing disclosure and its paired efficiency estimate — one
      * trade, two sides, presented together. Present iff the verdict
-     * carries the computed detectable rate and its baseline summary.
+     * carries the computed detectable rate (the baseline's sampling size
+     * travels beside it).
      */
     private static void appendSizingTrade(
             StringBuilder html, ProbabilisticTestVerdict verdict, Map<String, String> env) {
         String detectableRate = env.get("sizing-detectable-rate");
-        var baseline = verdict.statistics().baseline();
-        if (detectableRate == null || baseline.isEmpty()) {
+        String baselineSamples = env.get("sizing-baseline-samples");
+        if (detectableRate == null || baselineSamples == null) {
             return;
         }
         int planned = verdict.execution().plannedSamples();
-        int baselineSamples = baseline.get().baselineSamples();
         html.append("<p>This test was sized at ").append(planned)
-                .append(" samples against a baseline measured over ").append(baselineSamples)
+                .append(" samples against a baseline measured over ").append(escape(baselineSamples))
                 .append(". With ").append(planned)
                 .append(" samples, this test would only catch a drop below ")
                 .append(percent(detectableRate)).append(' ')
@@ -460,7 +460,7 @@ final class HtmlReportWriter {
         String timeSavedMs = env.get("sizing-time-saved-ms");
         String tokensSaved = env.get("sizing-tokens-saved");
         html.append("<p>Estimated saving versus a run at the baseline's ")
-                .append(baselineSamples).append(" samples: about ")
+                .append(escape(baselineSamples)).append(" samples: about ")
                 .append(percent(savedFraction));
         if (tokensSaved != null) {
             html.append(" less execution time and tokens (roughly ")
