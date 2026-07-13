@@ -95,6 +95,8 @@ public class ProbabilisticTestVerdictBuilder {
 
     // ── Baseline ──────────────────────────────────────────────────────────
     private BaselineData baseline;
+    private Integer sizingBaselineSamples;
+    private Double sizingBaselineRate;
 
     // ── Termination ───────────────────────────────────────────────────────
     private TerminationReason terminationReason = TerminationReason.COMPLETED;
@@ -246,6 +248,19 @@ public class ProbabilisticTestVerdictBuilder {
         return this;
     }
 
+    /**
+     * The resolved baseline's sampling size and effective rate, for the
+     * sizing-transparency disclosures. Set by the adapter from the
+     * criterion's derivation detail on paths that carry no full
+     * {@link BaselineData}; when {@link #baseline(BaselineData)} is also
+     * set, the full baseline wins.
+     */
+    public ProbabilisticTestVerdictBuilder sizingBaseline(int baselineSamples, double baselineRate) {
+        this.sizingBaselineSamples = baselineSamples;
+        this.sizingBaselineRate = baselineRate;
+        return this;
+    }
+
     public ProbabilisticTestVerdictBuilder baseline(BaselineData baseline) {
         this.baseline = baseline;
         return this;
@@ -340,15 +355,38 @@ public class ProbabilisticTestVerdictBuilder {
         Termination termination = buildTermination();
         PUnitVerdict punitVerdict = derivePUnitVerdict(covariates);
         String verdictReason = deriveVerdictReason(punitVerdict, covariates);
+        Map<String, String> environment = environmentWithSizingDisclosure();
 
         return new ProbabilisticTestVerdict(
                 id, Instant.now(),
                 identity, execution, functional, latency, statistics,
                 covariates, cost, pacing, provenance, termination,
-                environmentMetadata, junitPassed, punitVerdict, verdictReason,
+                environment, junitPassed, punitVerdict, verdictReason,
                 postconditionFailures,
                 perCriterion
         );
+    }
+
+    /**
+     * The verdict's environment entries: the caller-supplied metadata plus
+     * the sizing-transparency facts the report's run-design block renders —
+     * computed here, formatted there. The facts ride the schema's free-form
+     * environment entries, so the verdict XML schema is unchanged.
+     */
+    private Map<String, String> environmentWithSizingDisclosure() {
+        Integer baselineSamples = sizingBaselineSamples;
+        Double baselineRate = sizingBaselineRate;
+        if (baseline != null && baseline.hasEmpiricalData()) {
+            baselineSamples = baseline.baselineSamples();
+            baselineRate = baseline.baselineRate();
+        }
+        Map<String, String> environment =
+                new java.util.LinkedHashMap<>(environmentMetadata);
+        environment.putAll(SizingDisclosure.entries(
+                thresholdOrigin, plannedSamples, samplesExecuted, minPassRate,
+                resolvedConfidence, baselineSamples, baselineRate,
+                elapsedMs, methodTokensConsumed));
+        return java.util.Collections.unmodifiableMap(environment);
     }
 
     private static String newCorrelationId() {

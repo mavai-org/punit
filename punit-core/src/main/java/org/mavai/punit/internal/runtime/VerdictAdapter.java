@@ -156,6 +156,17 @@ public final class VerdictAdapter {
                     engine.baselineFilename().orElse(null));
         }
 
+        // The resolved baseline's size and rate, published on the empirical
+        // criterion's derivation detail — the sizing-transparency
+        // disclosures compare the run's size against them.
+        java.util.Optional<Double> baselineSamples =
+                scanDoubleDetail(result.criterionResults(), "baselineSampleCount");
+        java.util.Optional<Double> baselineRate =
+                scanDoubleDetail(result.criterionResults(), "baselineRate");
+        if (baselineSamples.isPresent() && baselineRate.isPresent()) {
+            b.sizingBaseline((int) Math.round(baselineSamples.get()), baselineRate.get());
+        }
+
         // Termination
         b.termination(
                 mapTerminationReason(engine.terminationReason()),

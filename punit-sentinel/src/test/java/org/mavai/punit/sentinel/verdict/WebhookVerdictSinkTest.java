@@ -134,8 +134,34 @@ class WebhookVerdictSinkTest {
         @Test
         @DisplayName("handles empty environment metadata")
         void handlesEmptyMetadata() {
-            var verdict = new ProbabilisticTestVerdictBuilder()
+            // Builder-produced verdicts always carry the sizing-disclosure
+            // entries, so the empty-map JSON shape is exercised on a record
+            // stripped back to no environment entries at all.
+            ProbabilisticTestVerdict built = new ProbabilisticTestVerdictBuilder()
                     .correlationId("v:empty1")
+                    .identity("TestClass", "test", "uc")
+                    .execution(100, 100, 95, 5, 0.9, 0.95, 1000)
+                    .junitPassed(true)
+                    .criterionVerdict(Verdict.PASS)
+                    .build();
+            ProbabilisticTestVerdict verdict = new ProbabilisticTestVerdict(
+                    built.correlationId(), built.timestamp(), built.identity(),
+                    built.execution(), built.functional(), built.latency(),
+                    built.statistics(), built.covariates(), built.cost(),
+                    built.pacing(), built.provenance(), built.termination(),
+                    Map.of(), built.junitPassed(), built.punitVerdict(),
+                    built.verdictReason(), built.postconditionFailures(),
+                    built.perCriterion());
+            String json = WebhookVerdictSink.toJson(verdict);
+
+            assertThat(json).contains("\"environmentMetadata\":{}");
+        }
+
+        @Test
+        @DisplayName("serialises the builder's sizing-disclosure entries")
+        void serialisesSizingDisclosureEntries() {
+            var verdict = new ProbabilisticTestVerdictBuilder()
+                    .correlationId("v:sizing1")
                     .identity("TestClass", "test", "uc")
                     .execution(100, 100, 95, 5, 0.9, 0.95, 1000)
                     .junitPassed(true)
@@ -143,7 +169,7 @@ class WebhookVerdictSinkTest {
                     .build();
             String json = WebhookVerdictSink.toJson(verdict);
 
-            assertThat(json).contains("\"environmentMetadata\":{}");
+            assertThat(json).contains("\"sizing-approach\":\"threshold-first\"");
         }
     }
 }
