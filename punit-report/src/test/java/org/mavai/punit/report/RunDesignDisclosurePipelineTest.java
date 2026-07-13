@@ -76,6 +76,7 @@ class RunDesignDisclosurePipelineTest {
     /** An empirical pass-rate criterion that judges the invocation output. */
     private static Criteria<Boolean> judgedPassRate() {
         return Criteria.empirical().<Boolean>passRate()
+                .name("accuracy")
                 .satisfies("output is true", out ->
                         out ? Outcome.ok(out) : Outcome.fail("demo", "scripted failure"));
     }
@@ -119,7 +120,7 @@ class RunDesignDisclosurePipelineTest {
     @Order(3)
     @DisplayName("a declared-threshold run's verdict XML discloses the approach alone")
     void declaredThresholdRun() throws Exception {
-        PUnit.testing(sampling("demo-declared", 60, Integer.MAX_VALUE, Criteria.meeting().passRate(0.9)))
+        PUnit.testing(sampling("demo-declared", 60, Integer.MAX_VALUE, Criteria.meeting().<Boolean>passRate(0.9).name("stipulated accuracy")))
                 .assertPasses();
 
         String xml = java.nio.file.Files.readString(
