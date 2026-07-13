@@ -22,22 +22,22 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 /**
- * Hands-on demo of the report's run-design disclosures. Not part of the
- * regression suite — a scratch driver to eyeball the rendered HTML.
+ * The run-design disclosures through the full production pipeline:
+ * {@code PUnit.testing(...)} → verdict adapter → XML sink → report
+ * generator. Measures a baseline over 200 samples at a 96% criterion
+ * rate, runs a downsized empirical test (80 samples, token costs
+ * recorded: the full sizing trade) and a declared-threshold test
+ * (approach disclosure alone), then renders the HTML report from the
+ * emitted verdict XML. Each run is its own ordered test method so each
+ * verdict lands in its own XML file.
  *
- * <p>Measures a baseline over 200 samples at a 96% rate, runs a downsized
- * empirical test (50 samples, token costs recorded: the full sizing
- * trade) and a declared-threshold test (approach disclosure alone), then
- * renders the HTML report from the emitted verdict XML. Each run is its
- * own test method so each verdict lands in its own XML file.
- *
- * <p>Run with
- * {@code ./gradlew :punit-report:test --tests RunDesignReportDemo}
+ * <p>Doubles as a hands-on demo: run with
+ * {@code ./gradlew :punit-report:test --tests RunDesignDisclosurePipelineTest}
  * and open {@code punit-report/build/run-design-demo/html/index.html}.
  */
-@DisplayName("Run-design report demo (scratch, not a regression test)")
+@DisplayName("Run-design disclosures through the production pipeline")
 @TestMethodOrder(OrderAnnotation.class)
-class RunDesignReportDemo {
+class RunDesignDisclosurePipelineTest {
 
     private static final Path DEMO_DIR = Path.of("build/run-design-demo");
 
