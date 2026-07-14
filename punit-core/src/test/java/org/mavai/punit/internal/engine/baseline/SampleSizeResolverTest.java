@@ -1,6 +1,7 @@
 package org.mavai.punit.internal.engine.baseline;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -141,6 +142,93 @@ class SampleSizeResolverTest {
         assertThat(resolution.declared()).isEqualTo(100);
         assertThat(resolution.effective()).isEqualTo(100);
         assertThat(resolution.drivenBy()).isEmpty();
+    }
+
+    private static ServiceContract<Factors, String, String> contractWithTolerance(
+            double tolerated) {
+        return new ServiceContract<>() {
+            @Override public String id() { return CONTRACT_ID; }
+            @Override public Outcome<String> invoke(String input, TokenTracker t) {
+                return Outcome.ok(input);
+            }
+            @Override public Criteria<String> criteria() {
+                return empirical().<String>passRate()
+                        .name("the-criterion")
+                        .tolerating(tolerated)
+                        .satisfies("always", v -> Outcome.ok());
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("risk-driven: a declared tolerance prices the count self-consistently and uplifts")
+    void riskDrivenTolerancePricesTheCount(@TempDir Path dir) throws IOException {
+        writeBaseline(dir, 0.96, 1000);
+        var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
+
+        var resolution = SampleSizeResolver.resolve(
+                contractWithTolerance(0.93),
+                FactorBundle.of(FACTORS),
+                provider,
+                100);
+
+        // The oracle-locked pricing for (0.96, 0.93, 0.95, 0.80).
+        int expected = new org.mavai.punit.statistics.RiskDrivenSizingCalculator()
+                .requiredSamples(0.96, 0.93, 0.95, 0.80);
+        assertThat(resolution.effective()).isEqualTo(expected);
+        assertThat(resolution.drivenBy()).contains("the-criterion");
+        assertThat(resolution.wasUplifted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("risk-driven: over-reach is refused naming the criterion and the re-measure remedy")
+    void riskDrivenOverReachIsRefused(@TempDir Path dir) throws IOException {
+        writeBaseline(dir, 0.96, 1000);
+        var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
+
+        assertThatThrownBy(() -> SampleSizeResolver.resolve(
+                contractWithTolerance(0.97),
+                FactorBundle.of(FACTORS),
+                provider,
+                100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("criterion 'the-criterion'")
+                .hasMessageContaining("re-measure the baseline");
+    }
+
+    @Test
+    @DisplayName("risk-driven: a requirement the baseline cannot ground is refused in sizing terms")
+    void riskDrivenRequirementBeyondBaselineIsRefused(@TempDir Path dir) throws IOException {
+        // (0.96, 0.93) prices to ~hundreds of samples; a 200-sample
+        // baseline cannot ground that test.
+        writeBaseline(dir, 0.96, 200);
+        var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
+
+        assertThatThrownBy(() -> SampleSizeResolver.resolve(
+                contractWithTolerance(0.93),
+                FactorBundle.of(FACTORS),
+                provider,
+                100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requires")
+                .hasMessageContaining("measured over only 200")
+                .hasMessageContaining("Re-measure the baseline with at least");
+    }
+
+    @Test
+    @DisplayName("risk-driven: the declared count stays a floor when it exceeds the requirement")
+    void riskDrivenDeclaredCountRemainsAFloor(@TempDir Path dir) throws IOException {
+        writeBaseline(dir, 0.96, 1000);
+        var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
+
+        var resolution = SampleSizeResolver.resolve(
+                contractWithTolerance(0.85),
+                FactorBundle.of(FACTORS),
+                provider,
+                900);
+
+        assertThat(resolution.effective()).isEqualTo(900);
+        assertThat(resolution.wasUplifted()).isFalse();
     }
 
     @Test

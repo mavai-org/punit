@@ -167,6 +167,14 @@ public final class VerdictAdapter {
             b.sizingBaseline((int) Math.round(baselineSamples.get()), baselineRate.get());
         }
 
+        // The run's declared sizing, published on the criterion detail —
+        // the disclosure names the operational approach from the
+        // configuration, never inferred from the threshold origin alone.
+        b.sizingDeclaration(
+                scanDoubleDetail(result.criterionResults(), "toleratedRate").orElse(null),
+                scanDoubleDetail(result.criterionResults(), "declaredMde").orElse(null),
+                scanDoubleDetail(result.criterionResults(), "declaredPower").orElse(null));
+
         // Termination
         b.termination(
                 mapTerminationReason(engine.terminationReason()),

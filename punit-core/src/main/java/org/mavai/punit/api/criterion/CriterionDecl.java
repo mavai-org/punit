@@ -215,10 +215,27 @@ public final class CriterionDecl<O> implements Decl<O> {
     /**
      * Declare the statistical power — probability of detecting a true
      * regression of size MDE. Composes only with {@code empirical()};
-     * must be paired with {@link #detectingMde(double)}.
+     * must be paired with {@link #detectingMde(double)} or
+     * {@link #tolerating(double)}.
      */
     public CriterionDecl<O> atPower(double power) {
         return new CriterionDecl<>(posture.withPower(power), postconditions, name);
+    }
+
+    /**
+     * Declare the worst true rate this criterion tolerates — an
+     * <em>absolute</em> bound, not a drop off the baseline. The
+     * framework computes the sample count that catches a genuine
+     * breach of the tolerance, priced self-consistently against the
+     * acceptance floor the run derives at its own size; the author's
+     * declared sample count remains a floor. Composes only with
+     * {@code empirical()}; mutually exclusive with
+     * {@link #detectingMde(double)}. Pair with
+     * {@link #atPower(double)} and {@link #atConfidence(double)} to
+     * override the framework defaults (0.80 and 0.95).
+     */
+    public CriterionDecl<O> tolerating(double rate) {
+        return new CriterionDecl<>(posture.withToleratedRate(rate), postconditions, name);
     }
 
     /**

@@ -614,6 +614,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             CriterionPosture onlyPosture = ctx.criterionPostures().getOrDefault(
                     only.criterionId(), CriterionPosture.implicit());
             onlyPosture.contractRef().ifPresent(ref -> detail.put("contractRef", ref));
+            publishSizingDeclaration(detail, onlyPosture);
         } else {
             detail.put("origin", resolvedOrigin.name());
             detail.put("total", total);
@@ -624,6 +625,17 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             }
             detail.put("thresholdsByCriterion", Map.copyOf(thresholdsByCriterion));
             detail.put("observedByCriterion", Map.copyOf(observedByCriterion));
+            // The run-level sizing declaration: the first criterion that
+            // declared one. Per-criterion claim disclosure is the family's
+            // later refinement; one declaring criterion is today's shape.
+            for (CriterionSampleCounts counts : methodologyCriteria) {
+                CriterionPosture p = ctx.criterionPostures().getOrDefault(
+                        counts.criterionId(), CriterionPosture.implicit());
+                if (p.isRiskDriven() || p.isConfidenceFirst()) {
+                    publishSizingDeclaration(detail, p);
+                    break;
+                }
+            }
             if (!wilsonLowerByCriterion.isEmpty()) {
                 detail.put("wilsonLowerByCriterion", Map.copyOf(wilsonLowerByCriterion));
             }
@@ -665,4 +677,18 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     private CriterionResult inconclusive(String reason, Map<String, Object> detail) {
         return new CriterionResult(NAME, Verdict.INCONCLUSIVE, reason, detail);
     }
+    /**
+     * Publishes the criterion's declared sizing facts — the absolute
+     * tolerated rate, or the relative detectable effect, with the
+     * declared power — so the verdict path can name the run's
+     * operational approach from its configuration rather than
+     * inferring it from the threshold origin.
+     */
+    private static void publishSizingDeclaration(
+            Map<String, Object> detail, CriterionPosture posture) {
+        posture.toleratedRate().ifPresent(rate -> detail.put("toleratedRate", rate));
+        posture.mde().ifPresent(m -> detail.put("declaredMde", m));
+        posture.power().ifPresent(pw -> detail.put("declaredPower", pw));
+    }
+
 }

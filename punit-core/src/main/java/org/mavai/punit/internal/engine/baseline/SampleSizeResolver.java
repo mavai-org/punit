@@ -13,17 +13,21 @@ import org.mavai.punit.api.spec.BaselineProvider;
 import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
+import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
 import org.mavai.punit.statistics.SampleSizeCalculator;
+import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
  * Resolves the *effective* sample count for a run by composing the
- * author-declared sample count with any confidence-first criterion's
- * power-analysis floor. The directive's silent-uplift rule:
+ * author-declared sample count with the confidence-first criteria's
+ * computed floors — the closed-form power analysis for a declared
+ * detectable effect, or the self-consistent risk-driven pricing for a
+ * declared absolute tolerance. The silent-uplift rule:
  *
  * <pre>
  * N_effective = max(
  *     declared,
- *     max over confidence-first criteria of PowerAnalysis(baseline, mde, power)
+ *     max over sizing criteria of their computed requirement
  * )
  * </pre>
  *
@@ -35,6 +39,8 @@ public final class SampleSizeResolver {
 
     private static final double DEFAULT_CONFIDENCE = 0.95;
     private static final SampleSizeCalculator CALCULATOR = new SampleSizeCalculator();
+    private static final RiskDrivenSizingCalculator RISK_CALCULATOR =
+            new RiskDrivenSizingCalculator();
 
     private SampleSizeResolver() { }
 
@@ -74,10 +80,10 @@ public final class SampleSizeResolver {
             int declaredSamples) {
 
         List<? extends Criterion<OT>> criteria = contract.effectiveCriteria();
-        List<? extends Criterion<OT>> confidenceFirst = criteria.stream()
-                .filter(c -> c.posture().isConfidenceFirst())
+        List<? extends Criterion<OT>> sizing = criteria.stream()
+                .filter(c -> c.posture().isConfidenceFirst() || c.posture().isRiskDriven())
                 .toList();
-        if (confidenceFirst.isEmpty()) {
+        if (sizing.isEmpty()) {
             return new Resolution(declaredSamples, declaredSamples, Optional.empty());
         }
 
@@ -103,10 +109,8 @@ public final class SampleSizeResolver {
 
         int maxRequired = declaredSamples;
         String drivenBy = null;
-        for (Criterion<OT> c : confidenceFirst) {
+        for (Criterion<OT> c : sizing) {
             CriterionPosture posture = c.posture();
-            double mde = posture.mde().getAsDouble();
-            double power = posture.power().getAsDouble();
             double confidence = posture.confidenceFloor().orElse(DEFAULT_CONFIDENCE);
             PassRateStatistics stats = baseline.get().byCriterion().get(c.id());
             if (stats == null && baseline.get().byCriterion().size() == 1) {
@@ -119,14 +123,21 @@ public final class SampleSizeResolver {
                 continue;
             }
             double baselineRate = stats.observedPassRate();
-            if (baselineRate - mde <= 0.0) {
-                // Defer to the verdict path's own diagnostic on
-                // alternative-hypothesis-rate ≤ 0.
-                continue;
+            int required;
+            if (posture.isRiskDriven()) {
+                required = riskDrivenRequirement(c.id(), posture, baselineRate, confidence, stats);
+            } else {
+                double mde = posture.mde().getAsDouble();
+                double power = posture.power().getAsDouble();
+                if (baselineRate - mde <= 0.0) {
+                    // Defer to the verdict path's own diagnostic on
+                    // alternative-hypothesis-rate ≤ 0.
+                    continue;
+                }
+                required = CALCULATOR
+                        .calculateForPower(baselineRate, mde, confidence, power)
+                        .requiredSamples();
             }
-            int required = CALCULATOR
-                    .calculateForPower(baselineRate, mde, confidence, power)
-                    .requiredSamples();
             if (required > maxRequired) {
                 maxRequired = required;
                 drivenBy = c.id();
@@ -136,5 +147,44 @@ public final class SampleSizeResolver {
             return new Resolution(declaredSamples, declaredSamples, Optional.empty());
         }
         return new Resolution(declaredSamples, maxRequired, Optional.of(drivenBy));
+    }
+
+    /**
+     * The self-consistently priced sample count for a risk-driven
+     * criterion, with the two pre-flight refusals stated in sizing
+     * terms rather than left to generic diagnostics downstream:
+     * over-reach (the tolerance does not sit strictly below the
+     * criterion's baseline rate) and a requirement the baseline's own
+     * measurement cannot ground.
+     */
+    private static int riskDrivenRequirement(
+            String criterionId,
+            CriterionPosture posture,
+            double baselineRate,
+            double confidence,
+            PassRateStatistics stats) {
+        double tolerated = posture.toleratedRate().getAsDouble();
+        double power = posture.power().orElse(StatisticalDefaults.DEFAULT_TARGET_POWER);
+        if (tolerated >= baselineRate) {
+            throw new IllegalStateException(String.format(
+                    "risk-driven sizing is undefined for criterion '%s': the tolerated "
+                            + "rate (%s) must sit strictly below the criterion's baseline "
+                            + "rate (%s). The tolerance declares how far below the measured "
+                            + "baseline a true rate may drop; to demand more than the "
+                            + "baseline delivered, re-measure the baseline rather than "
+                            + "raising the tolerance.",
+                    criterionId, tolerated, baselineRate));
+        }
+        int required = RISK_CALCULATOR.requiredSamples(
+                baselineRate, tolerated, confidence, power);
+        if (required > stats.sampleCount()) {
+            throw new IllegalStateException(String.format(
+                    "risk-driven sizing for criterion '%s' requires %d samples, but the "
+                            + "baseline was measured over only %d — a baseline must be at "
+                            + "least as rigorous as the test it grounds. Re-measure the "
+                            + "baseline with at least %d samples, or relax the tolerance.",
+                    criterionId, required, stats.sampleCount(), required));
+        }
+        return required;
     }
 }

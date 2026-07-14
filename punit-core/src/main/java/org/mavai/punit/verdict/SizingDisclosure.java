@@ -36,6 +36,11 @@ final class SizingDisclosure {
     static final String DECLARED_SAMPLES_KEY = "sizing-declared-samples";
     static final String DECLARED_CONFIDENCE_KEY = "sizing-declared-confidence";
     static final String DECLARED_MIN_PASS_RATE_KEY = "sizing-declared-min-pass-rate";
+    static final String TOLERATED_RATE_KEY = "sizing-tolerated-rate";
+    static final String DECLARED_EFFECT_KEY = "sizing-declared-min-detectable-effect";
+    static final String DECLARED_POWER_KEY = "sizing-declared-power";
+    static final String COMPUTED_SAMPLES_KEY = "sizing-computed-samples";
+    static final String SIZED_SAMPLES_KEY = "sizing-sized-samples";
     static final String BASELINE_SAMPLES_KEY = "sizing-baseline-samples";
     static final String DETECTABLE_RATE_KEY = "sizing-detectable-rate";
     static final String DETECTABLE_POWER_KEY = "sizing-detectable-power";
@@ -52,14 +57,21 @@ final class SizingDisclosure {
     /**
      * Computes the sizing-transparency entries one verdict carries.
      *
-     * <p>An empirical threshold origin marks the sample-size-first
-     * approach (the run declared its sample count and confidence; the
-     * acceptance bar was derived at that size); any other origin —
-     * including none — marks threshold-first (the run declared its bar
-     * outright). The confidence-first (risk-driven) arm is disclosed by
-     * the authoring surface that declares it, not inferred here.
+     * <p>The operational approach is named from the run's configuration:
+     * a declared absolute tolerance marks the confidence-first approach's
+     * risk-driven form; a declared minimum detectable effect marks its
+     * closed form. With neither declared, an empirical threshold origin
+     * marks sample-size-first (the run declared its sample count and
+     * confidence; the acceptance bar was derived at that size) and any
+     * other origin — including none — marks threshold-first (the run
+     * declared its bar outright). The downsizing sensitivity statement
+     * is made at the declared power when the run carried one, else at
+     * the framework default.
      *
      * @param thresholdOrigin where the run's threshold came from; may be null
+     * @param toleratedRate the declared worst tolerable rate, or null
+     * @param declaredMde the declared minimum detectable effect, or null
+     * @param declaredPower the declared target power, or null
      * @param plannedSamples the sample count the run was sized at
      * @param samplesExecuted the sample count actually executed
      * @param minPassRate the run's acceptance threshold
@@ -74,6 +86,9 @@ final class SizingDisclosure {
      */
     static Map<String, String> entries(
             ThresholdOrigin thresholdOrigin,
+            Double toleratedRate,
+            Double declaredMde,
+            Double declaredPower,
             int plannedSamples,
             int samplesExecuted,
             double minPassRate,
@@ -84,24 +99,46 @@ final class SizingDisclosure {
             long tokensConsumed) {
         Map<String, String> entries = new LinkedHashMap<>();
 
-        boolean sampleSizeFirst = thresholdOrigin == ThresholdOrigin.EMPIRICAL;
-        entries.put(APPROACH_KEY, sampleSizeFirst ? "sample-size-first" : "threshold-first");
-        entries.put(DECLARED_SAMPLES_KEY, Integer.toString(plannedSamples));
-        if (sampleSizeFirst) {
+        // The count the run was *sized* at. The record's planned count is
+        // the author's declared floor; a computed requirement (the silent
+        // uplift) surfaces only as an executed count above it, so the
+        // sized count is the larger of the two.
+        int sizedSamples = Math.max(plannedSamples, samplesExecuted);
+        double power = declaredPower != null
+                ? declaredPower
+                : StatisticalDefaults.DEFAULT_TARGET_POWER;
+        if (toleratedRate != null) {
+            entries.put(APPROACH_KEY, "confidence-first (risk-driven)");
+            entries.put(TOLERATED_RATE_KEY, Double.toString(toleratedRate));
+            entries.put(DECLARED_CONFIDENCE_KEY, Double.toString(resolvedConfidence));
+            entries.put(DECLARED_POWER_KEY, Double.toString(power));
+            entries.put(COMPUTED_SAMPLES_KEY, Integer.toString(sizedSamples));
+        } else if (declaredMde != null) {
+            entries.put(APPROACH_KEY, "confidence-first");
+            entries.put(DECLARED_EFFECT_KEY, Double.toString(declaredMde));
+            entries.put(DECLARED_CONFIDENCE_KEY, Double.toString(resolvedConfidence));
+            entries.put(DECLARED_POWER_KEY, Double.toString(power));
+            entries.put(COMPUTED_SAMPLES_KEY, Integer.toString(sizedSamples));
+        } else if (thresholdOrigin == ThresholdOrigin.EMPIRICAL) {
+            entries.put(APPROACH_KEY, "sample-size-first");
+            entries.put(DECLARED_SAMPLES_KEY, Integer.toString(plannedSamples));
             entries.put(DECLARED_CONFIDENCE_KEY, Double.toString(resolvedConfidence));
         } else {
+            entries.put(APPROACH_KEY, "threshold-first");
+            entries.put(DECLARED_SAMPLES_KEY, Integer.toString(plannedSamples));
             entries.put(DECLARED_MIN_PASS_RATE_KEY, Double.toString(minPassRate));
         }
 
-        if (downsized(plannedSamples, baselineSamples, baselineRate) && samplesExecuted > 0) {
-            double targetPower = StatisticalDefaults.DEFAULT_TARGET_POWER;
+        if (downsized(sizedSamples, baselineSamples, baselineRate) && samplesExecuted > 0) {
+            double targetPower = power;
             double detectableRate = SIZING_CALCULATOR.detectableRate(
-                    plannedSamples, baselineRate, resolvedConfidence, targetPower);
+                    sizedSamples, baselineRate, resolvedConfidence, targetPower);
+            entries.put(SIZED_SAMPLES_KEY, Integer.toString(sizedSamples));
             entries.put(BASELINE_SAMPLES_KEY, Integer.toString(baselineSamples));
             entries.put(DETECTABLE_RATE_KEY, Double.toString(detectableRate));
             entries.put(DETECTABLE_POWER_KEY, Double.toString(targetPower));
 
-            int savedSamples = baselineSamples - plannedSamples;
+            int savedSamples = baselineSamples - sizedSamples;
             double savedFraction = (double) savedSamples / baselineSamples;
             entries.put(SAVED_FRACTION_KEY, Double.toString(savedFraction));
             long timeSavedMs = Math.round(

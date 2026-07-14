@@ -445,13 +445,13 @@ final class HtmlReportWriter {
             StringBuilder html, ProbabilisticTestVerdict verdict, Map<String, String> env) {
         String detectableRate = env.get("sizing-detectable-rate");
         String baselineSamples = env.get("sizing-baseline-samples");
-        if (detectableRate == null || baselineSamples == null) {
+        String sizedSamples = env.get("sizing-sized-samples");
+        if (detectableRate == null || baselineSamples == null || sizedSamples == null) {
             return;
         }
-        int planned = verdict.execution().plannedSamples();
-        html.append("<p>This test was sized at ").append(planned)
+        html.append("<p>This test was sized at ").append(escape(sizedSamples))
                 .append(" samples against a baseline measured over ").append(escape(baselineSamples))
-                .append(". With ").append(planned)
+                .append(". With ").append(escape(sizedSamples))
                 .append(" samples, this test would only catch a drop below ")
                 .append(percent(detectableRate)).append(' ')
                 .append(powerPhrase(env.get("sizing-detectable-power"))).append(".</p>\n");
