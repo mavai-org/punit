@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mavai-org/mavai-R/schema/mavai-explore-1.schema.json",
+  "title": "mavai exploration interchange artefact",
+  "description": "One document per explored experiment configuration: the configuration's identity and the descriptive results its run observed. Framework-neutral: emitted by any mavai-family framework, consumed by shared tooling such as the report renderer. This schema is the machine-checkable structural projection of the canonical format specification; it validates the parsed data model of the YAML document. Statistics are stated by the emitter (percentiles value-or-absent under the emitter's own minimum-sample gate) — consumers never derive them. Additive evolution: emitters may add fields anywhere; consumers ignore what they do not know.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "serviceContractId",
+    "configuration",
+    "generatedAt",
+    "execution",
+    "statistics"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "const": "mavai-explore-1",
+      "description": "Schema identity. Consumers skip documents carrying any other value."
+    },
+    "serviceContractId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The explored service contract's stable identity. Groups configurations into one comparison."
+    },
+    "experimentId": {
+      "type": "string",
+      "description": "Informational: the experiment run this document belongs to."
+    },
+    "configuration": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The configuration's display name. Cross-document identity for consumers; filenames are never parsed."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of emission."
+    },
+    "factors": {
+      "type": "object",
+      "description": "The configuration's factor values, keyed by factor name. May be absent for a single-configuration exploration with no varied factors.",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["samplesPlanned", "samplesExecuted", "terminationReason"],
+      "additionalProperties": true,
+      "properties": {
+        "samplesPlanned": { "type": "integer", "minimum": 0 },
+        "samplesExecuted": { "type": "integer", "minimum": 0 },
+        "terminationReason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the run ended. Consumers flag anything other than COMPLETED."
+        }
+      }
+    },
+    "statistics": { "$ref": "#/$defs/statistics" },
+    "cost": { "$ref": "#/$defs/cost" },
+    "latency": { "$ref": "#/$defs/latency" },
+    "resultProjection": {
+      "description": "Informational per-sample detail, emitter-formatted. Consumers must not require it."
+    }
+  },
+  "$defs": {
+    "statistics": {
+      "type": "object",
+      "required": ["observed", "successes", "failures", "criteria"],
+      "additionalProperties": true,
+      "properties": {
+        "observed": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overall observed pass rate (successes / executed)."
+        },
+        "successes": { "type": "integer", "minimum": 0 },
+        "failures": { "type": "integer", "minimum": 0 },
+        "failureDistribution": { "$ref": "#/$defs/failureDistribution" },
+        "criteria": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "One entry per declared criterion, keyed by criterion name — including the single-criterion case.",
+          "additionalProperties": { "$ref": "#/$defs/criterion" }
+        }
+      },
+      "if": {
+        "properties": { "failures": { "exclusiveMinimum": 0 } },
+        "required": ["failures"]
+      },
+      "then": {
+        "required": ["failureDistribution"]
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": ["observedPassRate", "pass", "fail"],
+      "additionalProperties": true,
+      "properties": {
+        "observedPassRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "fail": { "type": "integer", "minimum": 0 },
+        "failureDistribution": { "$ref": "#/$defs/failureDistribution" }
+      }
+    },
+    "failureDistribution": {
+      "type": "object",
+      "description": "Failure counts keyed by violating check name.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "cost": {
+      "type": "object",
+      "description": "Informational wall-clock and token totals/averages.",
+      "additionalProperties": true,
+      "properties": {
+        "totalTimeMs": { "type": "integer", "minimum": 0 },
+        "avgTimePerSampleMs": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "avgTokensPerSample": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "description": "Absent as a whole when no sample passed. Percentiles are STATED value-or-absent: an absent key means 'not stateable at this sample count under the emitter's gate', never zero.",
+      "required": ["basis", "contributingSamples", "totalSamples", "sortedPassingLatenciesMs"],
+      "additionalProperties": true,
+      "properties": {
+        "basis": { "const": "passing-samples" },
+        "contributingSamples": { "type": "integer", "minimum": 1 },
+        "totalSamples": { "type": "integer", "minimum": 1 },
+        "p50Ms": { "type": "number", "minimum": 0 },
+        "p95Ms": { "type": "number", "minimum": 0 },
+        "p99Ms": { "type": "number", "minimum": 0 },
+        "sortedPassingLatenciesMs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number", "minimum": 0 },
+          "description": "Recorded passing-trial durations, milliseconds, ascending. For shape-only consumption."
+        }
+      }
+    }
+  }
+}

@@ -21,8 +21,9 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * Serialises a completed OPTIMIZE run's history to the
- * optimize-output YAML schema. Pure — performs no I/O. The
+ * Serialises a completed OPTIMIZE run's history to the mavai
+ * family's canonical optimize interchange schema. Pure — performs
+ * no I/O. The
  * {@link org.mavai.punit.internal.runtime.OptimizeEmitter OPTIMIZE emitter}
  * orchestrates persistence (writing to disk or to an in-memory sink
  * for tests).
@@ -36,7 +37,7 @@ import org.yaml.snakeyaml.Yaml;
 public final class OptimizeOutputWriter {
 
     /** Schema-version value carried in every emitted file. */
-    public static final String SCHEMA_VERSION = "punit-spec-1";
+    public static final String SCHEMA_VERSION = "mavai-optimize-1";
 
     /**
      * Build the optimize-output YAML for one optimize run. Pure —
@@ -57,7 +58,7 @@ public final class OptimizeOutputWriter {
      *                          {@code NO_IMPROVEMENT},
      *                          {@code STEPPER_STOP}, or another
      *                          framework-recognised value)
-     * @return YAML matching the canonical optimize-output schema
+     * @return YAML matching the canonical optimize interchange schema
      */
     public String writeYaml(
             String serviceContractId,
@@ -70,7 +71,7 @@ public final class OptimizeOutputWriter {
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
-        root.put("useCaseId", serviceContractId);
+        root.put("serviceContractId", serviceContractId);
         root.put("experimentId", experimentId);
         root.put("objective", objective);
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
@@ -154,7 +155,11 @@ public final class OptimizeOutputWriter {
             }
         }
         block.put("failureDistribution", failureDistribution);
-        if (iterSummary != null && !iterSummary.criterionSampleCounts().isEmpty()) {
+        // Per-criterion decomposition — required by the interchange
+        // schema, one entry per declared criterion (including the
+        // single-criterion case). conditionFail / transformFail are
+        // permitted informational extras beyond the canonical fields.
+        if (iterSummary != null) {
             Map<String, Object> criteria = new LinkedHashMap<>();
             for (CriterionSampleCounts c : iterSummary.criterionSampleCounts()) {
                 Map<String, Object> row = new LinkedHashMap<>();

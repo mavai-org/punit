@@ -55,8 +55,7 @@
          Producers emitting 1.2-shaped content do not write the
          element; permissive readers may continue to ignore it when
          encountered in 1.1-shaped content from older emitters in
-         service. See plan/directives/DIR-LEGACY-AGGREGATE-VERDICT-REMOVAL-punit.md
-         for the deprecation close-out. -->
+         service. -->
     <xs:attribute name="version"        type="xs:string"   use="required"/>
     <xs:attribute name="timestamp"      type="xs:dateTime"  use="required"/>
     <xs:attribute name="generator"      type="xs:string"    use="required"/>

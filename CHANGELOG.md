@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Canonical interchange schemas for experiment artefacts (breaking
+  for exploration and optimization outputs).** EXPLORE and OPTIMIZE
+  runs now emit the mavai family's canonical interchange formats —
+  `mavai-explore-1` (one YAML per explored configuration) and
+  `mavai-optimize-1` (one YAML per optimize run) — in place of the
+  punit-private `punit-spec-1` shape those two artefacts carried
+  before. The service identity field is now `serviceContractId`
+  (was `useCaseId`), exploration documents carry the configuration's
+  display name in a new body field `configuration` (the same
+  human-readable stem used for the filename, so consumers never
+  parse filenames), and the per-criterion `statistics.criteria`
+  decomposition is always present. The HTML comparison report
+  readers follow the new field names and schema identities, so
+  reports over newly emitted artefacts work unchanged; documents in
+  the old shape are no longer read. Baseline specs (MEASURE) and
+  verdict XML are untouched — `punit-spec-1` baselines and the spec
+  registry are unaffected. Emitted artefacts are validated in the
+  test suite against the pinned published JSON Schemas
+  (mavai-R release v0.8.6), including the semantic obligations the
+  schemas cannot express (ascending passing-latency vector,
+  floor-gated percentile statement, convergence consistency).
+
 ### Added
 
 - **Normative judgement at experiment time.** A measure experiment over

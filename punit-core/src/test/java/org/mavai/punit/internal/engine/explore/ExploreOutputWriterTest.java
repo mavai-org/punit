@@ -71,10 +71,12 @@ class ExploreOutputWriterTest {
 
         Map<String, Object> parsed = new Yaml().load(yaml);
         assertThat(parsed).containsKeys(
-                "schemaVersion", "useCaseId", "generatedAt",
+                "schemaVersion", "serviceContractId", "configuration", "generatedAt",
                 "factors", "execution", "statistics", "cost", "resultProjection");
-        assertThat(parsed).containsEntry("schemaVersion", "punit-spec-1");
-        assertThat(parsed).containsEntry("useCaseId", "LengthServiceContract");
+        assertThat(parsed).containsEntry("schemaVersion", "mavai-explore-1");
+        assertThat(parsed).containsEntry("serviceContractId", "LengthServiceContract");
+        // The body carries the same display name the filename stem uses.
+        assertThat(parsed).containsEntry("configuration", writer.filenameFor(bundle));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> factors = (Map<String, Object>) parsed.get("factors");
@@ -206,8 +208,8 @@ class ExploreOutputWriterTest {
         // Each captured value parses as YAML carrying the explore-output schema header.
         for (String yaml : sink.values()) {
             Map<String, Object> parsed = new Yaml().load(yaml);
-            assertThat(parsed).containsEntry("schemaVersion", "punit-spec-1");
-            assertThat(parsed).containsEntry("useCaseId", "explore-test");
+            assertThat(parsed).containsEntry("schemaVersion", "mavai-explore-1");
+            assertThat(parsed).containsEntry("serviceContractId", "explore-test");
         }
     }
 

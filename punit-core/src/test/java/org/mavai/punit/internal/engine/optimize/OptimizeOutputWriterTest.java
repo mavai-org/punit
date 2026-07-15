@@ -75,8 +75,8 @@ class OptimizeOutputWriterTest {
 
         String yaml = sink.values().iterator().next();
         Map<String, Object> parsed = new Yaml().load(yaml);
-        assertThat(parsed).containsEntry("schemaVersion", "punit-spec-1");
-        assertThat(parsed).containsEntry("useCaseId", "optimize-test");
+        assertThat(parsed).containsEntry("schemaVersion", "mavai-optimize-1");
+        assertThat(parsed).containsEntry("serviceContractId", "optimize-test");
         assertThat(parsed).containsEntry("experimentId", "opt-run-1");
         assertThat(parsed).containsEntry("objective", "MAXIMIZE");
         assertThat(parsed).containsKeys("iterations", "convergence", "generatedAt");

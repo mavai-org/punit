@@ -26,8 +26,8 @@ import org.yaml.snakeyaml.Yaml;
  */
 final class YamlReader {
 
-    /** The optimization-output schema version this reader accepts. */
-    private static final String OPTIMIZATION_SCHEMA = "punit-spec-1";
+    /** The canonical optimize interchange schema version this reader accepts. */
+    private static final String OPTIMIZATION_SCHEMA = "mavai-optimize-1";
 
     /**
      * Parses a single optimization YAML document.
@@ -50,7 +50,7 @@ final class YamlReader {
             return Optional.empty();
         }
 
-        String service = asString(root.get("useCaseId"));
+        String service = asString(root.get("serviceContractId"));
         String experimentId = asString(root.get("experimentId"));
         String objective = asString(root.get("objective"));
 
