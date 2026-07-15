@@ -4,6 +4,7 @@ import static java.time.Duration.ofMillis;
 import static java.time.Duration.ofSeconds;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mavai.punit.api.PercentileKey.P50;
 import static org.mavai.punit.api.PercentileKey.P95;
 import static org.mavai.punit.api.PercentileKey.P99;
@@ -110,6 +111,74 @@ class CriteriaFactoryTest {
             assertThat(decl.posture().confidenceFloor()).isPresent();
             assertThat(decl.posture().mde()).isPresent();
             assertThat(decl.posture().power()).isPresent();
+        }
+
+        @Test
+        @DisplayName(".tolerating(rate) declares the risk-driven form of confidence-first")
+        void toleratingDeclaresRiskDriven() {
+            CriterionDecl<String> decl = empirical().<String>passRate()
+                    .tolerating(0.93)
+                    .atConfidence(0.95)
+                    .atPower(0.80);
+
+            assertThat(decl.posture().toleratedRate()).hasValue(0.93);
+            assertThat(decl.posture().isRiskDriven()).isTrue();
+            assertThat(decl.posture().isConfidenceFirst()).isFalse();
+        }
+
+        @Test
+        @DisplayName(".tolerating alone is a complete declaration — power defaults downstream")
+        void toleratingAloneIsComplete() {
+            CriterionDecl<String> decl = empirical().<String>passRate()
+                    .tolerating(0.93);
+
+            decl.posture().validate();
+            assertThat(decl.posture().isRiskDriven()).isTrue();
+        }
+
+        @Test
+        @DisplayName(".atPower pairs with .tolerating — no MDE demanded")
+        void atPowerPairsWithTolerating() {
+            CriterionDecl<String> decl = empirical().<String>passRate()
+                    .tolerating(0.93)
+                    .atPower(0.90);
+
+            decl.posture().validate();
+            assertThat(decl.posture().power()).hasValue(0.90);
+        }
+
+        @Test
+        @DisplayName(".tolerating and .detectingMde are mutually exclusive, both ways")
+        void toleratingAndMdeAreMutuallyExclusive() {
+            assertThatThrownBy(() -> empirical().<String>passRate()
+                    .detectingMde(0.05)
+                    .tolerating(0.93))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("either relatively")
+                    .hasMessageContaining("or absolutely");
+            assertThatThrownBy(() -> empirical().<String>passRate()
+                    .tolerating(0.93)
+                    .detectingMde(0.05))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("never both");
+        }
+
+        @Test
+        @DisplayName(".tolerating rejects composition with a declared threshold")
+        void toleratingRejectsContractualPosture() {
+            assertThatThrownBy(() -> meeting().<String>passRate(0.9)
+                    .tolerating(0.93))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("cannot compose with .meeting");
+        }
+
+        @Test
+        @DisplayName(".tolerating rejects rates outside (0, 1)")
+        void toleratingRejectsOutOfRangeRates() {
+            assertThatThrownBy(() -> empirical().<String>passRate().tolerating(0.0))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> empirical().<String>passRate().tolerating(1.0))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 

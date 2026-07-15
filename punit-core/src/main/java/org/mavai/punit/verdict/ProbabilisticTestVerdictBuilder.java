@@ -97,6 +97,9 @@ public class ProbabilisticTestVerdictBuilder {
     private BaselineData baseline;
     private Integer sizingBaselineSamples;
     private Double sizingBaselineRate;
+    private Double declaredToleratedRate;
+    private Double declaredMde;
+    private Double declaredPower;
 
     // ── Termination ───────────────────────────────────────────────────────
     private TerminationReason terminationReason = TerminationReason.COMPLETED;
@@ -261,6 +264,21 @@ public class ProbabilisticTestVerdictBuilder {
         return this;
     }
 
+    /**
+     * The run's declared sizing, when the configuration carried one: the
+     * absolute tolerated rate (the confidence-first approach's risk-driven
+     * form) or the relative minimum detectable effect (its closed form),
+     * with the declared power. Any argument may be null. The sizing
+     * disclosure names the operational approach from these facts.
+     */
+    public ProbabilisticTestVerdictBuilder sizingDeclaration(
+            Double toleratedRate, Double mde, Double power) {
+        this.declaredToleratedRate = toleratedRate;
+        this.declaredMde = mde;
+        this.declaredPower = power;
+        return this;
+    }
+
     public ProbabilisticTestVerdictBuilder baseline(BaselineData baseline) {
         this.baseline = baseline;
         return this;
@@ -383,7 +401,8 @@ public class ProbabilisticTestVerdictBuilder {
         Map<String, String> environment =
                 new java.util.LinkedHashMap<>(environmentMetadata);
         environment.putAll(SizingDisclosure.entries(
-                thresholdOrigin, plannedSamples, samplesExecuted, minPassRate,
+                thresholdOrigin, declaredToleratedRate, declaredMde, declaredPower,
+                plannedSamples, samplesExecuted, minPassRate,
                 resolvedConfidence, baselineSamples, baselineRate,
                 elapsedMs, methodTokensConsumed));
         return java.util.Collections.unmodifiableMap(environment);

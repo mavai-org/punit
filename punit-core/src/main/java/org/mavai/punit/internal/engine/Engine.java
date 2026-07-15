@@ -109,7 +109,7 @@ public final class Engine {
                             cfg.samples());
             if (resolution.wasUplifted()) {
                 System.out.println(String.format(
-                        "[PUNIT-UPLIFT] criterion '%s' demands %d samples (PowerAnalysis); "
+                        "[PUNIT-UPLIFT] criterion '%s' demands %d samples; "
                                 + "uplifting declared count of %d.",
                         resolution.drivenBy().get(),
                         resolution.effective(),

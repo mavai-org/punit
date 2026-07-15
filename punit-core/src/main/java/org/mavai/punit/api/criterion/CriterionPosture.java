@@ -97,6 +97,7 @@ public final class CriterionPosture {
     private final OptionalDouble confidenceFloor;
     private final OptionalDouble mde;
     private final OptionalDouble power;
+    private final OptionalDouble toleratedRate;
     private final Optional<String> contractRef;
     private final Optional<EnumSet<PercentileKey>> assertedPercentiles;
     private final Optional<LatencySpec> latencySpec;
@@ -111,12 +112,28 @@ public final class CriterionPosture {
             Optional<String> contractRef,
             Optional<EnumSet<PercentileKey>> assertedPercentiles,
             Optional<LatencySpec> latencySpec) {
+        this(kind, threshold, origin, confidenceFloor, mde, power,
+                OptionalDouble.empty(), contractRef, assertedPercentiles, latencySpec);
+    }
+
+    private CriterionPosture(
+            Kind kind,
+            OptionalDouble threshold,
+            Optional<ThresholdOrigin> origin,
+            OptionalDouble confidenceFloor,
+            OptionalDouble mde,
+            OptionalDouble power,
+            OptionalDouble toleratedRate,
+            Optional<String> contractRef,
+            Optional<EnumSet<PercentileKey>> assertedPercentiles,
+            Optional<LatencySpec> latencySpec) {
         this.kind = kind;
         this.threshold = threshold;
         this.origin = origin;
         this.confidenceFloor = confidenceFloor;
         this.mde = mde;
         this.power = power;
+        this.toleratedRate = toleratedRate;
         this.contractRef = contractRef;
         this.assertedPercentiles = assertedPercentiles;
         this.latencySpec = latencySpec;
@@ -257,8 +274,8 @@ public final class CriterionPosture {
                     ".atConfidence(c) requires c in (0, 1), got " + confidence);
         }
         return new CriterionPosture(kind, threshold, origin,
-                OptionalDouble.of(confidence), mde, power, contractRef,
-                assertedPercentiles, latencySpec);
+                OptionalDouble.of(confidence), mde, power, toleratedRate,
+                contractRef, assertedPercentiles, latencySpec);
     }
 
     /**
@@ -270,13 +287,20 @@ public final class CriterionPosture {
      */
     public CriterionPosture withMde(double mdeValue) {
         rejectRigourAdjunct("detectingMde");
+        if (toleratedRate.isPresent()) {
+            throw new IllegalStateException(
+                    ".detectingMde(m) cannot compose with .tolerating(rate) — a "
+                            + "criterion declares its sensitivity either relatively "
+                            + "(a detectable drop off the baseline) or absolutely "
+                            + "(a worst tolerable rate), never both");
+        }
         if (Double.isNaN(mdeValue) || mdeValue <= 0.0 || mdeValue >= 1.0) {
             throw new IllegalArgumentException(
                     ".detectingMde(m) requires m in (0, 1), got " + mdeValue);
         }
         return new CriterionPosture(kind, threshold, origin,
-                confidenceFloor, OptionalDouble.of(mdeValue), power, contractRef,
-                assertedPercentiles, latencySpec);
+                confidenceFloor, OptionalDouble.of(mdeValue), power, toleratedRate,
+                contractRef, assertedPercentiles, latencySpec);
     }
 
     /**
@@ -292,8 +316,39 @@ public final class CriterionPosture {
                     ".atPower(p) requires p in (0, 1), got " + powerValue);
         }
         return new CriterionPosture(kind, threshold, origin,
-                confidenceFloor, mde, OptionalDouble.of(powerValue), contractRef,
-                assertedPercentiles, latencySpec);
+                confidenceFloor, mde, OptionalDouble.of(powerValue), toleratedRate,
+                contractRef, assertedPercentiles, latencySpec);
+    }
+
+    /**
+     * Returns a copy of this posture with the given tolerated rate —
+     * the worst true rate the author tolerates, declared as an
+     * <em>absolute</em> bound (not a drop off the baseline). This is
+     * the confidence-first approach in its risk-driven form: the
+     * framework computes the sample count that catches a genuine
+     * breach of the tolerance at the declared power, priced
+     * self-consistently against the acceptance floor the run derives
+     * at its own size. Composes only with {@code .empirical()};
+     * mutually exclusive with {@link #withMde(double)} — a criterion
+     * declares its sensitivity either relatively or absolutely, never
+     * both. An unpaired power defaults to the framework's 0.80.
+     */
+    public CriterionPosture withToleratedRate(double rate) {
+        rejectRigourAdjunct("tolerating");
+        if (mde.isPresent()) {
+            throw new IllegalStateException(
+                    ".tolerating(rate) cannot compose with .detectingMde(m) — a "
+                            + "criterion declares its sensitivity either relatively "
+                            + "(a detectable drop off the baseline) or absolutely "
+                            + "(a worst tolerable rate), never both");
+        }
+        if (Double.isNaN(rate) || rate <= 0.0 || rate >= 1.0) {
+            throw new IllegalArgumentException(
+                    ".tolerating(rate) requires rate in (0, 1), got " + rate);
+        }
+        return new CriterionPosture(kind, threshold, origin,
+                confidenceFloor, mde, power, OptionalDouble.of(rate),
+                contractRef, assertedPercentiles, latencySpec);
     }
 
     /**
@@ -313,7 +368,7 @@ public final class CriterionPosture {
             throw new IllegalArgumentException(".contractRef requires a non-blank string");
         }
         return new CriterionPosture(kind, threshold, origin,
-                confidenceFloor, mde, power, Optional.of(ref),
+                confidenceFloor, mde, power, toleratedRate, Optional.of(ref),
                 assertedPercentiles, latencySpec);
     }
 
@@ -350,7 +405,7 @@ public final class CriterionPosture {
                             + "IS the source");
         }
         return new CriterionPosture(kind, threshold, Optional.of(newOrigin),
-                confidenceFloor, mde, power, Optional.of(ref),
+                confidenceFloor, mde, power, toleratedRate, Optional.of(ref),
                 assertedPercentiles, latencySpec);
     }
 
@@ -392,10 +447,11 @@ public final class CriterionPosture {
                     ".detectingMde(m) requires a paired .atPower(p) — "
                             + "half a sensitivity declaration is undefined");
         }
-        if (power.isPresent() && mde.isEmpty()) {
+        if (power.isPresent() && mde.isEmpty() && toleratedRate.isEmpty()) {
             throw new IllegalStateException(
-                    ".atPower(p) requires a paired .detectingMde(m) — "
-                            + "half a sensitivity declaration is undefined");
+                    ".atPower(p) requires a paired .detectingMde(m) or "
+                            + ".tolerating(rate) — half a sensitivity declaration "
+                            + "is undefined");
         }
     }
 
@@ -425,6 +481,11 @@ public final class CriterionPosture {
     /** Statistical power when declared via {@code .atPower(...)}, empty otherwise. */
     public OptionalDouble power() {
         return power;
+    }
+
+    /** Worst tolerated true rate when declared via {@code .tolerating(...)}, empty otherwise. */
+    public OptionalDouble toleratedRate() {
+        return toleratedRate;
     }
 
     /**
@@ -477,5 +538,16 @@ public final class CriterionPosture {
      */
     public boolean isConfidenceFirst() {
         return kind == Kind.STATISTICAL_EMPIRICAL && mde.isPresent() && power.isPresent();
+    }
+
+    /**
+     * Whether this posture is in the confidence-first approach's
+     * risk-driven form — empirical with an absolute tolerated rate
+     * declared. Used by the framework to identify criteria whose
+     * sample-count floor is priced self-consistently against the
+     * moving acceptance floor rather than by the closed form.
+     */
+    public boolean isRiskDriven() {
+        return kind == Kind.STATISTICAL_EMPIRICAL && toleratedRate.isPresent();
     }
 }

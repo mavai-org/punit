@@ -612,6 +612,7 @@ class HtmlReportWriterTest {
             env.put("sizing-approach", "sample-size-first");
             env.put("sizing-declared-samples", "100");
             env.put("sizing-declared-confidence", "0.95");
+            env.put("sizing-sized-samples", "100");
             env.put("sizing-baseline-samples", "1000");
             env.put("sizing-detectable-rate", "0.876");
             env.put("sizing-detectable-power", "0.8");
@@ -641,6 +642,7 @@ class HtmlReportWriterTest {
             env.put("sizing-approach", "sample-size-first");
             env.put("sizing-declared-samples", "100");
             env.put("sizing-declared-confidence", "0.95");
+            env.put("sizing-sized-samples", "100");
             env.put("sizing-baseline-samples", "1000");
             env.put("sizing-detectable-rate", "0.876");
             env.put("sizing-detectable-power", "0.8");

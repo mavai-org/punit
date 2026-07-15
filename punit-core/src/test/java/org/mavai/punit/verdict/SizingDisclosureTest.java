@@ -16,8 +16,15 @@ class SizingDisclosureTest {
     private Map<String, String> entries(
             ThresholdOrigin origin, int planned, Integer baselineSamples,
             Double baselineRate, long tokens) {
+        return declaredEntries(origin, null, null, null, planned,
+                baselineSamples, baselineRate, tokens);
+    }
+
+    private Map<String, String> declaredEntries(
+            ThresholdOrigin origin, Double tolerated, Double mde, Double power,
+            int planned, Integer baselineSamples, Double baselineRate, long tokens) {
         return SizingDisclosure.entries(
-                origin, planned, planned, 0.90, 0.95,
+                origin, tolerated, mde, power, planned, planned, 0.90, 0.95,
                 baselineSamples, baselineRate, 5000, tokens);
     }
 
@@ -53,6 +60,41 @@ class SizingDisclosureTest {
             Map<String, String> entries = entries(null, 100, null, null, 0);
 
             assertThat(entries).containsEntry("sizing-approach", "threshold-first");
+        }
+
+        @Test
+        void aDeclaredToleranceNamesTheRiskDrivenFormWithItsParameters() {
+            Map<String, String> entries = declaredEntries(
+                    ThresholdOrigin.EMPIRICAL, 0.93, null, 0.8, 405, 1000, 0.96, 0);
+
+            assertThat(entries)
+                    .containsEntry("sizing-approach", "confidence-first (risk-driven)")
+                    .containsEntry("sizing-tolerated-rate", "0.93")
+                    .containsEntry("sizing-declared-confidence", "0.95")
+                    .containsEntry("sizing-declared-power", "0.8")
+                    .containsEntry("sizing-computed-samples", "405")
+                    .doesNotContainKey("sizing-declared-samples");
+        }
+
+        @Test
+        void aDeclaredEffectNamesTheConfidenceFirstClosedForm() {
+            Map<String, String> entries = declaredEntries(
+                    ThresholdOrigin.EMPIRICAL, null, 0.05, 0.9, 470, 1000, 0.96, 0);
+
+            assertThat(entries)
+                    .containsEntry("sizing-approach", "confidence-first")
+                    .containsEntry("sizing-declared-min-detectable-effect", "0.05")
+                    .containsEntry("sizing-declared-power", "0.9")
+                    .containsEntry("sizing-computed-samples", "470")
+                    .doesNotContainKey("sizing-tolerated-rate");
+        }
+
+        @Test
+        void anUndeclaredPowerDisclosesTheFrameworkDefault() {
+            Map<String, String> entries = declaredEntries(
+                    ThresholdOrigin.EMPIRICAL, 0.93, null, null, 405, 1000, 0.96, 0);
+
+            assertThat(entries).containsEntry("sizing-declared-power", "0.8");
         }
     }
 
@@ -113,6 +155,18 @@ class SizingDisclosureTest {
             assertThat(entries)
                     .containsKey("sizing-time-saved-ms")
                     .doesNotContainKey("sizing-tokens-saved");
+        }
+
+        @Test
+        void theSensitivityStatementUsesTheDeclaredPowerWhenPresent() {
+            Map<String, String> entries = declaredEntries(
+                    ThresholdOrigin.EMPIRICAL, 0.85, null, 0.9, 100, 1000, 0.96, 0);
+
+            double disclosed = Double.parseDouble(entries.get("sizing-detectable-rate"));
+            double expected = new RiskDrivenSizingCalculator().detectableRate(
+                    100, 0.96, 0.95, 0.9);
+            assertThat(disclosed).isEqualTo(expected);
+            assertThat(entries).containsEntry("sizing-detectable-power", "0.9");
         }
 
         @Test
