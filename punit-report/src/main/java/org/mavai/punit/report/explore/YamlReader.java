@@ -30,8 +30,8 @@ import org.yaml.snakeyaml.Yaml;
  */
 final class YamlReader {
 
-    /** The exploration-output schema version this reader accepts. */
-    private static final String EXPLORATION_SCHEMA = "punit-spec-1";
+    /** The canonical exploration interchange schema version this reader accepts. */
+    private static final String EXPLORATION_SCHEMA = "mavai-explore-1";
 
     /**
      * Parses a single exploration YAML document.
@@ -51,7 +51,7 @@ final class YamlReader {
             return Optional.empty();
         }
 
-        String service = asString(root.get("useCaseId"));
+        String service = asString(root.get("serviceContractId"));
         Map<String, Object> factors = mapOf(root.get("factors"));
         Map<String, Object> execution = mapOf(root.get("execution"));
         Map<String, Object> statistics = mapOf(root.get("statistics"));

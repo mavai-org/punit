@@ -318,8 +318,9 @@ class ReportGeneratorTest {
             double observed, int successes, int failures, String termination,
             long[] latencies, long avgMs) {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("schemaVersion", "punit-spec-1");
-        root.put("useCaseId", service);
+        root.put("schemaVersion", "mavai-explore-1");
+        root.put("serviceContractId", service);
+        root.put("configuration", configurationNameFor(factors));
         root.put("factors", factors);
 
         Map<String, Object> execution = new LinkedHashMap<>();
@@ -352,6 +353,17 @@ class ReportGeneratorTest {
             root.put("latency", latency);
         }
         return root;
+    }
+
+    private static String configurationNameFor(Map<String, Object> factors) {
+        StringBuilder name = new StringBuilder();
+        for (Map.Entry<String, Object> e : factors.entrySet()) {
+            if (name.length() > 0) {
+                name.append('_');
+            }
+            name.append(e.getKey()).append('-').append(e.getValue());
+        }
+        return name.length() == 0 ? "no-factors" : name.toString();
     }
 
     private static Map<String, Object> factors(String model) {

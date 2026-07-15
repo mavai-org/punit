@@ -6,7 +6,7 @@ import java.util.List;
  * One OPTIMIZE experiment — the unit the comparison report renders as a
  * single section. Each optimization YAML file is one run.
  *
- * @param service      the service contract identifier ({@code useCaseId})
+ * @param service      the service contract identifier ({@code serviceContractId})
  * @param experimentId the experiment identifier
  * @param objective    {@code MAXIMIZE} or {@code MINIMIZE} — the sense in
  *                     which a higher/lower score is "better"

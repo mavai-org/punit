@@ -299,8 +299,8 @@ class ReportGeneratorTest {
     private static Map<String, Object> run(String service, String experimentId, String objective,
             List<Map<String, Object>> iterations, Map<String, Object> convergence) {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("schemaVersion", "punit-spec-1");
-        root.put("useCaseId", service);
+        root.put("schemaVersion", "mavai-optimize-1");
+        root.put("serviceContractId", service);
         root.put("experimentId", experimentId);
         root.put("objective", objective);
         root.put("iterations", iterations);

@@ -76,6 +76,9 @@ dependencies {
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    // JSON Schema validation (draft 2020-12) for the interchange
+    // emitter conformance tests — test-only, never shipped.
+    testImplementation("com.networknt:json-schema-validator:1.5.6")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;

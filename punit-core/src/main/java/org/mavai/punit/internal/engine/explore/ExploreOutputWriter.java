@@ -19,28 +19,29 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * Serialises one EXPLORE configuration's outcome to the
- * explore-output YAML schema and resolves its readable-stem
- * filename.
+ * Serialises one EXPLORE configuration's outcome to the mavai
+ * family's canonical exploration interchange schema and resolves
+ * its readable-stem filename.
  *
  * <p>Both methods are pure — the writer performs no I/O. The
  * {@link org.mavai.punit.internal.runtime.ExploreEmitter EXPLORE emitter}
  * orchestrates persistence (writing to disk or to an in-memory
  * sink for tests).
  *
- * <p>Schema follows the canonical explore-output YAML shape:
- * {@code factors:} block in factor-record declaration order,
+ * <p>Emits the mavai family's canonical exploration interchange
+ * schema: {@code factors:} block in factor-record declaration order,
  * descriptive statistics only (no inferential statistics), small
- * sample counts accepted without warning. Per-sample result
- * projections are not emitted here yet — when the trial path threads
- * projection metadata through, a {@code resultProjection:} block can
- * be appended additively.
+ * sample counts accepted without warning. The {@code configuration:}
+ * field carries the configuration's display name — the same
+ * human-readable stem {@link #filenameFor(FactorBundle)} derives for
+ * the filename — so consumers identify configurations from the
+ * document body, never by parsing filenames.
  */
 // javai-ref: JVI-8CHB31R — do not remove (resolves in javai-orchestrator)
 public final class ExploreOutputWriter {
 
     /** Schema-version value carried in every emitted file. */
-    public static final String SCHEMA_VERSION = "punit-spec-1";
+    public static final String SCHEMA_VERSION = "mavai-explore-1";
 
     /** Maximum unsanitised canonical-value length before truncation kicks in. */
     private static final int MAX_RAW_LENGTH = 32;
@@ -56,16 +57,19 @@ public final class ExploreOutputWriter {
      * no I/O.
      *
      * @param serviceContractId the service contract identifier (becomes the
-     *                  {@code useCaseId:} field).
+     *                  {@code serviceContractId:} field).
      * @param factorBundle the configuration's factor bundle (becomes
-     *                     the {@code factors:} block).
+     *                     the {@code factors:} block and, via
+     *                     {@link #filenameFor(FactorBundle)}, the
+     *                     {@code configuration:} display name).
      * @param entry the per-config summary plus planned sample count.
-     * @return YAML matching the canonical explore-output schema.
+     * @return YAML matching the canonical exploration interchange schema.
      */
     public String writeYaml(String serviceContractId, FactorBundle factorBundle, PerConfigSummary<?, ?> entry) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
-        root.put("useCaseId", serviceContractId);
+        root.put("serviceContractId", serviceContractId);
+        root.put("configuration", filenameFor(factorBundle));
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
         root.put("factors", factorsBlock(factorBundle));
         root.put("execution", executionBlock(entry));
@@ -137,26 +141,26 @@ public final class ExploreOutputWriter {
             failureDistribution.put(entry.getKey(), entry.getValue().count());
         }
         block.put("failureDistribution", failureDistribution);
-        // Per-criterion decomposition (only when the run produced
-        // methodology-level criterion counts — empty for contracts
-        // that declared no explicit criteria() value).
-        // Mirrors the per-criterion shape that MEASURE writes into
-        // baselines so a reader can compare explore vs measure
-        // emissions of the same contract criterion-by-criterion.
-        if (!summary.criterionSampleCounts().isEmpty()) {
-            Map<String, Object> criteria = new LinkedHashMap<>();
-            for (org.mavai.punit.api.spec.CriterionSampleCounts counts
-                    : summary.criterionSampleCounts()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("observedPassRate", counts.observedPassRate());
-                row.put("pass", counts.pass());
-                row.put("fail", counts.fail());
-                row.put("conditionFail", counts.conditionFail());
-                row.put("transformFail", counts.transformFail());
-                criteria.put(counts.criterionId(), row);
-            }
-            block.put("criteria", criteria);
+        // Per-criterion decomposition — required by the interchange
+        // schema, one entry per declared criterion (including the
+        // single-criterion case; a contract cannot run without at
+        // least one declared criterion). Mirrors the per-criterion
+        // shape that MEASURE writes into baselines so a reader can
+        // compare explore vs measure emissions of the same contract
+        // criterion-by-criterion. conditionFail / transformFail are
+        // permitted informational extras beyond the canonical fields.
+        Map<String, Object> criteria = new LinkedHashMap<>();
+        for (org.mavai.punit.api.spec.CriterionSampleCounts counts
+                : summary.criterionSampleCounts()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("observedPassRate", counts.observedPassRate());
+            row.put("pass", counts.pass());
+            row.put("fail", counts.fail());
+            row.put("conditionFail", counts.conditionFail());
+            row.put("transformFail", counts.transformFail());
+            criteria.put(counts.criterionId(), row);
         }
+        block.put("criteria", criteria);
         return block;
     }
 

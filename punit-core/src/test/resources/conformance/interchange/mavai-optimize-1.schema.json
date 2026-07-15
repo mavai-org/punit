@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mavai-org/mavai-R/schema/mavai-optimize-1.schema.json",
+  "title": "mavai optimize interchange artefact",
+  "description": "One document per optimize run: the objective, the full iteration history (each iteration is one experiment configuration's descriptive result plus its score), and the convergence summary naming the selected optimum. Framework-neutral; the machine-checkable structural projection of the canonical format specification, validating the parsed data model of the YAML document. The statistics, cost, and latency blocks are shared with the exploration artefact and duplicated here so each schema is self-contained. Structural checks only: the cross-consistency of the convergence block with the iteration it names is a semantic obligation enforced by emitter conformance tests, not expressible here. Additive evolution: emitters may add fields anywhere; consumers ignore what they do not know.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "serviceContractId",
+    "objective",
+    "generatedAt",
+    "iterations",
+    "convergence"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "const": "mavai-optimize-1",
+      "description": "Schema identity. Consumers skip documents carrying any other value."
+    },
+    "serviceContractId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The optimized service contract's stable identity."
+    },
+    "experimentId": {
+      "type": "string",
+      "description": "Informational: the optimize run's name."
+    },
+    "objective": {
+      "enum": ["MAXIMIZE", "MINIMIZE"],
+      "description": "The direction the score is driven."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of emission."
+    },
+    "iterations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The full history, in execution order. Never elided or truncated — the history is the artefact.",
+      "items": { "$ref": "#/$defs/iteration" }
+    },
+    "convergence": {
+      "type": "object",
+      "required": ["totalIterations", "bestIteration", "bestScore", "bestFactors"],
+      "additionalProperties": true,
+      "properties": {
+        "totalIterations": { "type": "integer", "minimum": 1 },
+        "bestIteration": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index of the selected optimum in iterations. Must be internally consistent with that entry's score and factors (semantic obligation)."
+        },
+        "bestScore": { "type": "number" },
+        "bestFactors": { "$ref": "#/$defs/factors" }
+      }
+    }
+  },
+  "$defs": {
+    "iteration": {
+      "type": "object",
+      "required": ["iteration", "factors", "score", "execution", "statistics"],
+      "additionalProperties": true,
+      "properties": {
+        "iteration": { "type": "integer", "minimum": 0 },
+        "factors": { "$ref": "#/$defs/factors" },
+        "score": {
+          "type": "number",
+          "description": "The scoring function's value for this iteration, in objective units."
+        },
+        "execution": {
+          "type": "object",
+          "required": ["samplesExecuted", "terminationReason"],
+          "additionalProperties": true,
+          "properties": {
+            "samplesExecuted": { "type": "integer", "minimum": 0 },
+            "terminationReason": { "type": "string", "minLength": 1 }
+          }
+        },
+        "statistics": { "$ref": "#/$defs/statistics" },
+        "cost": { "$ref": "#/$defs/cost" },
+        "latency": { "$ref": "#/$defs/latency" },
+        "resultProjection": {
+          "description": "Informational per-sample detail, emitter-formatted. Consumers must not require it."
+        }
+      }
+    },
+    "factors": {
+      "type": "object",
+      "description": "Factor values keyed by factor name.",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": ["observed", "successes", "failures", "criteria"],
+      "additionalProperties": true,
+      "properties": {
+        "observed": { "type": "number", "minimum": 0, "maximum": 1 },
+        "successes": { "type": "integer", "minimum": 0 },
+        "failures": { "type": "integer", "minimum": 0 },
+        "failureDistribution": { "$ref": "#/$defs/failureDistribution" },
+        "criteria": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/criterion" }
+        }
+      },
+      "if": {
+        "properties": { "failures": { "exclusiveMinimum": 0 } },
+        "required": ["failures"]
+      },
+      "then": {
+        "required": ["failureDistribution"]
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": ["observedPassRate", "pass", "fail"],
+      "additionalProperties": true,
+      "properties": {
+        "observedPassRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "fail": { "type": "integer", "minimum": 0 },
+        "failureDistribution": { "$ref": "#/$defs/failureDistribution" }
+      }
+    },
+    "failureDistribution": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "totalTimeMs": { "type": "integer", "minimum": 0 },
+        "avgTimePerSampleMs": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "avgTokensPerSample": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "description": "Absent as a whole when no sample passed. Percentiles are STATED value-or-absent under the emitter's minimum-sample gate; at optimize's typically small per-iteration sample counts, most will be absent — that is the gate working.",
+      "required": ["basis", "contributingSamples", "totalSamples", "sortedPassingLatenciesMs"],
+      "additionalProperties": true,
+      "properties": {
+        "basis": { "const": "passing-samples" },
+        "contributingSamples": { "type": "integer", "minimum": 1 },
+        "totalSamples": { "type": "integer", "minimum": 1 },
+        "p50Ms": { "type": "number", "minimum": 0 },
+        "p95Ms": { "type": "number", "minimum": 0 },
+        "p99Ms": { "type": "number", "minimum": 0 },
+        "sortedPassingLatenciesMs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
