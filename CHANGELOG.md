@@ -23,6 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Artefact key discipline and the redesigned `failureDistribution`
+  (breaking for exploration and optimization outputs).** The
+  `statistics.failureDistribution` block of `mavai-explore-1` and
+  `mavai-optimize-1` documents is now a *sequence* of
+  `{condition, count}` entries instead of a mapping keyed by
+  free-text check identity: each failed trial is attributed to its
+  first failing condition, so entry counts sum to the enclosing
+  `failures` total, and no mapping key carries unbounded free text.
+  Every mapping key punit emits into these artefacts (postcondition
+  descriptions in `resultProjection`, criterion names, factor names)
+  is now bounded at 256 characters — comfortably under YAML's
+  1,024-character implicit-key limit — with over-long keys truncated
+  to a bounded prefix plus a short content hash so distinct keys
+  stay distinct. Per-input identity remains structural
+  (`inputIndex`); input text appears only in values. The vendored
+  interchange schemas are re-pinned to the mavai-R v0.9.0
+  publication, and the conformance suite now drives a run with a
+  >1,024-character input and over-long condition identities to prove
+  the emitted document parses and validates.
+
 - **Canonical interchange schemas for experiment artefacts (breaking
   for exploration and optimization outputs).** EXPLORE and OPTIMIZE
   runs now emit the mavai family's canonical interchange formats —

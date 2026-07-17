@@ -10,9 +10,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.mavai.punit.api.FactorBundle;
-import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.PerConfigSummary;
 import org.mavai.punit.api.spec.SampleSummary;
+import org.mavai.punit.internal.engine.emit.EmittedKeys;
+import org.mavai.punit.internal.engine.emit.FailureDistributions;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.internal.engine.emit.ResultProjections;
 import org.yaml.snakeyaml.DumperOptions;
@@ -118,7 +119,7 @@ public final class ExploreOutputWriter {
     private static Map<String, Object> factorsBlock(FactorBundle bundle) {
         Map<String, Object> block = new LinkedHashMap<>();
         for (FactorBundle.Entry e : bundle.entries()) {
-            block.put(e.name(), e.value().yamlValue());
+            block.put(EmittedKeys.bound(e.name()), e.value().yamlValue());
         }
         return block;
     }
@@ -136,11 +137,11 @@ public final class ExploreOutputWriter {
         block.put("observed", summary.passRate());
         block.put("successes", summary.successes());
         block.put("failures", summary.failures());
-        Map<String, Object> failureDistribution = new LinkedHashMap<>();
-        for (Map.Entry<String, FailureCount> entry : summary.failuresByPostcondition().entrySet()) {
-            failureDistribution.put(entry.getKey(), entry.getValue().count());
-        }
-        block.put("failureDistribution", failureDistribution);
+        // Sequence of {condition, count} entries — first-failing-
+        // condition attribution over the trials, so entry counts sum
+        // to the failures total. Never a mapping keyed by free-text
+        // identity (artefact key discipline).
+        block.put("failureDistribution", FailureDistributions.fromTrials(summary.trials()));
         // Per-criterion decomposition — required by the interchange
         // schema, one entry per declared criterion (including the
         // single-criterion case; a contract cannot run without at
@@ -158,7 +159,7 @@ public final class ExploreOutputWriter {
             row.put("fail", counts.fail());
             row.put("conditionFail", counts.conditionFail());
             row.put("transformFail", counts.transformFail());
-            criteria.put(counts.criterionId(), row);
+            criteria.put(EmittedKeys.bound(counts.criterionId()), row);
         }
         block.put("criteria", criteria);
         return block;
