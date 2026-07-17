@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Named scorers, stated in the optimize artefact.** `Scorer` gains an
+  optional identity (`Scorer.name()`, default empty) and a built-in
+  named implementation, `Scorer.observedPassRate()`, which scores each
+  iteration by the observed pass rate the artefact's statistics block
+  states. When an optimize experiment's scorer carries a name, the
+  emitted `mavai-optimize-1` document states it in the additive
+  `scorer` field (e.g. `scorer: observed-pass-rate`), so downstream
+  consumers — the shared `mavai optimize` report — can label what the
+  score measures. Ad-hoc lambda scorers remain unnamed and the field
+  stays absent: the artefact never claims an identity the author did
+  not declare.
+
 ### Changed
 
 - **Canonical interchange schemas for experiment artefacts (breaking

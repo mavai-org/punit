@@ -241,6 +241,21 @@ public final class Experiment implements Spec {
     }
 
     /**
+     * Diagnostic accessor populated for optimize experiments only.
+     * Returns the declared scorer's stable name, when the scorer
+     * carries one (see {@link Scorer#name()}). Empty for measure and
+     * explore, and for ad-hoc lambda scorers. Consumed by the
+     * OPTIMIZE artefact emitter for the additive {@code scorer}
+     * field.
+     */
+    public Optional<String> optimizeScorerName() {
+        if (internal instanceof OptimizeInternal<?, ?, ?> o) {
+            return o.scorer.name();
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Diagnostic accessor populated for optimize experiments only,
      * after the run has completed. Reports why the iteration loop
      * stopped: {@code MAX_ITERATIONS}, {@code NO_IMPROVEMENT}, or

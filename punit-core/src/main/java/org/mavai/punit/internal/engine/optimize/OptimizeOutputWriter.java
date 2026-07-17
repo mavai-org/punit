@@ -47,6 +47,11 @@ public final class OptimizeOutputWriter {
      * @param experimentId the experiment identifier (becomes the
      *                     filename stem)
      * @param objective {@code "MAXIMIZE"} or {@code "MINIMIZE"}
+     * @param scorerName the scorer's stable domain name (e.g.
+     *                   {@code observed-pass-rate}), or {@code null}
+     *                   for an unnamed ad-hoc scorer — stated in the
+     *                   additive {@code scorer} field only when the
+     *                   author declared one
      * @param history the full iteration history in execution order;
      *                each {@link IterationResult} carries its
      *                factors, score, raw counts, and per-clause
@@ -64,6 +69,7 @@ public final class OptimizeOutputWriter {
             String serviceContractId,
             String experimentId,
             String objective,
+            String scorerName,
             List<? extends IterationResult<?>> history,
             List<? extends SampleSummary<?>> iterationSummaries,
             IterationResult<?> bestIteration,
@@ -74,6 +80,9 @@ public final class OptimizeOutputWriter {
         root.put("serviceContractId", serviceContractId);
         root.put("experimentId", experimentId);
         root.put("objective", objective);
+        if (scorerName != null) {
+            root.put("scorer", scorerName);
+        }
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
         root.put("iterations", iterationsBlock(history, iterationSummaries));
         root.put("convergence", convergenceBlock(history, bestIteration, terminationReason));
