@@ -102,6 +102,7 @@ public final class OptimizeEmitter {
         List<SampleSummary<?>> iterationSummaries = experiment.iterationSummaries();
         Optional<IterationResult<?>> best = experiment.bestOptimizeIteration();
         String objective = experiment.optimizeObjective().orElse("MAXIMIZE");
+        String scorerName = experiment.optimizeScorerName().orElse(null);
         String terminationReason = experiment.optimizeTerminationReason().orElse("UNKNOWN");
         String experimentId = experiment.experimentId();
 
@@ -111,6 +112,7 @@ public final class OptimizeEmitter {
                 serviceContractId,
                 experimentId,
                 objective,
+                scorerName,
                 history,
                 iterationSummaries,
                 best.orElse(null),

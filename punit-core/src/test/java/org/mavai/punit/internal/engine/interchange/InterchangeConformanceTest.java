@@ -24,6 +24,7 @@ import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.NextFactor;
+import org.mavai.punit.api.spec.Scorer;
 import org.mavai.punit.internal.engine.Engine;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.internal.runtime.ExploreEmitter;
@@ -184,7 +185,7 @@ class InterchangeConformanceTest {
                     .stepper((cur, hist) -> hist.size() < 2
                             ? NextFactor.next(new LlmFactors("gpt-4o", cur.temperature() + 0.3))
                             : NextFactor.stop())
-                    .maximize(s -> 1.0 * s.successes() / Math.max(1, s.total()))
+                    .maximize(Scorer.observedPassRate())
                     .maxIterations(5)
                     .experimentId("interchange-opt-run")
                     .build();
@@ -196,6 +197,10 @@ class InterchangeConformanceTest {
             Map<String, Object> doc = new Yaml().load(sink.values().iterator().next());
 
             assertThat(validate("mavai-optimize-1", doc)).isEmpty();
+
+            // The built-in scorer is named, so the additive scorer field
+            // states its identity — and the document still validates.
+            assertThat(doc).containsEntry("scorer", "observed-pass-rate");
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> iterations = (List<Map<String, Object>>) doc.get("iterations");

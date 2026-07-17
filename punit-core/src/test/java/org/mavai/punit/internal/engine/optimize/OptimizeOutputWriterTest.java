@@ -16,6 +16,7 @@ import org.mavai.punit.api.criterion.Criteria;
 import static org.mavai.punit.api.criterion.Criteria.meeting;
 import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.NextFactor;
+import org.mavai.punit.api.spec.Scorer;
 import org.mavai.punit.internal.engine.Engine;
 import org.mavai.punit.internal.runtime.OptimizeEmitter;
 import org.junit.jupiter.api.DisplayName;
@@ -80,6 +81,10 @@ class OptimizeOutputWriterTest {
         assertThat(parsed).containsEntry("experimentId", "opt-run-1");
         assertThat(parsed).containsEntry("objective", "MAXIMIZE");
         assertThat(parsed).containsKeys("iterations", "convergence", "generatedAt");
+        // An ad-hoc lambda scorer has no name, so the additive scorer
+        // field stays absent — the artefact never claims an identity
+        // the author did not declare.
+        assertThat(parsed).doesNotContainKey("scorer");
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> iterations = (List<Map<String, Object>>) parsed.get("iterations");
@@ -129,6 +134,41 @@ class OptimizeOutputWriterTest {
                 .filter(line -> line.contains("anchor:"))
                 .count();
         assertThat(anchorCount).isEqualTo((long) totalSamples);
+    }
+
+    @Test
+    @DisplayName("a named scorer is stated in the additive scorer field")
+    void namedScorerIsStated() {
+        Sampling<LlmFactors, String, Integer> sampling = Sampling
+                .<LlmFactors, String, Integer>builder()
+                .serviceContractFactory(f -> new IdServiceContract("optimize-test"))
+                .inputs("a", "bb")
+                .samples(2)
+                .build();
+        Experiment experiment = Experiment.optimizing(sampling)
+                .initialFactors(new LlmFactors("gpt-4o", 0.0))
+                .stepper((cur, hist) -> NextFactor.stop())
+                .maximize(Scorer.observedPassRate())
+                .maxIterations(2)
+                .experimentId("opt-run-named")
+                .build();
+        new Engine().run(experiment);
+
+        Map<String, String> sink = new LinkedHashMap<>();
+        OptimizeEmitter.emit(experiment, sink::put);
+
+        Map<String, Object> parsed = new Yaml().load(sink.values().iterator().next());
+        assertThat(parsed).containsEntry("scorer", "observed-pass-rate");
+        // The built-in scores by the observed pass rate the statistics
+        // block states, so the two agree by construction.
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> iterations = (List<Map<String, Object>>) parsed.get("iterations");
+        for (Map<String, Object> iteration : iterations) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) iteration.get("statistics");
+            assertThat(((Number) iteration.get("score")).doubleValue())
+                    .isEqualTo(((Number) statistics.get("observed")).doubleValue());
+        }
     }
 
     @Test
