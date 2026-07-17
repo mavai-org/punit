@@ -12,9 +12,10 @@ import java.time.Duration;
 import org.mavai.punit.api.FactorBundle;
 import org.mavai.punit.api.spec.CriterionSampleCounts;
 import org.mavai.punit.api.spec.FactorsStepper.IterationResult;
-import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.SampleSummary;
 import org.mavai.punit.api.spec.Trial;
+import org.mavai.punit.internal.engine.emit.EmittedKeys;
+import org.mavai.punit.internal.engine.emit.FailureDistributions;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.internal.engine.emit.ResultProjections;
 import org.yaml.snakeyaml.DumperOptions;
@@ -156,14 +157,13 @@ public final class OptimizeOutputWriter {
         block.put("observed", observed);
         block.put("successes", ir.successes());
         block.put("failures", ir.failures());
-        Map<String, Object> failureDistribution = new LinkedHashMap<>();
-        if (iterSummary != null) {
-            for (Map.Entry<String, FailureCount> e
-                    : iterSummary.failuresByPostcondition().entrySet()) {
-                failureDistribution.put(e.getKey(), e.getValue().count());
-            }
-        }
-        block.put("failureDistribution", failureDistribution);
+        // Sequence of {condition, count} entries — first-failing-
+        // condition attribution over the iteration's trials, so entry
+        // counts sum to the failures total. Never a mapping keyed by
+        // free-text identity (artefact key discipline).
+        block.put("failureDistribution", iterSummary != null
+                ? FailureDistributions.fromTrials(iterSummary.trials())
+                : List.of());
         // Per-criterion decomposition — required by the interchange
         // schema, one entry per declared criterion (including the
         // single-criterion case). conditionFail / transformFail are
@@ -177,7 +177,7 @@ public final class OptimizeOutputWriter {
                 row.put("fail", c.fail());
                 row.put("conditionFail", c.conditionFail());
                 row.put("transformFail", c.transformFail());
-                criteria.put(c.criterionId(), row);
+                criteria.put(EmittedKeys.bound(c.criterionId()), row);
             }
             block.put("criteria", criteria);
         }
@@ -219,7 +219,7 @@ public final class OptimizeOutputWriter {
     private static Map<String, Object> factorsBlock(FactorBundle bundle) {
         Map<String, Object> block = new LinkedHashMap<>();
         for (FactorBundle.Entry e : bundle.entries()) {
-            block.put(e.name(), e.value().yamlValue());
+            block.put(EmittedKeys.bound(e.name()), e.value().yamlValue());
         }
         return block;
     }

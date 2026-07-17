@@ -1,8 +1,5 @@
 package org.mavai.punit.internal.engine.emit;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,8 +41,6 @@ public final class ResultProjections {
 
     private ResultProjections() { }
 
-    private static final char[] HEX = "0123456789abcdef".toCharArray();
-
     /**
      * Render one trial as the per-sample projection map.
      *
@@ -67,7 +62,10 @@ public final class ResultProjections {
         entry.put("inputIndex", trial.inputIndex());
         Map<String, Object> postconds = new LinkedHashMap<>();
         for (PostconditionResult pr : trial.outcome().postconditionResults()) {
-            postconds.put(pr.description(), pr.passed() ? "passed" : "failed");
+            // Key discipline: descriptions reach a mapping-key
+            // position here, so they pass through the emitted-key
+            // bound (prefix-plus-hash truncation past 256 chars).
+            postconds.put(EmittedKeys.bound(pr.description()), pr.passed() ? "passed" : "failed");
         }
         entry.put("postconditions", postconds);
         entry.put("executionTimeMs", trial.duration().toMillis());
@@ -121,7 +119,7 @@ public final class ResultProjections {
     /** Anchor for one (sampleIndex, inputIndex) pair. */
     public static String anchorOf(int sampleIndex, int inputIndex) {
         String content = sampleIndex + ":" + inputIndex;
-        return sha256HexPrefix(content, 8);
+        return EmittedKeys.sha256HexPrefix(content, 8);
     }
 
     /**
@@ -159,22 +157,4 @@ public final class ResultProjections {
         return out.toString();
     }
 
-    private static String sha256HexPrefix(String input, int hexChars) {
-        byte[] digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256")
-                    .digest(input.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 must be supported by every JRE", e);
-        }
-        StringBuilder hex = new StringBuilder(hexChars);
-        for (int i = 0; hex.length() < hexChars && i < digest.length; i++) {
-            int b = digest[i] & 0xff;
-            hex.append(HEX[b >>> 4]);
-            if (hex.length() < hexChars) {
-                hex.append(HEX[b & 0x0f]);
-            }
-        }
-        return hex.toString();
-    }
 }

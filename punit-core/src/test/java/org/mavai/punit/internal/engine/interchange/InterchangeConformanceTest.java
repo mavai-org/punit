@@ -41,7 +41,8 @@ import org.yaml.snakeyaml.Yaml;
  * <p>Small real EXPLORE and OPTIMIZE experiments are driven through
  * the engine and their emitted YAML artefacts are validated against
  * the vendored, pinned copies of the published JSON Schemas
- * ({@code mavai-explore-1}, {@code mavai-optimize-1}). On top of the
+ * ({@code mavai-explore-1}, {@code mavai-optimize-1}, pinned at the
+ * mavai-R v0.9.0 publication). On top of the
  * structural validation, the tests assert the semantic obligations
  * the schemas cannot express: the sorted passing-latency vector is
  * ascending and sized to {@code contributingSamples}; each latency
@@ -126,11 +127,24 @@ class InterchangeConformanceTest {
 
             @SuppressWarnings("unchecked")
             Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
-            assertThat(((Number) statistics.get("failures")).intValue()).isPositive();
+            int failures = ((Number) statistics.get("failures")).intValue();
+            assertThat(failures).isPositive();
+            // Sequence-of-entries shape: {condition, count} entries whose
+            // counts sum to the enclosing failures total, each condition
+            // a bounded identity — never a free-text-keyed mapping.
             @SuppressWarnings("unchecked")
-            Map<String, Object> failureDistribution =
-                    (Map<String, Object>) statistics.get("failureDistribution");
+            List<Map<String, Object>> failureDistribution =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
             assertThat(failureDistribution).isNotEmpty();
+            int attributed = 0;
+            for (Map<String, Object> entry : failureDistribution) {
+                assertThat(entry).containsKeys("condition", "count");
+                assertThat((String) entry.get("condition")).hasSizeLessThanOrEqualTo(256);
+                attributed += ((Number) entry.get("count")).intValue();
+            }
+            assertThat(attributed)
+                    .as("each failed trial attributed to its first failing condition")
+                    .isEqualTo(failures);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> latency = (Map<String, Object>) doc.get("latency");
@@ -232,6 +246,124 @@ class InterchangeConformanceTest {
             assertThat(convergence.get("bestFactors")).isEqualTo(best.get("factors"));
             assertThat(((Number) convergence.get("totalIterations")).intValue())
                     .isEqualTo(iterations.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("artefact key discipline")
+    class ArtefactKeyDiscipline {
+
+        /** Driving input comfortably past YAML's 1,024-char implicit-key limit. */
+        private static final String LONG_INPUT = "lorem ipsum dolor sit amet ".repeat(48);
+
+        /** Condition identities past the 256-char emitted-key bound, sharing a prefix. */
+        private static final String LONG_DESCRIPTION_A =
+                "the response upholds every clause of the long-winded acceptance narrative "
+                        + "x".repeat(300) + " variant-A";
+        private static final String LONG_DESCRIPTION_B =
+                "the response upholds every clause of the long-winded acceptance narrative "
+                        + "x".repeat(300) + " variant-B";
+
+        /**
+         * Echoes its over-long input and alternates failures between
+         * two conditions whose declared identities exceed the emitted-key
+         * bound — exercising both the free-text-key exposure and the
+         * prefix-plus-hash truncation's distinctness.
+         */
+        private final class LongIdentityContract implements ServiceContract<LlmFactors, String, String> {
+            private final AtomicInteger invocations = new AtomicInteger();
+            @Override public String id() { return "interchange-long-identity"; }
+            @Override public Outcome<String> invoke(String input, TokenTracker tracker) {
+                return Outcome.ok(input);
+            }
+            @Override public Criteria<String> criteria() {
+                return meeting().<String>zeroFailures()
+                        .name("long-identity")
+                        .satisfies(LONG_DESCRIPTION_A, v -> invocations.get() % 2 == 0
+                                ? Outcome.fail(LONG_DESCRIPTION_A, "even invocation")
+                                : Outcome.ok())
+                        .satisfies(LONG_DESCRIPTION_B, v -> invocations.getAndIncrement() % 2 == 0
+                                ? Outcome.ok()
+                                : Outcome.fail(LONG_DESCRIPTION_B, "odd invocation"));
+            }
+        }
+
+        @Test
+        @DisplayName("over-long input and condition identities emit a parseable, schema-valid artefact with bounded keys")
+        void longInputAndIdentitiesStayWithinKeyBounds() {
+            assertThat(LONG_INPUT.length()).isGreaterThan(1024);
+
+            Sampling<LlmFactors, String, String> sampling = Sampling
+                    .<LlmFactors, String, String>builder()
+                    .serviceContractFactory(f -> new LongIdentityContract())
+                    .inputs(LONG_INPUT)
+                    .samples(4)
+                    .build();
+            Experiment experiment = Experiment.exploring(sampling)
+                    .grid(List.of(new LlmFactors("gpt-4o", 0.3)))
+                    .build();
+            new Engine().run(experiment);
+
+            Map<String, String> sink = new LinkedHashMap<>();
+            ExploreEmitter.emit(experiment, sink::put);
+            assertThat(sink).hasSize(1);
+            String rawYaml = sink.values().iterator().next();
+
+            // The whole document parses — no implicit key anywhere near
+            // the 1,024-char limit that broke unbounded-key emission.
+            Map<String, Object> doc = new Yaml().load(rawYaml);
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            // Every mapping key on every surface is bounded and never
+            // derived from input content.
+            List<String> keys = new ArrayList<>();
+            collectKeys(doc, keys);
+            for (String key : keys) {
+                assertThat(key.length())
+                        .as("emitted key must stay within the 256-char bound: %s", key)
+                        .isLessThanOrEqualTo(256);
+                assertThat(key).doesNotContain(LONG_INPUT.substring(0, 64));
+            }
+
+            // Failure attribution: bounded conditions, distinct after
+            // truncation despite the shared prefix, counts summing to
+            // the failures total.
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            int failures = ((Number) statistics.get("failures")).intValue();
+            assertThat(failures).isEqualTo(4);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> failureDistribution =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+            assertThat(failureDistribution).hasSize(2);
+            List<String> conditions = new ArrayList<>();
+            int attributed = 0;
+            for (Map<String, Object> entry : failureDistribution) {
+                String condition = (String) entry.get("condition");
+                assertThat(condition).hasSize(256);
+                conditions.add(condition);
+                attributed += ((Number) entry.get("count")).intValue();
+            }
+            assertThat(attributed).isEqualTo(failures);
+            assertThat(conditions.get(0)).isNotEqualTo(conditions.get(1));
+
+            // The long input is welcome in values — the per-sample
+            // content still carries it in full.
+            assertThat(rawYaml).contains("lorem ipsum dolor sit amet");
+        }
+
+        /** Recursively collect every mapping key in the document. */
+        private static void collectKeys(Object node, List<String> keys) {
+            if (node instanceof Map<?, ?> map) {
+                for (Map.Entry<?, ?> e : map.entrySet()) {
+                    keys.add(String.valueOf(e.getKey()));
+                    collectKeys(e.getValue(), keys);
+                }
+            } else if (node instanceof List<?> list) {
+                for (Object item : list) {
+                    collectKeys(item, keys);
+                }
+            }
         }
     }
 

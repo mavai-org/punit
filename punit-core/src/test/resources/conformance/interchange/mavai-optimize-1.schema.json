@@ -129,8 +129,39 @@
       }
     },
     "failureDistribution": {
-      "type": "object",
-      "additionalProperties": { "type": "integer", "minimum": 0 }
+      "type": "array",
+      "description": "A sequence of failure entries aggregated over the run (amendment 2026-07-17: the earlier check-name-keyed mapping is withdrawn — no mapping key may derive from input or response content, per the interchange area's key discipline). Each failed trial is attributed to its first failing condition; the entries' counts sum to the enclosing failures total.",
+      "items": {
+        "type": "object",
+        "required": [
+          "condition",
+          "count"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "condition": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The violating condition's bounded identity, as the contract declares it — never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Failed trials attributed to this entry."
+          },
+          "inputIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-based index into the inputs list, present when the condition is per-input — the structural input reference; the input value itself is never serialised as identity."
+          },
+          "inputExcerpt": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Informational bounded excerpt of the driving input, for human orientation only — consumers correlate via inputIndex."
+          }
+        }
+      }
     },
     "cost": {
       "type": "object",
