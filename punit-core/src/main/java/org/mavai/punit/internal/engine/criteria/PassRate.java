@@ -66,7 +66,7 @@ import org.mavai.punit.statistics.ThresholdDeriver;
  * dependencies. The {@link Criterion} interface itself stays in
  * {@code api package}; only this implementation moved.
  */
-// javai-ref: JVI-C5P3EQE — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-C5P3EQE — do not remove (resolves in mavai-orchestrator)
 public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateStatistics> {
 
     private static final String NAME = "bernoulli-pass-rate";
@@ -260,8 +260,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
     }
 
     @Override
-    // javai-ref: JVI-BQTS77W — do not remove (resolves in javai-orchestrator)
-    // javai-ref: JVI-GZFMZXV — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-BQTS77W — do not remove (resolves in mavai-orchestrator)
+    // mavai-ref: JVI-GZFMZXV — do not remove (resolves in mavai-orchestrator)
     public OptionalDouble earlyTerminationPassRate() {
         return contractualTarget();
     }

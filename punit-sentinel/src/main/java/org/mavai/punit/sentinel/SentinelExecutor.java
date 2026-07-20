@@ -42,7 +42,7 @@ import org.opentest4j.TestAbortedException;
  * across calls; orchestration over a registry of classes lives in
  * {@link SentinelOrchestrator}.
  */
-// javai-ref: JVI-C4CJAN~ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-C4CJAN~ — do not remove (resolves in mavai-orchestrator)
 public class SentinelExecutor {
 
     /**

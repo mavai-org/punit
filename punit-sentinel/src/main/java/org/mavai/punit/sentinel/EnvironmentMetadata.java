@@ -17,7 +17,7 @@ import java.util.Map;
  * @param environmentId identifies the environment, e.g., "prod", "staging", "us-east-1"
  * @param instanceId identifies the instance, e.g., hostname or pod name
  */
-// javai-ref: JVI-R7NTQ6~ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-R7NTQ6~ — do not remove (resolves in mavai-orchestrator)
 public record EnvironmentMetadata(
         String environmentId,
         String instanceId

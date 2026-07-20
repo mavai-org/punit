@@ -72,7 +72,7 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  *   <li>{@code generatedAt} — {@code Instant.now()}</li>
  * </ul>
  */
-// javai-ref: JVI-EC8CPT3 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-EC8CPT3 — do not remove (resolves in mavai-orchestrator)
 public final class BaselineEmitter {
 
     private BaselineEmitter() { }

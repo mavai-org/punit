@@ -35,7 +35,7 @@ import org.apache.commons.statistics.distribution.BinomialDistribution;
  * <p>This construction is non-parametric, distribution-free, and exact for any
  * continuous underlying latency distribution.
  */
-// javai-ref: JVI-QVNG2SX — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-QVNG2SX — do not remove (resolves in mavai-orchestrator)
 public final class LatencyThresholdDeriver {
 
     private LatencyThresholdDeriver() {}

@@ -15,7 +15,7 @@ import org.mavai.punit.api.TokenChargeRecorder;
  * 
  * <p>Not thread-safe - intended for use within a single test execution thread.
  */
-// javai-ref: JVI-76VA511 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-76VA511 — do not remove (resolves in mavai-orchestrator)
 public class DefaultTokenChargeRecorder implements TokenChargeRecorder {
 
     private final long tokenBudget;

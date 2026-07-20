@@ -45,7 +45,7 @@ public class TestVerdictEvaluator {
      * @param threshold The derived threshold against which to compare
      * @return Verdict with full statistical context
      */
-    // javai-ref: JVI-T08PKZ6 — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-T08PKZ6 — do not remove (resolves in mavai-orchestrator)
     public VerdictWithConfidence evaluate(int testSuccesses, int testSamples, DerivedThreshold threshold) {
         validateInputs(testSuccesses, testSamples, threshold);
 

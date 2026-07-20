@@ -29,7 +29,7 @@ import org.mavai.punit.api.ProbabilisticTest;
  * aren't run twice when a subclass is also registered. If inheritance
  * becomes a real authoring pattern, this is the place to extend.
  */
-// javai-ref: JVI-0PYEB09 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-0PYEB09 — do not remove (resolves in mavai-orchestrator)
 public final class SentinelOrchestrator {
 
     private final SentinelExecutor executor;

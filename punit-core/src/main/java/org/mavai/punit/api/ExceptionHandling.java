@@ -4,8 +4,8 @@ package org.mavai.punit.api;
  * Defines how non-{@link AssertionError} exceptions thrown by the test method
  * should be handled.
  */
-// javai-ref: JVI-A076E41 — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-EGG7M2* — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-A076E41 — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-EGG7M2* — do not remove (resolves in mavai-orchestrator)
 public enum ExceptionHandling {
     
     /**

@@ -57,7 +57,7 @@ punit-sentinel/punit/
 
 ### Orchestrator-managed
 # Requirements / design / planning material for punit lives in
-# javai-orchestrator from 0.7.0 onwards, not in this repository.
+# mavai-orchestrator from 0.7.0 onwards, not in this repository.
 # The block below prevents accidental re-introduction.
 /plan/
 

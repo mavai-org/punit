@@ -19,7 +19,7 @@ import org.mavai.punit.verdict.VerdictSink;
  * <p>Output uses the standard PUnit framing (header/footer dividers) and
  * label-value alignment provided by {@link PUnitReporter}.
  */
-// javai-ref: JVI-ZVX9J8V — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-ZVX9J8V — do not remove (resolves in mavai-orchestrator)
 public final class ConsoleVerdictSink implements VerdictSink {
 
     private final PrintStream out;

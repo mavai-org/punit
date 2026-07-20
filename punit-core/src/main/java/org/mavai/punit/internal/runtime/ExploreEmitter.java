@@ -38,7 +38,7 @@ import org.mavai.punit.internal.engine.explore.ExploreOutputWriter;
  * overload; both share the same per-configuration logic so tests
  * exercise the same path production code drives.
  */
-// javai-ref: JVI-8CHB31R — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-8CHB31R — do not remove (resolves in mavai-orchestrator)
 public final class ExploreEmitter {
 
     private ExploreEmitter() { }

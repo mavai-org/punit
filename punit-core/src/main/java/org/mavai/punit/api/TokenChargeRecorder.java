@@ -34,7 +34,7 @@ package org.mavai.punit.api;
  * @see ProbabilisticTest#tokenBudget()
  * @see ProbabilisticTest#tokenCharge()
  */
-// javai-ref: JVI-76VA511 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-76VA511 — do not remove (resolves in mavai-orchestrator)
 public interface TokenChargeRecorder {
     
     /**

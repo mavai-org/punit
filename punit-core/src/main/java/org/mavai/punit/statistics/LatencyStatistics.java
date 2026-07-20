@@ -35,7 +35,7 @@ public final class LatencyStatistics {
      * @param p the percentile level in (0, 1]
      * @return the percentile value
      */
-    // javai-ref: JVI-CHSD1WP — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-CHSD1WP — do not remove (resolves in mavai-orchestrator)
     public static double nearestRankPercentile(double[] latencies, double p) {
         Objects.requireNonNull(latencies, "latencies must not be null");
         if (latencies.length == 0) {

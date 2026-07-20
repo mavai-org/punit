@@ -36,7 +36,7 @@ import org.mavai.punit.api.spec.Trial;
  * so the anchor line matches across the two files and acts as a
  * synchronisation point for the diff tool.
  */
-// javai-ref: JVI-G0R8DT$ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-G0R8DT$ — do not remove (resolves in mavai-orchestrator)
 public final class ResultProjections {
 
     private ResultProjections() { }

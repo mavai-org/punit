@@ -10,7 +10,7 @@ package org.mavai.punit.verdict;
  * <p>Implementations must be thread-safe if used from concurrent test execution.
  */
 @FunctionalInterface
-// javai-ref: JVI-C8AT3DD — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-C8AT3DD — do not remove (resolves in mavai-orchestrator)
 public interface VerdictSink {
 
     /**

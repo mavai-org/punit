@@ -45,7 +45,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
-// javai-ref: JVI-0CRN8G6 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-0CRN8G6 — do not remove (resolves in mavai-orchestrator)
 public @interface ControlFactor {
 
     /**

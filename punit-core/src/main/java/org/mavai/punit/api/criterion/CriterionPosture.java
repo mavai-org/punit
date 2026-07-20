@@ -46,11 +46,11 @@ import org.mavai.punit.api.ThresholdOrigin;
  * <p>An instance is immutable; the static factory methods produce
  * the four kinds.
  */
-// javai-ref: JVI-0NGDRGR — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-0FVFYBM — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-5YJVXGF — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-6789AKT — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-THPVKXD — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-0NGDRGR — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-0FVFYBM — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-5YJVXGF — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-6789AKT — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-THPVKXD — do not remove (resolves in mavai-orchestrator)
 public final class CriterionPosture {
 
     /** Posture kinds. */

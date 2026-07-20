@@ -41,7 +41,7 @@ import org.mavai.punit.internal.util.HashUtils;
  * to (but excluding) the matched line — which is what the writer
  * hashes when it builds the file.
  */
-// javai-ref: JVI-CNDHE1$ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-CNDHE1$ — do not remove (resolves in mavai-orchestrator)
 final class BaselineIntegrity {
 
     private BaselineIntegrity() { }
