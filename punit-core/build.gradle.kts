@@ -78,7 +78,11 @@ dependencies {
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
     // JSON Schema validation (draft 2020-12) for the interchange
     // emitter conformance tests — test-only, never shipped.
-    testImplementation("com.networknt:json-schema-validator:1.5.6")
+    testImplementation("com.networknt:json-schema-validator:3.0.6")
+    // networknt 3.x validates against Jackson 3 (the tools.jackson line),
+    // distinct from the com.fasterxml Jackson 2 the statistics conformance
+    // tests use above; both are test-only and coexist on the test classpath.
+    testImplementation("tools.jackson.core:jackson-databind:3.1.4")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;
