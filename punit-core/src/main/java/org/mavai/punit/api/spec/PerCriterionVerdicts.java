@@ -42,7 +42,7 @@ import java.util.Optional;
  *       per-criterion verdicts.</li>
  * </ul>
  */
-// javai-ref: JVI-ZCSHQ5K — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-ZCSHQ5K — do not remove (resolves in mavai-orchestrator)
 public final class PerCriterionVerdicts {
 
     private PerCriterionVerdicts() {}

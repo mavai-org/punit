@@ -17,7 +17,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict;
  * {@link ProbabilisticTestVerdict} instances, and writes a standalone
  * HTML report.
  */
-// javai-ref: JVI-PNR8C3F — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-PNR8C3F — do not remove (resolves in mavai-orchestrator)
 public final class ReportGenerator {
 
     private final VerdictXmlReader reader = new VerdictXmlReader();

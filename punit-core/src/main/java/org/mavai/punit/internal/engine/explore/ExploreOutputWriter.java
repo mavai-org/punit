@@ -38,7 +38,7 @@ import org.yaml.snakeyaml.Yaml;
  * the filename — so consumers identify configurations from the
  * document body, never by parsing filenames.
  */
-// javai-ref: JVI-8CHB31R — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-8CHB31R — do not remove (resolves in mavai-orchestrator)
 public final class ExploreOutputWriter {
 
     /** Schema-version value carried in every emitted file. */

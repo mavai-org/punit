@@ -34,7 +34,7 @@ import org.yaml.snakeyaml.Yaml;
  * {@code {serviceContractId}/{experimentId}.yaml} — assembled by the
  * emitter, not the writer.
  */
-// javai-ref: JVI-FJK9SN9 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-FJK9SN9 — do not remove (resolves in mavai-orchestrator)
 public final class OptimizeOutputWriter {
 
     /** Schema-version value carried in every emitted file. */

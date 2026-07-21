@@ -1658,7 +1658,7 @@ is required for the defaults.
 ### Verdict XML (RP07)
 
 Every probabilistic test verdict serialises to an XML file conforming
-to the **RP07 javai verdict interchange standard**:
+to the **RP07 mavai verdict interchange standard**:
 
 - Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`

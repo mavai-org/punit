@@ -464,7 +464,7 @@ public final class ProbabilisticTest implements Spec {
 
     // ── Builder ──────────────────────────────────────────────────────
 
-    // javai-ref: JVI-QRV7SYX — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-QRV7SYX — do not remove (resolves in mavai-orchestrator)
     public static final class Builder<FT, IT, OT> {
 
         private final Sampling<FT, IT, OT> sampling;
@@ -582,7 +582,7 @@ public final class ProbabilisticTest implements Spec {
      * {@link #build()} time. Rejects empirical criteria at build time
      * with a diagnostic teaching the helper-extraction pattern.
      */
-    // javai-ref: JVI-QRV7SYX — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-QRV7SYX — do not remove (resolves in mavai-orchestrator)
     public static final class InlineBuilder<FT, IT, OT> {
 
         private final Function<FT, ServiceContract<FT, IT, OT>> serviceContractFactory;

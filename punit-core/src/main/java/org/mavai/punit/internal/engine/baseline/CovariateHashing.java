@@ -41,7 +41,7 @@ import org.mavai.punit.internal.util.HashUtils;
  * preserves that order through resolution and round-trip, so the
  * implementation here just iterates the profile's value map.
  */
-// javai-ref: JVI-07HPCY* — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-07HPCY* — do not remove (resolves in mavai-orchestrator)
 final class CovariateHashing {
 
     static final int HASH_LENGTH = 4;

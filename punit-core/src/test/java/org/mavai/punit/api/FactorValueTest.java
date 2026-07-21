@@ -91,9 +91,9 @@ class FactorValueTest {
     @Test
     @DisplayName("lifts URI to canonical string form")
     void lifts_uris() {
-        FactorValue v = FactorValue.of(URI.create("https://javai.org/x"));
+        FactorValue v = FactorValue.of(URI.create("https://mavai.org/x"));
         assertThat(v).isInstanceOf(UriValue.class);
-        assertThat(v.canonical()).isEqualTo("\"https://javai.org/x\"");
+        assertThat(v.canonical()).isEqualTo("\"https://mavai.org/x\"");
     }
 
     @Test

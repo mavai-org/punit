@@ -45,7 +45,7 @@ import org.mavai.punit.api.criterion.LatencyCriterion;
  * @param <I> the per-sample input type
  * @param <O> the per-sample output value type
  */
-// javai-ref: JVI-GQXC6W9 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-GQXC6W9 — do not remove (resolves in mavai-orchestrator)
 public interface Contract<I, O> {
 
     /**

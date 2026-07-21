@@ -61,7 +61,7 @@ import org.mavai.punit.api.criterion.ValueMatcher;
  *
  * @param <T> the type the postcondition evaluates
  */
-// javai-ref: JVI-K90P6S1 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-K90P6S1 — do not remove (resolves in mavai-orchestrator)
 public sealed interface Postcondition<T> permits Postcondition.Leaf, Postcondition.Matching {
 
     /** Human-readable description; non-blank. */

@@ -43,7 +43,7 @@ import org.mavai.punit.api.covariate.Covariate;
  * @param <IT> the per-sample input type
  * @param <OT> the per-sample output value type
  */
-// javai-ref: JVI-SMQ2S1R — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-SMQ2S1R — do not remove (resolves in mavai-orchestrator)
 public interface ServiceContract<FT, IT, OT> extends Contract<IT, OT> {
 
     /**

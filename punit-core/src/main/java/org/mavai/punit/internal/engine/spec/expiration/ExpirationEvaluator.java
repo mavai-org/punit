@@ -11,7 +11,7 @@ import org.mavai.punit.internal.engine.spec.model.ExecutionSpecification;
  * <p>Provides convenient methods to evaluate expiration at the current time
  * or at a specified instant.
  */
-// javai-ref: JVI-09GQGN$ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-09GQGN$ — do not remove (resolves in mavai-orchestrator)
 public final class ExpirationEvaluator {
 
     private ExpirationEvaluator() {

@@ -36,8 +36,8 @@ package org.mavai.punit.api;
  *
  * @see ProbabilisticTest#intent()
  */
-// javai-ref: JVI-Q3H5YYY — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-WKHRGXJ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-Q3H5YYY — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-WKHRGXJ — do not remove (resolves in mavai-orchestrator)
 public enum TestIntent {
     /**
      * Evidential intent. Use this when the test is expected to support a confidence-backed

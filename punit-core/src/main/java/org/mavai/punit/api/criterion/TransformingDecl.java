@@ -33,7 +33,7 @@ import org.mavai.punit.api.PostconditionCheck;
  * @param <T> the transformed value type the postconditions evaluate
  *            against
  */
-// javai-ref: JVI-Q8BDYMS — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-Q8BDYMS — do not remove (resolves in mavai-orchestrator)
 public final class TransformingDecl<O, T> implements Decl<O> {
 
     private final CriterionPosture posture;

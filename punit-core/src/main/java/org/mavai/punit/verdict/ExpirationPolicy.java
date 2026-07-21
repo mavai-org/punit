@@ -28,7 +28,7 @@ import java.util.Optional;
  *
  * @see ExpirationStatus
  */
-// javai-ref: JVI-09GQGN$ — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-09GQGN$ — do not remove (resolves in mavai-orchestrator)
 public record ExpirationPolicy(
     int expiresInDays,
     Instant baselineEndTime

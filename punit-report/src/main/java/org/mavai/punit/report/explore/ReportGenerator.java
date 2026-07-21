@@ -29,7 +29,7 @@ import java.util.stream.Stream;
  * already in the YAML; it computes no statistics the exploration producer
  * did not.
  */
-// javai-ref: JVI-ZFQ8WNQ — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-ZFQ8WNQ — do not remove (resolves in mavai-orchestrator)
 public final class ReportGenerator {
 
     private final YamlReader reader = new YamlReader();

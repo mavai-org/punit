@@ -26,8 +26,8 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * remains unchanged — this class maps from the punit record to the
  * cross-project XML format.
  */
-// javai-ref: JVI-6506GYF — do not remove (resolves in javai-orchestrator)
-// javai-ref: JVI-DQWKY4Z — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-6506GYF — do not remove (resolves in mavai-orchestrator)
+// mavai-ref: JVI-DQWKY4Z — do not remove (resolves in mavai-orchestrator)
 public final class VerdictXmlWriter {
 
     /**

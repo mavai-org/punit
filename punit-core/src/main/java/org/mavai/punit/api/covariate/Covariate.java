@@ -50,7 +50,7 @@ import java.util.Set;
  * exhaustiveness at compile time. Adding a sixth variant requires
  * extending the framework — user code cannot.
  */
-// javai-ref: JVI-44AD1Q8 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-44AD1Q8 — do not remove (resolves in mavai-orchestrator)
 public sealed interface Covariate
         permits DayOfWeekCovariate,
                 TimeOfDayCovariate,

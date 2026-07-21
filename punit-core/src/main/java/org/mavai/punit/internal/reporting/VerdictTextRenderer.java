@@ -40,7 +40,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.Termination;
  *   <li>{@link #renderForReporter} — verbose box-drawn output for transparent stats console</li>
  * </ul>
  */
-// javai-ref: JVI-ZVX9J8V — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-ZVX9J8V — do not remove (resolves in mavai-orchestrator)
 public final class VerdictTextRenderer {
 
     private static final int LINE_WIDTH = 78;

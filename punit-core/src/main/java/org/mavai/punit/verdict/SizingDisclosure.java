@@ -29,7 +29,7 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  * rate, target power, computed sample size) that a risk-driven authoring
  * surface will declare: those entries extend this disclosure additively.
  */
-// javai-ref: JVI-RX30FM8 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-RX30FM8 — do not remove (resolves in mavai-orchestrator)
 final class SizingDisclosure {
 
     static final String APPROACH_KEY = "sizing-approach";

@@ -43,7 +43,7 @@ import org.mavai.punit.internal.engine.optimize.OptimizeOutputWriter;
  * <p>The Path overload is a thin wrapper around the BiConsumer
  * overload; both share the same artefact-assembly logic.
  */
-// javai-ref: JVI-FJK9SN9 — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-FJK9SN9 — do not remove (resolves in mavai-orchestrator)
 public final class OptimizeEmitter {
 
     private OptimizeEmitter() { }

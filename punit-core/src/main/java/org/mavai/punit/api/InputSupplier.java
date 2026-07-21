@@ -73,7 +73,7 @@ import java.util.function.Supplier;
  *
  * @param <IT> the per-sample input type
  */
-// javai-ref: JVI-WXK2ZQP — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-WXK2ZQP — do not remove (resolves in mavai-orchestrator)
 public interface InputSupplier<IT> {
 
     /**

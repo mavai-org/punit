@@ -55,7 +55,7 @@ import org.mavai.punit.api.covariate.CovariateProfile;
  * declared covariates; the candidate file alone (which only carries
  * key/value pairs in the {@code covariates:} block) is not enough.
  */
-// javai-ref: JVI-YN3BJ6U — do not remove (resolves in javai-orchestrator)
+// mavai-ref: JVI-YN3BJ6U — do not remove (resolves in mavai-orchestrator)
 final class BaselineSelector {
 
     /**

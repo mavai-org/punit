@@ -70,7 +70,7 @@ public class ThresholdDeriver {
      * @param thresholdConfidence Desired confidence level (1-α)
      * @return Derived threshold with full context
      */
-    // javai-ref: JVI-9HJ92BC — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-9HJ92BC — do not remove (resolves in mavai-orchestrator)
     public DerivedThreshold deriveSampleSizeFirst(
             int baselineSamples,
             int baselineSuccesses,
@@ -145,7 +145,7 @@ public class ThresholdDeriver {
      * @param explicitThreshold The explicitly specified threshold
      * @return Derived threshold with implied confidence and soundness flag
      */
-    // javai-ref: JVI-HHV7KT0 — do not remove (resolves in javai-orchestrator)
+    // mavai-ref: JVI-HHV7KT0 — do not remove (resolves in mavai-orchestrator)
     public DerivedThreshold deriveThresholdFirst(
             int baselineSamples,
             int baselineSuccesses,
