@@ -8,15 +8,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.api.Sampling;
 import org.mavai.punit.api.ServiceContract;
@@ -33,6 +30,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Emitter conformance against the mavai family's canonical
@@ -403,18 +402,18 @@ class InterchangeConformanceTest {
 
     /**
      * Validates a parsed YAML document against a vendored interchange
-     * schema; returns the set of violations (empty means conformant).
+     * schema; returns the list of violations (empty means conformant).
      */
-    private static Set<ValidationMessage> validate(String schemaName, Map<String, Object> document) {
-        JsonSchema schema = loadSchema(schemaName);
+    private static List<Error> validate(String schemaName, Map<String, Object> document) {
+        Schema schema = loadSchema(schemaName);
         JsonNode node = MAPPER.valueToTree(document);
         return schema.validate(node);
     }
 
-    private static JsonSchema loadSchema(String schemaName) {
+    private static Schema loadSchema(String schemaName) {
         String resource = "/conformance/interchange/" + schemaName + ".schema.json";
         InputStream in = InterchangeConformanceTest.class.getResourceAsStream(resource);
         assertThat(in).as("vendored schema %s must be on the test classpath", resource).isNotNull();
-        return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012).getSchema(in);
+        return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12).getSchema(in);
     }
 }
