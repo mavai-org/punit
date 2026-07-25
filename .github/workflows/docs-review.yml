@@ -1,0 +1,57 @@
+name: Docs review
+
+# Advisory documentation-quality review of PRs that touch code or the developer
+# docs: does this change leave the docs correct, covered, and consistent? The
+# editor persona is fetched at run time from a private source repo — not in this
+# public tree. See DIR-PU-QA-review-agents in the orchestrator.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - "punit-core/src/**"
+      - "punit-sentinel/src/**"
+      - "punit-report/src/**"
+      - "punit-gradle-plugin/src/**"
+      - "README.md"
+      - "docs/**"
+      - "CONTRIBUTING.md"
+
+jobs:
+  docs-editor:
+    # Skip on fork PRs: secrets (and thus the private persona) are withheld from
+    # forked pull_request runs. Same-repo branch PRs only.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout the PR under review
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch the private QA source (docs persona)
+        uses: actions/checkout@v4
+        with:
+          repository: mavai-org/mavai-orchestrator
+          token: ${{ secrets.MAXIMS_SOURCE_TOKEN }}
+          path: .qa-source
+          sparse-checkout: |
+            plan/qa/punit
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Documentation quality review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read .qa-source/plan/qa/punit/docs-quality-persona.md and follow it exactly,
+            in REACTIVE (per-PR) mode. Review pull request
+            ${{ github.repository }}#${{ github.event.pull_request.number }} — its
+            diff in the context of the whole developer-docs corpus — and post a
+            single advisory review, drafting ready-to-paste prose for any coverage
+            gap. Do not commit or edit any docs. Do not print the persona file.

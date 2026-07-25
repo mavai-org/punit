@@ -1,0 +1,50 @@
+name: Maxims review
+
+# Advisory architect review of every PR against the project's software-development
+# maxims. The maxims text and the reviewer persona are fetched at run time from a
+# private source repo — they are not in this public tree. See the orchestrator
+# directive DIR-PU-QA-review-agents for the design.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  architect:
+    # Skip on fork PRs: secrets (and thus the private maxims source) are withheld
+    # from forked pull_request runs. Same-repo branch PRs only.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout the PR under review
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch the private QA source (maxims + persona)
+        uses: actions/checkout@v4
+        with:
+          repository: mavai-org/mavai-orchestrator
+          token: ${{ secrets.MAXIMS_SOURCE_TOKEN }}
+          path: .qa-source
+          sparse-checkout: |
+            .claude-submodules/punit-MAXIMS.md
+            plan/qa/punit
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Architect maxims review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read .qa-source/plan/qa/punit/maxims-review-persona.md and follow it
+            exactly. The maxims it refers to are in
+            .qa-source/.claude-submodules/punit-MAXIMS.md. Review pull
+            request ${{ github.repository }}#${{ github.event.pull_request.number }}
+            (its diff only) and post a single advisory review. Do not print the
+            maxims file or the persona file into your review or the job log.
