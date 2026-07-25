@@ -1,0 +1,50 @@
+name: Docs audit
+
+# Proactive full-corpus documentation sweep. Catches the drift no single PR owns
+# — lost flow, cross-doc redundancy, staleness, deletion candidates — and records
+# it in one tracking issue. Runs weekly and on demand. The editor persona is
+# fetched from a private source repo. See DIR-PU-QA-review-agents.
+
+on:
+  schedule:
+    # Mondays 07:00 UTC.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  docs-sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch the private QA source (docs persona)
+        uses: actions/checkout@v4
+        with:
+          repository: mavai-org/mavai-orchestrator
+          token: ${{ secrets.MAXIMS_SOURCE_TOKEN }}
+          path: .qa-source
+          sparse-checkout: |
+            plan/qa/punit
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Full-corpus documentation audit
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read .qa-source/plan/qa/punit/docs-quality-persona.md and follow it exactly,
+            in PROACTIVE (full-corpus sweep) mode. Read the entire owned docs
+            corpus it defines (README.md, docs/USER-GUIDE.md, and the specialist
+            guides it lists) against the current feature surface. Find the open
+            issue in ${{ github.repository }} labelled `docs-audit` and update its
+            body with your findings; if none exists, open one titled
+            "Documentation drift audit — <today's ISO date>" with the `docs-audit`
+            label. Do not commit or edit any docs. Do not print the persona file.

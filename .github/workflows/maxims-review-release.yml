@@ -1,0 +1,103 @@
+name: Maxims review (release panel)
+
+# Deeper, four-persona maxims review for release preparation.
+#
+# punit has no `release/**` branch: a release is cut by bumping `punitVersion`
+# in gradle.properties from `X.Y.Z-SNAPSHOT` to a final `X.Y.Z`, then running
+# the guarded `./gradlew release` task (see CLAUDE-visible release checklist).
+# So this panel keys on that version bump — the one act every release must
+# perform — rather than on a branch name. Between releases the version is
+# always `-SNAPSHOT`, so a final version on a PR marks the release-preparation
+# PR. Because the release flow does not require the bump to travel by PR, the
+# release checklist also allows forcing the panel against any PR via a manual
+# `workflow_dispatch`.
+#
+# The personas and maxims are fetched from a private source repo — not in this
+# public tree. See DIR-PU-QA-review-agents in the orchestrator.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - gradle.properties
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to review
+        required: true
+
+jobs:
+  gate:
+    # Run the panel only when this PR is preparing a release — i.e. its
+    # gradle.properties punitVersion is a final `X.Y.Z` (no `-SNAPSHOT` /
+    # pre-release suffix). A manual dispatch always runs.
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "manual dispatch — running panel"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ver="$(grep -E '^punitVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          if printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "release version $ver — running panel"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "development version $ver — not a release PR, skipping panel"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  panel:
+    needs: gate
+    # Skip on fork PRs (secrets, and thus the private source, are withheld).
+    if: >-
+      needs.gate.outputs.run == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        persona: [structural, type-state, interface-error, java-idiom]
+    steps:
+      - name: Checkout the PR under review
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch the private QA source (maxims + personas)
+        uses: actions/checkout@v4
+        with:
+          repository: mavai-org/mavai-orchestrator
+          token: ${{ secrets.MAXIMS_SOURCE_TOKEN }}
+          path: .qa-source
+          sparse-checkout: |
+            .claude-submodules/punit-MAXIMS.md
+            plan/qa/punit
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: ${{ matrix.persona }} maxims review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read .qa-source/plan/qa/punit/maxims-review-${{ matrix.persona }}.md and
+            follow it exactly. The maxims are in
+            .qa-source/.claude-submodules/punit-MAXIMS.md. Review the diff of
+            PR #${{ github.event.pull_request.number || github.event.inputs.pr }}
+            through this persona's lens only, and post one advisory review section
+            headed with the persona name. Do not print the maxims or persona files.
