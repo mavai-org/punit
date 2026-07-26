@@ -20,6 +20,7 @@ module org.mavai.punit.decl {
     // is black-box enablement of the declarative approach, not an
     // API, and subject to change without notice.
     exports org.mavai.punit.decl;
+    exports org.mavai.punit.decl.spi;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
@@ -29,6 +30,7 @@ module org.mavai.punit.decl {
     // Explicitly NO requires for JUnit.
 
     // ── Services ──────────────────────────────────────────────
+    uses org.mavai.punit.decl.spi.ServiceType;
     provides org.mavai.punit.runtime.PUnit.DeclarativeFrontEnd
             with org.mavai.punit.decl.internal.DeclFrontEnd;
 }

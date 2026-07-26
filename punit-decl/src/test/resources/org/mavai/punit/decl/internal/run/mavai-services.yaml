@@ -1,0 +1,19 @@
+format: mavai-services/1
+services:
+  triage-assistant:
+    type: triage
+    configuration:
+      tone: matter-of-fact
+      certainty: 0.9
+    explorations:
+      - certainty: 0.7
+      - tone: reassuring
+  echo-service:
+    type: echo-model
+    configuration:
+      prefix: "echo:"
+  dual-source:
+    type: triage
+    configuration:
+      tone: from-the-definition
+      certainty: 0.5

@@ -1,0 +1,13 @@
+format: mavai-contract/1
+contract: registered-view-takes-an-xpath
+service: receipt-service
+transforms:
+  dom: receipt-dom
+criteria:
+  - name: total-is-decimal
+    threshold: 0.5
+    postconditions:
+      - in: dom
+        path: "/receipt/total"
+        matches: '^\d+\.\d{2}$'
+inputs: ["order-1"]

@@ -1,6 +1,7 @@
 package org.mavai.punit.decl.internal.run;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.api.NoFactors;
@@ -30,6 +31,7 @@ public final class DeclaredRun implements Declared {
 
     private Integer samples;
     private Class<?> bindingsClass;
+    private java.nio.file.Path servicesFile;
     private Double power;
     private Double tolerateBare;
     private final java.util.Map<String, Double> tolerateNamed = new java.util.LinkedHashMap<>();
@@ -49,6 +51,12 @@ public final class DeclaredRun implements Declared {
     @Override
     public Declared bindings(Class<?> bindingsClass) {
         this.bindingsClass = bindingsClass;
+        return this;
+    }
+
+    @Override
+    public Declared services(java.nio.file.Path servicesFile) {
+        this.servicesFile = servicesFile;
         return this;
     }
 
@@ -80,11 +88,46 @@ public final class DeclaredRun implements Declared {
         }
         RiskClaims claims = RiskClaims.resolve(declaration, samples, power, tolerateBare, tolerateNamed);
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
-        BindingsRegistry.Invoker invoker = registry.resolve(declaration.service());
-        StockViews views = new StockViews(declaration);
+        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        org.mavai.punit.decl.spi.ConfiguredService defined = services.lookup(declaration.service());
+        final BindingsRegistry.Invoker invoker;
+        Map<String, String> configurationCovariates;
+        if (defined != null) {
+            // A definition wins service: resolution over a same-named binding.
+            invoker = defined::invoke;
+            configurationCovariates = defined.configurationCovariates();
+        } else if (registry.hasBinding(declaration.service())) {
+            invoker = registry.resolveBinding(declaration.service());
+            configurationCovariates = Map.of();
+        } else {
+            // Neither population resolves the name — the binding
+            // registry's refusal names the known bindings; extend it
+            // with the definition population.
+            try {
+                registry.resolveBinding(declaration.service());
+                throw new IllegalStateException("unreachable");
+            } catch (ContractConfigurationException refusal) {
+                throw new ContractConfigurationException(refusal.getMessage()
+                        + "; no mavai-services.yaml definition names it either "
+                        + "(registered types: " + services.registeredTypeNames() + ")");
+            }
+        }
+        Map<String, String> covariateFeed = registry.covariateFeed(declaration.service());
+        for (String key : covariateFeed.keySet()) {
+            if (configurationCovariates.containsKey(key)) {
+                throw new ContractConfigurationException(
+                        "covariate '" + key + "' arrives from both the resolved configuration "
+                                + "and the @Covariates feed for service '" + declaration.service()
+                                + "' — one identity, two feeds, no overlapping keys");
+            }
+        }
+        Map<String, String> covariates = new java.util.LinkedHashMap<>(configurationCovariates);
+        covariates.putAll(covariateFeed);
+        StockViews views = new StockViews(declaration, registry);
         AtomicReference<Object> currentInput = new AtomicReference<>();
         CriteriaCompiler compiler = new CriteriaCompiler(
-                declaration, views, currentInput, claims.tolerateByCriterion(), claims.power());
+                declaration, views, currentInput, claims.tolerateByCriterion(), claims.power(),
+                registry);
         compiler.validateEagerly();
         Criteria<String> criteria = compiler.compile();
         Sizing.Sized sized = Sizing.resolve(declaration, samples);
@@ -104,6 +147,22 @@ public final class DeclaredRun implements Declared {
             @Override
             public String id() {
                 return declaration.contract();
+            }
+
+            @Override
+            public List<org.mavai.punit.api.covariate.Covariate> covariates() {
+                return covariates.keySet().stream()
+                        .map(key -> org.mavai.punit.api.covariate.Covariate.custom(key,
+                                org.mavai.punit.api.covariate.CovariateCategory.CONFIGURATION))
+                        .toList();
+            }
+
+            @Override
+            public Map<String, java.util.function.Supplier<String>> customCovariateResolvers() {
+                Map<String, java.util.function.Supplier<String>> resolvers =
+                        new java.util.LinkedHashMap<>();
+                covariates.forEach((key, value) -> resolvers.put(key, () -> value));
+                return resolvers;
             }
         };
 

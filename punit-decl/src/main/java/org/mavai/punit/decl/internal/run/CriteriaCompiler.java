@@ -25,7 +25,6 @@ import org.mavai.punit.decl.internal.model.CriterionDeclaration;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
-import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
 /**
@@ -47,16 +46,18 @@ final class CriteriaCompiler {
     private final AtomicReference<Object> currentInput;
     private final Map<String, Double> tolerateOverrides;
     private final Double power;
+    private final BindingsRegistry registry;
     private final Map<Object, List<FormDeclaration>> expectations = new IdentityHashMap<>();
 
     CriteriaCompiler(ContractDeclaration declaration, StockViews views,
             AtomicReference<Object> currentInput,
-            Map<String, Double> tolerateOverrides, Double power) {
+            Map<String, Double> tolerateOverrides, Double power, BindingsRegistry registry) {
         this.declaration = declaration;
         this.views = views;
         this.currentInput = currentInput;
         this.tolerateOverrides = tolerateOverrides;
         this.power = power;
+        this.registry = registry;
         for (InputDeclaration input : declaration.inputs()) {
             if (input.hasExpectations()) {
                 expectations.put(input.value(), input.expected());
@@ -159,10 +160,22 @@ final class CriteriaCompiler {
 
     private Check compileForm(FormDeclaration form, String name) {
         if (form.form() == PostconditionForm.SATISFIES) {
-            throw new ContractConfigurationException(
-                    "`satisfies: " + form.argument() + "` names a check registered in code — "
-                            + "the named-check registry arrives with the bindings-artefact phase "
-                            + "of the declarative surface");
+            String checkName = (String) form.argument();
+            if (!registry.hasCheck(checkName)) {
+                // Force the registry's refusal, which names the known checks.
+                registry.applyCheck(checkName, "");
+            }
+            return new Check(name, response -> {
+                Object subject = response;
+                if (!form.view().equals(FormDeclaration.RAW_VIEW)) {
+                    Outcome<Object> parsed = views.view(form.view(), response);
+                    if (parsed instanceof Outcome.Fail<?> fail) {
+                        return fail;
+                    }
+                    subject = ((Outcome.Ok<Object>) parsed).value();
+                }
+                return registry.applyCheck(checkName, subject);
+            });
         }
         if (form.form() == PostconditionForm.PARSES) {
             String view = (String) form.argument();
@@ -282,7 +295,14 @@ final class CriteriaCompiler {
     }
 
     private Selection compileSelection(String transformation, String expression) {
-        if (transformation.equals("xml")) {
+        // Stock views pin the language by transformation; a registered
+        // view's expression selects its own language by syntax — a
+        // $-rooted expression is JSONPath (the RFC mandates the root),
+        // anything else XPath 1.0.
+        boolean stock = transformation.equals("json") || transformation.equals("yaml")
+                || transformation.equals("xml");
+        boolean jsonPath = stock ? !transformation.equals("xml") : expression.startsWith("$");
+        if (!jsonPath) {
             XPathExpression compiled;
             try {
                 compiled = XPathFactory.newInstance().newXPath().compile(expression);
@@ -291,7 +311,13 @@ final class CriteriaCompiler {
                         "`path: " + expression + "` is not a valid XPath 1.0 expression: "
                                 + error.getMessage());
             }
-            return viewValue -> selectXml(compiled, (Document) viewValue);
+            return viewValue -> {
+                if (!(viewValue instanceof org.w3c.dom.Node node)) {
+                    throw new IllegalArgumentException("the view's value is not a parsed XML "
+                            + "document — an XPath selection needs one");
+                }
+                return selectXml(compiled, node);
+            };
         }
         CompiledJsonPath compiled;
         try {
@@ -301,10 +327,16 @@ final class CriteriaCompiler {
                     "`path: " + expression + "` is not a valid JSONPath (RFC 9535) expression: "
                             + error.getMessage());
         }
-        return compiled::select;
+        return viewValue -> {
+            if (!(viewValue instanceof Map) && !(viewValue instanceof List)) {
+                throw new IllegalArgumentException("the view's value is not a JSON-model "
+                        + "structure — a JSONPath selection needs a mapping or sequence");
+            }
+            return compiled.select(viewValue);
+        };
     }
 
-    private static List<Object> selectXml(XPathExpression expression, Document document) {
+    private static List<Object> selectXml(XPathExpression expression, org.w3c.dom.Node document) {
         try {
             NodeList nodes = (NodeList) expression.evaluate(document, XPathConstants.NODESET);
             List<Object> values = new ArrayList<>(nodes.getLength());

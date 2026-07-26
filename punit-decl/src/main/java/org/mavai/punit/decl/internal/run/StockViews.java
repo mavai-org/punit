@@ -31,30 +31,37 @@ import org.xml.sax.InputSource;
 final class StockViews {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final java.util.Set<String> STOCK = java.util.Set.of("json", "xml", "yaml");
 
     private final Map<String, String> transforms;
+    private final BindingsRegistry registry;
 
     private Object currentResponse;
     private Map<String, Outcome<Object>> cache = new HashMap<>();
 
-    StockViews(ContractDeclaration declaration) {
+    StockViews(ContractDeclaration declaration, BindingsRegistry registry) {
         this.transforms = declaration.transforms();
+        this.registry = registry;
         for (Map.Entry<String, String> view : transforms.entrySet()) {
             String transformation = view.getValue();
-            if (!transformation.equals("json") && !transformation.equals("xml")
-                    && !transformation.equals("yaml")) {
+            if (!STOCK.contains(transformation) && !registry.hasTransform(transformation)) {
                 throw new ContractConfigurationException(
                         "view '" + view.getKey() + "' names transformation '" + transformation
-                                + "', which is not a stock one (json, xml, yaml) — registered "
-                                + "transformations arrive with the bindings-artefact phase of "
-                                + "the declarative surface");
+                                + "', which is neither a stock one (json, xml, yaml) nor "
+                                + "registered in " + registry.bindingsClass().getSimpleName()
+                                + " (register with @Transform(\"" + transformation + "\"))");
             }
         }
     }
 
-    /** The transformation a view applies (stock names only in this phase). */
+    /** The transformation a view applies. */
     String transformation(String view) {
         return transforms.get(view);
+    }
+
+    /** Whether the view's transformation is one of the stock three. */
+    boolean isStock(String view) {
+        return STOCK.contains(transforms.get(view));
     }
 
     /** The view's value for this response — computed once, shared, memoised. */
@@ -68,6 +75,14 @@ final class StockViews {
 
     private Outcome<Object> compute(String name, String response) {
         String transformation = transforms.get(name);
+        if (!STOCK.contains(transformation)) {
+            Outcome<Object> value = registry.applyTransform(transformation, response);
+            return value instanceof Outcome.Fail<?>
+                    ? Outcome.fail("transform-failure",
+                            "view '" + name + "' (" + transformation + "): "
+                                    + ((Outcome.Fail<Object>) value).failure().message())
+                    : value;
+        }
         try {
             return switch (transformation) {
                 case "json" -> Outcome.ok(JSON.readValue(response, Object.class));

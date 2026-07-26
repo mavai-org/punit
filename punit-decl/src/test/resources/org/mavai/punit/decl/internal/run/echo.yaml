@@ -1,0 +1,6 @@
+format: mavai-contract/1
+contract: built-in-type-resolves-via-service-loader
+service: echo-service
+criteria:
+  - { threshold: 0.5, contains: "echo:" }
+inputs: ["ping"]

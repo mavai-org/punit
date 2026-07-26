@@ -128,6 +128,154 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("bindings artefact and service definitions")
+    class BindingsAndServices {
+
+        @Test
+        @DisplayName("a services-file definition configures a user type through its factory signature")
+        void triageAssistantRoutesRequests() {
+            assertThatCode(() -> PUnit.declared().assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a registered check answers the satisfies form")
+        void satisfiesResolvesRegisteredCheck() {
+            assertThatCode(() ->
+                    PUnit.declared("triage-assistant-routes-requests").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a registered transformation is a view, with a dollar-rooted JSONPath")
+        void judgedViewTakesAJsonpath() {
+            assertThatCode(() -> PUnit.declared().assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a registered view holding a document takes XPath by expression syntax")
+        void registeredViewTakesAnXpath() {
+            assertThatCode(() ->
+                    PUnit.declared("registered-view-takes-an-xpath").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a definition wins service resolution over a same-named binding")
+        void definitionWinsServiceResolution() {
+            assertThatCode(() -> PUnit.declared().assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a built-in type resolves via ServiceLoader")
+        void builtInTypeResolvesViaServiceLoader() {
+            assertThatCode(() -> PUnit.declared().assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("an unknown type is refused naming the registered types")
+        void unknownType(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      impossible:
+                        type: warp-drive
+                        configuration:
+                          dilithium: high
+                    """);
+            Declared run = PUnit.declared("greeting-service-is-polite").services(services);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("unknown `type: warp-drive`")
+                    .hasMessageContaining("triage");
+        }
+
+        @Test
+        @DisplayName("a configuration misfit is refused with the factory's rendered signature")
+        void configurationMisfit(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      triage-assistant:
+                        type: triage
+                        configuration:
+                          tone: matter-of-fact
+                          certainty: "very"
+                    """);
+            Declared run = PUnit.declared("triage-assistant-routes-requests").services(services);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("`certainty:` must be a double")
+                    .hasMessageContaining("triage(tone: String, certainty: double)");
+        }
+
+        @Test
+        @DisplayName("a missing configuration key is refused with the signature")
+        void missingConfigurationKey(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      triage-assistant:
+                        type: triage
+                        configuration:
+                          tone: matter-of-fact
+                    """);
+            Declared run = PUnit.declared("triage-assistant-routes-requests").services(services);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("missing configuration key `certainty:`");
+        }
+
+        @Test
+        @DisplayName("duplicate resolved grid points are refused naming the colliding entries")
+        void duplicateGridPoint(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      triage-assistant:
+                        type: triage
+                        configuration:
+                          tone: matter-of-fact
+                          certainty: 0.9
+                        explorations:
+                          - certainty: 0.9
+                    """);
+            Declared run = PUnit.declared("triage-assistant-routes-requests").services(services);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("same configuration as the baseline");
+        }
+
+        @Test
+        @DisplayName("shadowing a built-in type name is refused")
+        void shadowingBuiltInType() {
+            Declared run = PUnit.declared("greeting-service-is-polite")
+                    .bindings(ShadowingBindings.class);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("shadows the built-in type");
+        }
+    }
+
+    static class ShadowingBindings {
+        @org.mavai.punit.decl.BindingFactory("echo-model")
+        java.util.function.Function<String, String> echo(String prefix) {
+            return input -> prefix + input;
+        }
+    }
+
+    @Nested
     @DisplayName("risk claims")
     class RiskClaimRules {
 
@@ -217,14 +365,26 @@ class DeclaredRunTest {
         }
 
         @Test
-        @DisplayName("an unresolvable service names the known bindings")
-        void unresolvableService() {
+        @DisplayName("an unresolvable service names both populations")
+        void unresolvableService(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      echo-service:
+                        type: echo-model
+                        configuration:
+                          prefix: "echo:"
+                    """);
             Declared run = PUnit.declared("greeting-service-is-polite")
-                    .bindings(EmptyBindings.class);
+                    .bindings(EmptyBindings.class)
+                    .services(services);
             assertThatThrownBy(run::assertPasses)
                     .isInstanceOf(ContractConfigurationException.class)
                     .hasMessageContaining("greeting-service")
-                    .hasMessageContaining("@Binding");
+                    .hasMessageContaining("@Binding")
+                    .hasMessageContaining("no mavai-services.yaml definition names it");
         }
 
         @Test
