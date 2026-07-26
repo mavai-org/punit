@@ -175,13 +175,15 @@ public final class PUnit {
          * Runs the declared contract as a measure experiment: every
          * criterion recorded, the standard baseline artefact always
          * persisted, no verdict rendered — recording is the
-         * experiment's main act. A measurement's budget is an
-         * experimental-design decision: an explicit sample count is
-         * required (1,000 is baseline-grade; a smaller deliberate
-         * budget is legitimate — an empirical bar derived from a
-         * smaller baseline widens honestly).
+         * experiment's main act. The terminal carries the verb: the
+         * declarative opener and the contract file are both
+         * posture-free, so the posture lives here. A measurement's
+         * budget is an experimental-design decision: an explicit
+         * sample count is required (1,000 is baseline-grade; a smaller
+         * deliberate budget is legitimate — an empirical bar derived
+         * from a smaller baseline widens honestly).
          */
-        void run();
+        void measure();
 
         /**
          * The measure experiment with the developer's opt-in assertion:

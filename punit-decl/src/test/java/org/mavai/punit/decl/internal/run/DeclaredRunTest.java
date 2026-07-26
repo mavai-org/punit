@@ -109,7 +109,7 @@ class DeclaredRunTest {
         @DisplayName("a measurement's budget must be typed — never defaulted")
         void budgetRequired() {
             Declared run = PUnit.declared("greeting-service-is-polite");
-            assertThatThrownBy(run::run)
+            assertThatThrownBy(run::measure)
                     .isInstanceOf(ContractConfigurationException.class)
                     .hasMessageContaining("experimental-design decision")
                     .hasMessageContaining("1,000 is baseline-grade");
@@ -121,7 +121,7 @@ class DeclaredRunTest {
                 throws java.io.IOException {
             System.setProperty("punit.baseline.dir", directory.toString());
             try {
-                PUnit.declared("greeting-service-is-polite").samples(40).run();
+                PUnit.declared("greeting-service-is-polite").samples(40).measure();
                 try (var files = java.nio.file.Files.walk(directory)) {
                     assertThat(files.filter(java.nio.file.Files::isRegularFile).count())
                             .as("persisted baseline artefacts")
@@ -157,7 +157,7 @@ class DeclaredRunTest {
         void measureThenTest(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) {
             System.setProperty("punit.baseline.dir", directory.toString());
             try {
-                PUnit.declared("mostly-polite-holds-its-measured-form").samples(100).run();
+                PUnit.declared("mostly-polite-holds-its-measured-form").samples(100).measure();
                 // With the baseline in place the empirical criterion is
                 // judged — no INCONCLUSIVE abort, and the always-polite
                 // greeter clears both its bars.
@@ -175,7 +175,7 @@ class DeclaredRunTest {
         void overridesRefusedOnMeasure() {
             Declared run = PUnit.declared("greeting-service-is-polite")
                     .samples(50).atPower(0.9);
-            assertThatThrownBy(run::run)
+            assertThatThrownBy(run::measure)
                     .isInstanceOf(ContractConfigurationException.class)
                     .hasMessageContaining("test posture");
         }

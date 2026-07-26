@@ -91,7 +91,7 @@ public final class DeclaredRun implements Declared {
     }
 
     @Override
-    public void run() {
+    public void measure() {
         Instantiated instantiated = instantiate(false);
         Sizing.Sized sized = measureBudget(instantiated.declaration());
         runPlan(instantiated.declaration(), sized);
