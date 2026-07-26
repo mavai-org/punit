@@ -1,0 +1,7 @@
+format: mavai-contract/1
+contract: nonstandard-confidence-with-thresholds
+service: greeting-service
+confidence: 0.9
+criteria:
+  - { threshold: 0.5, contains: "hello" }
+inputs: ["Alice"]

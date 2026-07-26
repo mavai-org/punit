@@ -15,12 +15,20 @@
 module org.mavai.punit.decl {
 
     // ── Public API surface ────────────────────────────────────
+    // Exactly the author surface: the bindings annotations and the
+    // refusal exception. Everything else — parser, model, engine —
+    // is black-box enablement of the declarative approach, not an
+    // API, and subject to change without notice.
     exports org.mavai.punit.decl;
-    exports org.mavai.punit.decl.model;
-    exports org.mavai.punit.decl.parser;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
     requires org.snakeyaml.engine.v2;
+    requires com.fasterxml.jackson.databind;
+    requires java.xml;
     // Explicitly NO requires for JUnit.
+
+    // ── Services ──────────────────────────────────────────────
+    provides org.mavai.punit.runtime.PUnit.DeclarativeFrontEnd
+            with org.mavai.punit.decl.internal.DeclFrontEnd;
 }

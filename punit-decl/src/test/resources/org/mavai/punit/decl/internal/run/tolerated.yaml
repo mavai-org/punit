@@ -1,0 +1,11 @@
+format: mavai-contract/1
+contract: tolerated-claim-rides-in-the-file
+service: greeting-service
+criteria:
+  - name: clears-its-bar
+    threshold: 0.5
+    contains: "hello"
+  - name: no-worse-than-measured
+    tolerate: 0.8
+    contains: "hello"
+inputs: ["Alice"]

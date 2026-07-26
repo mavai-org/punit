@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: demanding-bar-trips-the-gate
+service: greeting-service
+criteria:
+  - name: nearly-perfect
+    threshold: 0.99
+    contains: "hello"
+inputs:
+  - "Alice"

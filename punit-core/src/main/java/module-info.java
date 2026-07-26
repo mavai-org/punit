@@ -54,6 +54,7 @@ module org.mavai.punit.core {
     // ── ServiceLoader ─────────────────────────────────────────
     uses org.mavai.punit.verdict.VerdictSink;
     uses org.mavai.punit.api.spec.SpecCriterionDeriver;
+    uses org.mavai.punit.runtime.PUnit.DeclarativeFrontEnd;
     provides org.mavai.punit.api.spec.SpecCriterionDeriver
         with org.mavai.punit.internal.engine.criteria.PostureBasedSpecCriterionDeriver;
 }

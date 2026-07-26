@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: rude-service-fails-its-bar
+service: rude-service
+criteria:
+  - name: greets-politely
+    threshold: 0.5
+    contains: "hello"
+inputs:
+  - "Alice"

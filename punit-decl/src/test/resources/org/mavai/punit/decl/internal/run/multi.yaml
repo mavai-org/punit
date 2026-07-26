@@ -1,0 +1,12 @@
+format: mavai-contract/1
+contract: fortune-teller-is-usually-encouraging
+service: fortune-teller
+criteria:
+  - name: fortune-is-delivered
+    threshold: 0.8
+    contains: "fortune"
+  - name: sentence-ends-politely
+    threshold: 0.8
+    contains: "."
+inputs:
+  - "Alice"
