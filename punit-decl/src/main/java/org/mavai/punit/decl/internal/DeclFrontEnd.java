@@ -1,4 +1,4 @@
-package org.mavai.punit.decl;
+package org.mavai.punit.decl.internal;
 
 import org.mavai.punit.decl.internal.run.DeclaredRun;
 import org.mavai.punit.runtime.PUnit.Declared;

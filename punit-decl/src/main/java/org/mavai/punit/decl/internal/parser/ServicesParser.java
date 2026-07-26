@@ -1,7 +1,7 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
-import static org.mavai.punit.decl.parser.Yaml.requireMapping;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireMapping;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -14,10 +14,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.OptimizationDeclaration;
-import org.mavai.punit.decl.model.OptimizationDeclaration.Objective;
-import org.mavai.punit.decl.model.ServiceEntry;
-import org.mavai.punit.decl.model.ServicesDeclaration;
+import org.mavai.punit.decl.internal.model.OptimizationDeclaration;
+import org.mavai.punit.decl.internal.model.OptimizationDeclaration.Objective;
+import org.mavai.punit.decl.internal.model.ServiceEntry;
+import org.mavai.punit.decl.internal.model.ServicesDeclaration;
 
 /**
  * The {@code mavai-services/1} parser: reads a service-definition

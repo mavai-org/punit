@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.model;
+package org.mavai.punit.decl.internal.model;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

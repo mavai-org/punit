@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

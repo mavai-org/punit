@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,14 +13,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.DeclaredIntent;
-import org.mavai.punit.decl.model.FileInput;
-import org.mavai.punit.decl.model.InputDeclaration;
-import org.mavai.punit.decl.model.MediaKind;
-import org.mavai.punit.decl.model.MessageParts;
-import org.mavai.punit.decl.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.CriterionDeclaration;
+import org.mavai.punit.decl.internal.model.DeclaredIntent;
+import org.mavai.punit.decl.internal.model.FileInput;
+import org.mavai.punit.decl.internal.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.MediaKind;
+import org.mavai.punit.decl.internal.model.MessageParts;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 @DisplayName("Contract-file parser")
 class ContractParserTest {

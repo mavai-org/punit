@@ -1,7 +1,7 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
-import static org.mavai.punit.decl.parser.Yaml.requireMapping;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireMapping;
 
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
@@ -13,12 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.mavai.punit.decl.model.FileInput;
-import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.InputDeclaration;
-import org.mavai.punit.decl.model.MediaKind;
-import org.mavai.punit.decl.model.MessageParts;
-import org.mavai.punit.decl.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.FileInput;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.MediaKind;
+import org.mavai.punit.decl.internal.model.MessageParts;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 /**
  * The {@code inputs:} block: scalars, flat argument lists, file-sourced

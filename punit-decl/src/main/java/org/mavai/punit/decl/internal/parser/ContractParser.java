@@ -1,9 +1,9 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
-import static org.mavai.punit.decl.parser.Yaml.isUnitIntervalRate;
-import static org.mavai.punit.decl.parser.Yaml.requireMapping;
-import static org.mavai.punit.decl.parser.Yaml.requireString;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.isUnitIntervalRate;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireMapping;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireString;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -16,12 +16,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.DeclaredIntent;
-import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.InputDeclaration;
-import org.mavai.punit.decl.model.LatencyDeclaration;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.CriterionDeclaration;
+import org.mavai.punit.decl.internal.model.DeclaredIntent;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.LatencyDeclaration;
 import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**

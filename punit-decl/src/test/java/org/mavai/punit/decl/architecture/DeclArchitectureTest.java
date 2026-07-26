@@ -35,6 +35,46 @@ class DeclArchitectureTest {
     }
 
     @Test
+    @DisplayName("the public surface is exactly the author annotations and the refusal exception")
+    void publicSurfaceIsExactlyTheAuthorSurface() {
+        // The engine enabling the declarative approach — parser, model,
+        // locator, compiler, sizing — is a black box, not an API: it
+        // lives under internal.* and is subject to change without
+        // notice. The author-facing surface is the YAML formats plus
+        // this short allowlist.
+        ArchRule rule = classes()
+                .that().resideInAPackage("org.mavai.punit.decl")
+                .and().areTopLevelClasses()
+                .should().haveSimpleNameEndingWith("Binding")
+                .orShould().haveSimpleName("ContractConfigurationException")
+                .because("everything beyond the author surface is internal enablement — "
+                        + "new public types belong under internal.* unless they are "
+                        + "deliberately part of the authoring API");
+
+        rule.check(declClasses);
+    }
+
+    @Test
+    @DisplayName("the module exports only the author surface package")
+    void moduleExportsOnlyTheAuthorSurface() throws Exception {
+        // JPMS is the second fence: consumers on the module path cannot
+        // reach the engine at all. This pins the exports list so a new
+        // exports clause is a deliberate, reviewed decision.
+        java.nio.file.Path classes = java.nio.file.Paths.get("build", "classes", "java", "main");
+        var descriptor = java.lang.module.ModuleFinder.of(classes).findAll().stream()
+                .map(reference -> reference.descriptor())
+                .filter(module -> module.name().equals("org.mavai.punit.decl"))
+                .findFirst()
+                .orElseThrow();
+        var exported = descriptor.exports().stream()
+                .map(java.lang.module.ModuleDescriptor.Exports::source)
+                .collect(java.util.stream.Collectors.toSet());
+        org.assertj.core.api.Assertions.assertThat(exported)
+                .as("packages exported by org.mavai.punit.decl")
+                .containsExactly("org.mavai.punit.decl");
+    }
+
+    @Test
     @DisplayName("decl classes must not depend on JUnit")
     void declMustNotDependOnJUnit() {
         ArchRule rule = noClasses()

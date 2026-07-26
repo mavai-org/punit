@@ -11,7 +11,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 import org.xml.sax.InputSource;

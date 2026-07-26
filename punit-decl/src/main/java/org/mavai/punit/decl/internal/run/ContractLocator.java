@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.parser.ContractParser;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.parser.ContractParser;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 

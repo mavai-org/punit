@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,10 +7,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.OptimizationDeclaration;
-import org.mavai.punit.decl.model.OptimizationDeclaration.Objective;
-import org.mavai.punit.decl.model.ServiceEntry;
-import org.mavai.punit.decl.model.ServicesDeclaration;
+import org.mavai.punit.decl.internal.model.OptimizationDeclaration;
+import org.mavai.punit.decl.internal.model.OptimizationDeclaration.Objective;
+import org.mavai.punit.decl.internal.model.ServiceEntry;
+import org.mavai.punit.decl.internal.model.ServicesDeclaration;
 
 @DisplayName("Services-file parser")
 class ServicesParserTest {

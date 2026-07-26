@@ -1,9 +1,9 @@
 package org.mavai.punit.decl.internal.run;
 
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.DeclaredIntent;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.CriterionDeclaration;
+import org.mavai.punit.decl.internal.model.DeclaredIntent;
 import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
 
 /**

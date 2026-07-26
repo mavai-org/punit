@@ -1,17 +1,17 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
-import static org.mavai.punit.decl.parser.Yaml.isUnitIntervalRate;
-import static org.mavai.punit.decl.parser.Yaml.requireMapping;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.isUnitIntervalRate;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireMapping;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.CriterionDeclaration;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 /**
  * One {@code criteria:} entry, parsed: the key allowlist (with the

@@ -20,11 +20,11 @@ import org.mavai.punit.api.criterion.Decl;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.internal.path.CompiledJsonPath;
 import org.mavai.punit.decl.internal.path.PathSyntaxException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.InputDeclaration;
-import org.mavai.punit.decl.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.CriterionDeclaration;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 

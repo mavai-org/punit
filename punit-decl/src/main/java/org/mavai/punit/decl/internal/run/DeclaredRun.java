@@ -10,9 +10,9 @@ import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.decl.ContractConfigurationException;
-import org.mavai.punit.decl.model.ContractDeclaration;
-import org.mavai.punit.decl.model.DeclaredIntent;
-import org.mavai.punit.decl.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.ContractDeclaration;
+import org.mavai.punit.decl.internal.model.DeclaredIntent;
+import org.mavai.punit.decl.internal.model.InputDeclaration;
 import org.mavai.punit.runtime.PUnit.Declared;
 import org.mavai.punit.runtime.PUnit;
 

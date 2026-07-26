@@ -1,14 +1,14 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 /**
  * One postcondition form entry, parsed: the form vocabulary, the

@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.model;
+package org.mavai.punit.decl.internal.model;
 
 /**
  * The declared test intent: {@code verification} (the default — the run

@@ -1,15 +1,15 @@
-package org.mavai.punit.decl.parser;
+package org.mavai.punit.decl.internal.parser;
 
-import static org.mavai.punit.decl.parser.Yaml.fail;
-import static org.mavai.punit.decl.parser.Yaml.isUnitIntervalRate;
-import static org.mavai.punit.decl.parser.Yaml.requireMapping;
+import static org.mavai.punit.decl.internal.parser.Yaml.fail;
+import static org.mavai.punit.decl.internal.parser.Yaml.isUnitIntervalRate;
+import static org.mavai.punit.decl.internal.parser.Yaml.requireMapping;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.mavai.punit.decl.model.LatencyDeclaration;
-import org.mavai.punit.decl.model.LatencyDeclaration.PercentileCeiling;
+import org.mavai.punit.decl.internal.model.LatencyDeclaration;
+import org.mavai.punit.decl.internal.model.LatencyDeclaration.PercentileCeiling;
 
 /**
  * The {@code latency:} block: explicit millisecond ceilings, or

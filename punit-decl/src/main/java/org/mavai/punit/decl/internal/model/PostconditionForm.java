@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.model;
+package org.mavai.punit.decl.internal.model;
 
 /**
  * The postcondition form vocabulary of the contract format — a real

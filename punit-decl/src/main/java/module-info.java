@@ -15,9 +15,11 @@
 module org.mavai.punit.decl {
 
     // ── Public API surface ────────────────────────────────────
+    // Exactly the author surface: the bindings annotations and the
+    // refusal exception. Everything else — parser, model, engine —
+    // is black-box enablement of the declarative approach, not an
+    // API, and subject to change without notice.
     exports org.mavai.punit.decl;
-    exports org.mavai.punit.decl.model;
-    exports org.mavai.punit.decl.parser;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
@@ -28,5 +30,5 @@ module org.mavai.punit.decl {
 
     // ── Services ──────────────────────────────────────────────
     provides org.mavai.punit.runtime.PUnit.DeclarativeFrontEnd
-            with org.mavai.punit.decl.DeclFrontEnd;
+            with org.mavai.punit.decl.internal.DeclFrontEnd;
 }

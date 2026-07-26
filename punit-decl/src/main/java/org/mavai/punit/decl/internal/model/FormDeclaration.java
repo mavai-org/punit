@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.model;
+package org.mavai.punit.decl.internal.model;
 
 /**
  * One parsed postcondition form: the form, its argument, the subject
