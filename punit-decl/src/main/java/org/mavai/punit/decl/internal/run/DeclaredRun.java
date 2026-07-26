@@ -80,13 +80,87 @@ public final class DeclaredRun implements Declared {
 
     @Override
     public void assertPasses() {
+        Instantiated instantiated = instantiate(true);
+        Sizing.Sized sized = Sizing.resolve(instantiated.declaration(), samples);
+        runPlan(instantiated.declaration(), sized);
+        PUnit.testing(instantiated.sampling(sized.samples()))
+                .intent(instantiated.declaration().intent() == DeclaredIntent.SMOKE
+                        ? TestIntent.SMOKE
+                        : TestIntent.VERIFICATION)
+                .assertPasses();
+    }
+
+    @Override
+    public void run() {
+        Instantiated instantiated = instantiate(false);
+        Sizing.Sized sized = measureBudget(instantiated.declaration());
+        runPlan(instantiated.declaration(), sized);
+        PUnit.measuring(instantiated.sampling(sized.samples())).run();
+    }
+
+    @Override
+    public void assertMeets() {
+        Instantiated instantiated = instantiate(false);
+        Sizing.Sized sized = measureBudget(instantiated.declaration());
+        runPlan(instantiated.declaration(), sized);
+        PUnit.measuring(instantiated.sampling(sized.samples())).assertMeets();
+    }
+
+    /**
+     * A measurement's budget is always typed: property, then the
+     * builder's {@code samples(N)} — never a default.
+     */
+    private Sizing.Sized measureBudget(ContractDeclaration declaration) {
+        if (power != null || tolerateBare != null || !tolerateNamed.isEmpty()) {
+            throw new ContractConfigurationException(
+                    "tolerate/power overrides target the test posture — a measure run records "
+                            + "every criterion and consults no claims");
+        }
+        String property = "punit.samples." + declaration.contract();
+        String propertyValue = System.getProperty(property);
+        if (propertyValue != null) {
+            return new Sizing.Sized(Integer.parseInt(propertyValue.trim()), "set via -D" + property);
+        }
+        if (samples != null) {
+            return new Sizing.Sized(samples, "set via .samples(" + samples + ")");
+        }
+        throw new ContractConfigurationException(
+                "a measurement's budget is an experimental-design decision — type it with "
+                        + ".samples(N) or -D" + property + "=N (1,000 is baseline-grade; a "
+                        + "smaller deliberate budget is legitimate — an empirical bar derived "
+                        + "from a smaller baseline widens honestly)");
+    }
+
+    private void runPlan(ContractDeclaration declaration, Sizing.Sized sized) {
+        System.out.println("[PUNIT] run plan: contract '" + declaration.contract() + "', "
+                + sized.samples() + " samples — " + sized.provenance());
+    }
+
+    private record Instantiated(
+            ContractDeclaration declaration,
+            ServiceContract<NoFactors, Object, String> contract,
+            List<Object> inputs) {
+
+        Sampling<NoFactors, Object, String> sampling(int samples) {
+            return Sampling.<NoFactors, Object, String>builder()
+                    .serviceContractFactory(factors -> contract)
+                    .inputs(inputs)
+                    .samples(samples)
+                    .build();
+        }
+    }
+
+    private Instantiated instantiate(boolean testPosture) {
         ContractLocator.Located located = ContractLocator.locate(caller, methodName, explicitName);
         ContractDeclaration declaration = located.declaration();
-        if (declaration.latency() != null) {
+        if (declaration.latency() != null && !declaration.latency().empirical().isEmpty()) {
             throw new ContractConfigurationException(
-                    "the `latency:` block arrives with a later phase of the declarative surface");
+                    "the empirical `latency:` shape arrives with a later phase of the "
+                            + "declarative surface — declare explicit ceilings meanwhile");
         }
-        RiskClaims claims = RiskClaims.resolve(declaration, samples, power, tolerateBare, tolerateNamed);
+        RiskClaims claims = testPosture
+                ? RiskClaims.resolve(declaration, samples, power, tolerateBare, tolerateNamed)
+                : RiskClaims.none();
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
         ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
         org.mavai.punit.decl.spi.ConfiguredService defined = services.lookup(declaration.service());
@@ -130,8 +204,6 @@ public final class DeclaredRun implements Declared {
                 registry);
         compiler.validateEagerly();
         Criteria<String> criteria = compiler.compile();
-        Sizing.Sized sized = Sizing.resolve(declaration, samples);
-
         ServiceContract<NoFactors, Object, String> contract = new ServiceContract<>() {
             @Override
             public Criteria<String> criteria() {
@@ -164,25 +236,30 @@ public final class DeclaredRun implements Declared {
                 covariates.forEach((key, value) -> resolvers.put(key, () -> value));
                 return resolvers;
             }
+
+            @Override
+            public org.mavai.punit.api.criterion.LatencyCriterion latency() {
+                if (declaration.latency() == null || declaration.latency().ceilings().isEmpty()) {
+                    return ServiceContract.super.latency();
+                }
+                org.mavai.punit.api.criterion.LatencyCriterion criterion = null;
+                for (var ceiling : declaration.latency().ceilings()) {
+                    org.mavai.punit.api.PercentileKey key =
+                            org.mavai.punit.api.PercentileKey.valueOf(
+                                    ceiling.percentile().toUpperCase(java.util.Locale.ROOT));
+                    java.time.Duration bound = java.time.Duration.ofMillis(ceiling.millis());
+                    criterion = criterion == null
+                            ? Criteria.meeting().atMost(key, bound)
+                            : criterion.atMost(key, bound);
+                }
+                return criterion;
+            }
         };
 
         List<Object> inputs = declaration.inputs().stream()
                 .map(InputDeclaration::value)
                 .toList();
-        Sampling<NoFactors, Object, String> sampling = Sampling.<NoFactors, Object, String>builder()
-                .serviceContractFactory(factors -> contract)
-                .inputs(inputs)
-                .samples(sized.samples())
-                .build();
-
-        System.out.println("[PUNIT] run plan: contract '" + declaration.contract() + "', "
-                + sized.samples() + " samples — " + sized.provenance());
-
-        PUnit.testing(sampling)
-                .intent(declaration.intent() == DeclaredIntent.SMOKE
-                        ? TestIntent.SMOKE
-                        : TestIntent.VERIFICATION)
-                .assertPasses();
+        return new Instantiated(declaration, contract, inputs);
     }
 
     private Class<?> resolveBindingsClass() {

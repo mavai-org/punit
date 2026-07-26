@@ -52,6 +52,17 @@ class MavaiBindings {
         return "<receipt><total>12.50</total></receipt>";
     }
 
+    @Binding("mostly-polite")
+    String mostlyPolite(String name) {
+        // Deterministically imperfect: every twentieth response is curt,
+        // so a measured baseline records a 0.95 rate — inside (0, 1),
+        // as the engine's risk-driven sizing requires.
+        int turn = MOSTLY_POLITE_TURN++;
+        return turn % 20 == 19 ? "hmpf, " + name : "hello " + name + "!";
+    }
+
+    private static int MOSTLY_POLITE_TURN;
+
     @Binding("dual-source")
     String dualSourceBinding(String input) {
         return "from-the-binding";

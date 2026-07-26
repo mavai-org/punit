@@ -1,0 +1,8 @@
+format: mavai-contract/1
+contract: empirical-latency-not-yet-supported
+service: greeting-service
+latency:
+  empirical: [p95]
+criteria:
+  - { threshold: 0.5, contains: "hello" }
+inputs: ["Alice"]

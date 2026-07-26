@@ -41,6 +41,11 @@ final class RiskClaims {
         return power;
     }
 
+    /** The measure posture's empty claims — no overrides, no derivation. */
+    static RiskClaims none() {
+        return new RiskClaims(new LinkedHashMap<>(), null);
+    }
+
     static RiskClaims resolve(ContractDeclaration declaration, Integer explicitSamples,
             Double builderPower, Double builderBare, Map<String, Double> builderNamed) {
         String contract = declaration.contract();
