@@ -17,6 +17,7 @@ import org.mavai.punit.decl.model.ContractDeclaration;
 import org.mavai.punit.decl.model.CriterionDeclaration;
 import org.mavai.punit.decl.model.DeclaredIntent;
 import org.mavai.punit.decl.model.FileInput;
+import org.mavai.punit.decl.model.InputDeclaration;
 import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.MediaKind;
 import org.mavai.punit.decl.model.MessageParts;
@@ -57,7 +58,7 @@ class ContractParserTest {
             assertThat(declaration.intent()).isEqualTo(DeclaredIntent.VERIFICATION);
             assertThat(declaration.confidence()).isEqualTo(0.95);
             assertThat(declaration.confidenceDeclared()).isFalse();
-            assertThat(declaration.inputs()).containsExactly("Alice", "Bob");
+            assertThat(declaration.inputs()).extracting(InputDeclaration::value).containsExactly("Alice", "Bob");
             assertThat(declaration.criteria()).hasSize(1);
             CriterionDeclaration criterion = declaration.criteria().get(0);
             assertThat(criterion.threshold()).isEqualTo(0.95);
@@ -145,10 +146,10 @@ class ContractParserTest {
                         expected: { contains: "milk" }
                     """);
             assertThat(declaration.inputs()).hasSize(3);
-            assertThat(declaration.expectations()).hasSize(2);
-            assertThat(declaration.expectations().get(0).inputIndex()).isEqualTo(1);
-            assertThat(declaration.expectations().get(1).inputIndex()).isEqualTo(2);
-            assertThat(declaration.expectations().get(1).forms()).hasSize(1);
+            assertThat(declaration.inputs().get(0).hasExpectations()).isFalse();
+            assertThat(declaration.inputs().get(1).hasExpectations()).isTrue();
+            assertThat(declaration.inputs().get(2).expected()).hasSize(1);
+            assertThat(declaration.hasInputExpectations()).isTrue();
         }
 
         @Test
@@ -239,14 +240,14 @@ class ContractParserTest {
             ContractDeclaration declaration = ContractParser.load(contract);
             assertThat(declaration.intent()).isEqualTo(DeclaredIntent.SMOKE);
             assertThat(declaration.inputs()).hasSize(5);
-            assertThat(declaration.inputs().get(1)).isEqualTo(List.of("milk", 2, true));
-            assertThat(declaration.inputs().get(2)).isInstanceOf(MessageParts.class);
-            MessageParts message = (MessageParts) declaration.inputs().get(2);
+            assertThat(declaration.inputs().get(1).value()).isEqualTo(List.of("milk", 2, true));
+            assertThat(declaration.inputs().get(2).value()).isInstanceOf(MessageParts.class);
+            MessageParts message = (MessageParts) declaration.inputs().get(2).value();
             assertThat(message.parts().get(0)).isEqualTo("What colour dominates this image?");
             assertThat(((FileInput) message.parts().get(1)).kind()).isEqualTo(MediaKind.IMAGE);
-            assertThat(declaration.inputs().get(3)).isEqualTo("the quick brown fox");
-            assertThat(((FileInput) declaration.inputs().get(4)).kind()).isEqualTo(MediaKind.AUDIO);
-            assertThat(declaration.expectations()).hasSize(1);
+            assertThat(declaration.inputs().get(3).value()).isEqualTo("the quick brown fox");
+            assertThat(((FileInput) declaration.inputs().get(4).value()).kind()).isEqualTo(MediaKind.AUDIO);
+            assertThat(declaration.inputs().get(4).expected()).hasSize(1);
         }
     }
 

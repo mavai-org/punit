@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 import org.mavai.punit.decl.model.FileInput;
 import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.FormDeclaration;
-import org.mavai.punit.decl.model.InputExpectation;
+import org.mavai.punit.decl.model.InputDeclaration;
 import org.mavai.punit.decl.model.MediaKind;
 import org.mavai.punit.decl.model.MessageParts;
 
@@ -33,14 +33,11 @@ final class InputsParser {
 
     private InputsParser() {}
 
-    record Result(List<Object> inputs, List<InputExpectation> expectations) {}
-
-    static Result parse(Object value, Map<String, String> views, Path baseDir) {
+    static List<InputDeclaration> parse(Object value, Map<String, String> views, Path baseDir) {
         if (!(value instanceof List<?> entries) || entries.isEmpty()) {
             throw fail("`inputs:` must be a non-empty list");
         }
-        List<Object> inputs = new ArrayList<>();
-        List<InputExpectation> expectations = new ArrayList<>();
+        List<InputDeclaration> inputs = new ArrayList<>();
         int index = 0;
         for (Object entry : entries) {
             index++;
@@ -67,13 +64,12 @@ final class InputsParser {
                         throw fail(expectedWhere + ": `parses:` is a criterion-level form");
                     }
                 }
-                expectations.add(new InputExpectation(inputs.size(), inputValue, forms));
-                inputs.add(inputValue);
+                inputs.add(new InputDeclaration(inputValue, forms));
             } else {
-                inputs.add(normalised(entry, where, baseDir));
+                inputs.add(InputDeclaration.bare(normalised(entry, where, baseDir)));
             }
         }
-        return new Result(inputs, expectations);
+        return inputs;
     }
 
     /**

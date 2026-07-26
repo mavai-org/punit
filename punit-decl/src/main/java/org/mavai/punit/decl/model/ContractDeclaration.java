@@ -19,10 +19,8 @@ import java.util.Map;
  * @param transforms the declared views, in declaration order: view name
  *     to transformation name (a stock one — {@code json}/{@code xml}/
  *     {@code yaml} — or one registered in code)
- * @param inputs the fixed, finite input list; each value is a scalar, a
- *     {@code List} of scalars (an argument tuple), a {@link FileInput},
- *     or a {@link MessageParts}
- * @param expectations the per-input expectations, in input order
+ * @param inputs the fixed, finite input list, each entry carrying its
+ *     value and its own expectations
  * @param criteria the criterion entries, in declaration order
  * @param intent the declared test intent
  * @param confidence the contract-level confidence for thresholded
@@ -37,8 +35,7 @@ public record ContractDeclaration(
         String contract,
         String service,
         Map<String, String> transforms,
-        List<Object> inputs,
-        List<InputExpectation> expectations,
+        List<InputDeclaration> inputs,
         List<CriterionDeclaration> criteria,
         DeclaredIntent intent,
         double confidence,
@@ -52,8 +49,12 @@ public record ContractDeclaration(
     public ContractDeclaration {
         transforms = new LinkedHashMap<>(transforms);
         inputs = List.copyOf(inputs);
-        expectations = List.copyOf(expectations);
         criteria = List.copyOf(criteria);
+    }
+
+    /** Whether any input carries expectations of its own. */
+    public boolean hasInputExpectations() {
+        return inputs.stream().anyMatch(InputDeclaration::hasExpectations);
     }
 
     @Override

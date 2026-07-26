@@ -20,6 +20,7 @@ import org.mavai.punit.decl.model.ContractDeclaration;
 import org.mavai.punit.decl.model.CriterionDeclaration;
 import org.mavai.punit.decl.model.DeclaredIntent;
 import org.mavai.punit.decl.model.FormDeclaration;
+import org.mavai.punit.decl.model.InputDeclaration;
 import org.mavai.punit.decl.model.LatencyDeclaration;
 import org.mavai.punit.statistics.StatisticalDefaults;
 
@@ -70,7 +71,7 @@ public final class ContractParser {
 
         Map<String, String> views = parseTransforms(data);
         Path baseDir = sourcePath != null ? sourcePath.getParent() : null;
-        InputsParser.Result inputs = InputsParser.parse(data.get("inputs"), views, baseDir);
+        List<InputDeclaration> inputs = InputsParser.parse(data.get("inputs"), views, baseDir);
 
         Object criteriaValue = data.get("criteria");
         if (!(criteriaValue instanceof List<?> entries) || entries.isEmpty()) {
@@ -86,7 +87,8 @@ public final class ContractParser {
                 throw fail("criterion names must be unique within the contract");
             }
         }
-        if (!inputs.expectations().isEmpty() && criteria.size() != 1) {
+        boolean hasExpectations = inputs.stream().anyMatch(InputDeclaration::hasExpectations);
+        if (hasExpectations && criteria.size() != 1) {
             throw fail("per-input `expected:` entries require exactly one criteria entry — with "
                     + "several criteria their owner would be ambiguous; move the expectations "
                     + "into the criterion entries");
@@ -115,8 +117,7 @@ public final class ContractParser {
                 requireString(data, "contract"),
                 requireString(data, "service"),
                 views,
-                inputs.inputs(),
-                inputs.expectations(),
+                inputs,
                 criteria,
                 intent,
                 confidence,
