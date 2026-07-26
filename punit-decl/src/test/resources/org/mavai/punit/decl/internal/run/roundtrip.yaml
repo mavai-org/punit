@@ -1,0 +1,11 @@
+format: mavai-contract/1
+contract: mostly-polite-holds-its-measured-form
+service: mostly-polite
+criteria:
+  - name: clears-its-bar
+    threshold: 0.5
+    contains: "hello"
+  - name: no-worse-than-measured
+    tolerate: 0.7
+    contains: "hello"
+inputs: ["Alice"]

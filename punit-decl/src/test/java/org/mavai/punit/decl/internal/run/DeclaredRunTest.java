@@ -87,6 +87,98 @@ class DeclaredRunTest {
             assertThatCode(() -> PUnit.declared().assertPasses())
                     .doesNotThrowAnyException();
         }
+
+        @Test
+        @DisplayName("explicit latency ceilings are judged on the test run")
+        void latencyBlockNotYetSupported() {
+            // The contract name is historical: explicit ceilings now run.
+            // The percentile-existence gate needs 59 samples for p95 at
+            // the default confidence, so the budget is explicit; a fast
+            // local binding sits well under the 500ms ceiling.
+            assertThatCode(() ->
+                    PUnit.declared("latency-block-not-yet-supported").samples(60).assertPasses())
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
+    @DisplayName("measure")
+    class MeasureVerb {
+
+        @Test
+        @DisplayName("a measurement's budget must be typed — never defaulted")
+        void budgetRequired() {
+            Declared run = PUnit.declared("greeting-service-is-polite");
+            assertThatThrownBy(run::measure)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("experimental-design decision")
+                    .hasMessageContaining("1,000 is baseline-grade");
+        }
+
+        @Test
+        @DisplayName("a measure run records and always persists the baseline artefact")
+        void measurePersists(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                PUnit.declared("greeting-service-is-polite").samples(40).measure();
+                try (var files = java.nio.file.Files.walk(directory)) {
+                    assertThat(files.filter(java.nio.file.Files::isRegularFile).count())
+                            .as("persisted baseline artefacts")
+                            .isPositive();
+                }
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
+        }
+
+        @Test
+        @DisplayName("assertMeets records, persists, then asserts the declared bars")
+        void assertMeetsPersistsBeforeAsserting(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                Declared failing = PUnit.declared("rude-service-fails-its-bar").samples(20);
+                assertThatThrownBy(failing::assertMeets)
+                        .isInstanceOf(AssertionFailedError.class);
+                try (var files = java.nio.file.Files.walk(directory)) {
+                    assertThat(files.filter(java.nio.file.Files::isRegularFile).count())
+                            .as("the artefact is on disk whatever the outcome")
+                            .isPositive();
+                }
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
+        }
+
+        @Test
+        @DisplayName("measure then test: the empirical criterion is judged against the baseline")
+        void measureThenTest(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                PUnit.declared("mostly-polite-holds-its-measured-form").samples(100).measure();
+                // With the baseline in place the empirical criterion is
+                // judged — no INCONCLUSIVE abort, and the always-polite
+                // greeter clears both its bars.
+                assertThatCode(() ->
+                        PUnit.declared("mostly-polite-holds-its-measured-form").samples(100)
+                                .assertPasses())
+                        .doesNotThrowAnyException();
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
+        }
+
+        @Test
+        @DisplayName("tolerate and power overrides target the test posture, not measure")
+        void overridesRefusedOnMeasure() {
+            Declared run = PUnit.declared("greeting-service-is-polite")
+                    .samples(50).atPower(0.9);
+            assertThatThrownBy(run::measure)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("test posture");
+        }
     }
 
     @Nested
@@ -388,12 +480,12 @@ class DeclaredRunTest {
         }
 
         @Test
-        @DisplayName("the latency block is refused until its phase arrives")
-        void latencyBlock() {
-            Declared run = PUnit.declared("latency-block-not-yet-supported");
+        @DisplayName("the empirical latency shape is refused until its phase arrives")
+        void empiricalLatencyShape() {
+            Declared run = PUnit.declared("empirical-latency-not-yet-supported");
             assertThatThrownBy(run::assertPasses)
                     .isInstanceOf(ContractConfigurationException.class)
-                    .hasMessageContaining("latency");
+                    .hasMessageContaining("empirical `latency:`");
         }
 
         @Test
