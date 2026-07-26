@@ -1,0 +1,13 @@
+format: mavai-contract/1
+contract: receipt-carries-a-total
+service: receipt-service
+transforms:
+  receipt: xml
+criteria:
+  - name: total-is-decimal
+    threshold: 0.5
+    postconditions:
+      - in: receipt
+        path: "/receipt/total"
+        matches: '^\d+\.\d{2}$'
+inputs: ["order-1"]

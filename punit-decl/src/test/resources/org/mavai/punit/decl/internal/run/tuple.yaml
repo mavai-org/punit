@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: tuple-input-splats-across-parameters
+service: repeater
+criteria:
+  - name: repeats-the-item
+    threshold: 0.5
+    contains: "milk"
+inputs:
+  - ["milk", 3]

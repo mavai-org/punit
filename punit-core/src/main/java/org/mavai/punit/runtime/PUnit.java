@@ -101,6 +101,125 @@ public final class PUnit {
 
     private PUnit() { }
 
+    /**
+     * A declarative run in progress: the surface {@link PUnit#declared()}
+     * returns. The contract file carries the claim — criteria, thresholds,
+     * provenance, intent; this builder carries only the invocation's
+     * concerns: the budget and the bindings override.
+ *
+     * <p>Implemented by the punit-decl module and discovered via
+     * {@link java.util.ServiceLoader}; punit-core defines the seam and
+     * carries no reader machinery.
+     */
+    public interface Declared {
+
+        /**
+         * The run's sample budget. Resolution order for a declarative run:
+         * the per-contract system property
+         * {@code -Dpunit.samples.<contract-name>=N}, then this call, then
+         * the derived minimum the declared bars require.
+         */
+        Declared samples(int samples);
+
+        /**
+         * The bindings class to resolve service names against — the
+         * compile-checked override of the conventional {@code MavaiBindings}
+         * class in the test's package.
+         */
+        Declared bindings(Class<?> bindingsClass);
+
+        /**
+         * The target power for a risk-driven run (default 0.80) — the
+         * {@code --power} flag's equivalent; property channel
+         * {@code -Dpunit.power.<contract-name>=P}. One sizing source per
+         * invocation: contradicts {@link #samples(int)}.
+         */
+        Declared atPower(double power);
+
+        /**
+         * Overrides the sole empirical criterion's risk claim — the bare
+         * {@code --tolerate} flag's equivalent; legal only when exactly one
+         * empirical criterion exists. Property channel
+         * {@code -Dpunit.tolerate.<contract-name>=RATE}. One sizing source
+         * per invocation: contradicts {@link #samples(int)}.
+         */
+        Declared tolerating(double rate);
+
+        /**
+         * Overrides a named criterion's risk claim — the
+         * {@code --tolerate CRITERION=RATE} form; the criterion must exist
+         * and be empirical. Property channel
+         * {@code -Dpunit.tolerate.<contract-name>.<criterion>=RATE}.
+         */
+        Declared tolerating(String criterion, double rate);
+
+        /**
+         * Runs the declared contract as a probabilistic test and translates
+         * the verdict through punit's standard opentest4j mapping: returns
+         * normally on PASS, throws {@link org.opentest4j.AssertionFailedError}
+         * on FAIL. Declarative-layer refusals (a malformed file, an
+         * unresolvable name, an infeasible design) travel on the defect
+         * channel as {@link IllegalStateException} — a test error, never a
+         * FAIL — and always before any sample runs.
+         */
+        void assertPasses();
+    }
+
+    /**
+     * The service-provider seam between {@link PUnit#declared()} and the
+     * declarative reader. punit-decl provides the implementation via
+     * {@link java.util.ServiceLoader} (the {@code VerdictSink} precedent);
+     * punit-core only defines the seam, so a project that never uses
+     * declarative authoring carries none of the reader's machinery.
+     */
+    public interface DeclarativeFrontEnd {
+
+        /**
+         * Opens a declarative run for the calling test method.
+         *
+         * @param caller the test class whose resource package holds the
+         *     contract files
+         * @param methodName the calling method's name — kebab-cased into
+         *     the contract name unless {@code explicitName} overrides
+         * @param explicitName the explicit contract name, or {@code null}
+         *     to resolve from the method name
+         */
+        Declared open(Class<?> caller, String methodName, String explicitName);
+    }
+
+    // ── Declarative entry ───────────────────────────────────────────
+
+    /**
+     * Opens a declarative run: the contract is resolved by its declared
+     * {@code contract:} name — the calling method's name, kebab-cased —
+     * against the contract files in the calling test class's resource
+     * package. Requires the punit-decl module on the runtime classpath;
+     * discovered via {@link java.util.ServiceLoader}.
+     */
+    public static Declared declared() {
+        return declared(null);
+    }
+
+    /**
+     * Opens a declarative run for an explicitly named contract —
+     * the override for when the method name and the {@code contract:}
+     * key deliberately differ.
+     */
+    public static Declared declared(String contractName) {
+        StackWalker walker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+        StackWalker.StackFrame frame = walker.walk(frames -> frames
+                .filter(f -> !f.getClassName().equals(PUnit.class.getName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "PUnit.declared() could not identify its calling method")));
+        DeclarativeFrontEnd frontEnd = ServiceLoader.load(DeclarativeFrontEnd.class)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "PUnit.declared() requires the punit-decl module on the classpath — "
+                                + "add the org.mavai:punit-decl dependency"));
+        return frontEnd.open(frame.getDeclaringClass(), frame.getMethodName(), contractName);
+    }
+
     // ── Sampling-bound factories ────────────────────────────────────
 
     /** Compose a contractual probabilistic test against a shared sampling. */

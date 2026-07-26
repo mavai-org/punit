@@ -1,0 +1,8 @@
+format: mavai-contract/1
+contract: latency-block-not-yet-supported
+service: greeting-service
+latency:
+  p95: 500
+criteria:
+  - { threshold: 0.5, contains: "hello" }
+inputs: ["Alice"]

@@ -1,0 +1,11 @@
+format: mavai-contract/1
+contract: broken-json-fails-per-sample
+service: broken-json
+transforms:
+  doc: json
+criteria:
+  - name: parses-cleanly
+    threshold: 0.5
+    parses: doc
+inputs:
+  - "anything"

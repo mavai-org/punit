@@ -1,0 +1,19 @@
+format: mavai-contract/1
+contract: basket-builder-disappoints-one-input
+service: basket-builder
+transforms:
+  basket: json
+criteria:
+  - name: response-is-a-valid-basket
+    threshold: 0.9
+    postconditions:
+      - in: basket
+        path: "$.items[*].name"
+        matches: '\w'
+inputs:
+  - input: "a dozen eggs, please"
+    expected:
+      - in: basket
+        path: "$.items[*].name"
+        equals: "caviar"
+  - "two bottles of milk"

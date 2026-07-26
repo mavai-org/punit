@@ -1,0 +1,10 @@
+format: mavai-contract/1
+contract: greeting-service-is-polite
+service: greeting-service
+criteria:
+  - name: greets-politely
+    threshold: 0.95
+    contains: "hello"
+inputs:
+  - "Alice"
+  - "Bob"
