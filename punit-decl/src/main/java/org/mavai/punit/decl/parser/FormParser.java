@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.FormDeclaration;
+import org.mavai.punit.decl.model.PostconditionForm;
 
 /**
  * One postcondition form entry, parsed: the form vocabulary, the
@@ -19,8 +19,8 @@ import org.mavai.punit.decl.model.FormDeclaration;
  */
 final class FormParser {
 
-    private static final Set<Form> STRING_FORMS =
-            Set.of(Form.EQUALS, Form.ONE_OF, Form.CONTAINS, Form.MATCHES);
+    private static final Set<PostconditionForm> STRING_FORMS =
+            Set.of(PostconditionForm.EQUALS, PostconditionForm.ONE_OF, PostconditionForm.CONTAINS, PostconditionForm.MATCHES);
 
     private FormParser() {}
 
@@ -52,7 +52,7 @@ final class FormParser {
             throw fail(where + ": each postcondition declares exactly one form");
         }
         String formKey = keys.iterator().next();
-        Form form = forKey(formKey);
+        PostconditionForm form = forKey(formKey);
         if (form == null) {
             throw fail(where + ": unknown postcondition form `" + formKey + "`");
         }
@@ -67,7 +67,7 @@ final class FormParser {
                         + "the raw response is unstructured text");
             }
         }
-        if (form == Form.PARSES) {
+        if (form == PostconditionForm.PARSES) {
             if (!view.equals(FormDeclaration.RAW_VIEW)) {
                 throw fail(where + ": `parses:` takes no `in:` — it names its view directly");
             }
@@ -79,7 +79,7 @@ final class FormParser {
         return new FormDeclaration(form, argument, view, path);
     }
 
-    private static void checkArgument(Form form, Object argument, String where) {
+    private static void checkArgument(PostconditionForm form, Object argument, String where) {
         switch (form) {
             case ONE_OF -> {
                 if (!(argument instanceof List<?> values)
@@ -105,8 +105,8 @@ final class FormParser {
         }
     }
 
-    private static Form forKey(String key) {
-        for (Form form : Form.values()) {
+    private static PostconditionForm forKey(String key) {
+        for (PostconditionForm form : PostconditionForm.values()) {
             if (form.key().equals(key)) {
                 return form;
             }

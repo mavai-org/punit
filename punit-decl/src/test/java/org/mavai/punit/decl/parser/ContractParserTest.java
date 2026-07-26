@@ -18,9 +18,9 @@ import org.mavai.punit.decl.model.CriterionDeclaration;
 import org.mavai.punit.decl.model.DeclaredIntent;
 import org.mavai.punit.decl.model.FileInput;
 import org.mavai.punit.decl.model.InputDeclaration;
-import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.MediaKind;
 import org.mavai.punit.decl.model.MessageParts;
+import org.mavai.punit.decl.model.PostconditionForm;
 
 @DisplayName("Contract-file parser")
 class ContractParserTest {
@@ -63,7 +63,7 @@ class ContractParserTest {
             CriterionDeclaration criterion = declaration.criteria().get(0);
             assertThat(criterion.threshold()).isEqualTo(0.95);
             assertThat(criterion.forms()).hasSize(1);
-            assertThat(criterion.forms().get(0).form()).isEqualTo(Form.CONTAINS);
+            assertThat(criterion.forms().get(0).form()).isEqualTo(PostconditionForm.CONTAINS);
             assertThat(criterion.name()).isEqualTo("criterion-1-contains");
         }
 
@@ -116,8 +116,8 @@ class ContractParserTest {
             assertThat(forms.get(0).view()).isEqualTo("raw");
             assertThat(forms.get(1).view()).isEqualTo("basket");
             assertThat(forms.get(1).path()).isEqualTo("$.items[*].name");
-            assertThat(forms.get(2).form()).isEqualTo(Form.PARSES);
-            assertThat(forms.get(3).form()).isEqualTo(Form.SATISFIES);
+            assertThat(forms.get(2).form()).isEqualTo(PostconditionForm.PARSES);
+            assertThat(forms.get(3).form()).isEqualTo(PostconditionForm.SATISFIES);
         }
 
         @Test

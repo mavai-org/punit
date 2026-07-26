@@ -14,11 +14,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.mavai.punit.decl.model.FileInput;
-import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.FormDeclaration;
 import org.mavai.punit.decl.model.InputDeclaration;
 import org.mavai.punit.decl.model.MediaKind;
 import org.mavai.punit.decl.model.MessageParts;
+import org.mavai.punit.decl.model.PostconditionForm;
 
 /**
  * The {@code inputs:} block: scalars, flat argument lists, file-sourced
@@ -60,7 +60,7 @@ final class InputsParser {
                     forms.add(FormParser.parse(requireMapping(formEntry, expectedWhere), expectedWhere, views));
                 }
                 for (FormDeclaration declaration : forms) {
-                    if (declaration.form() == Form.PARSES) {
+                    if (declaration.form() == PostconditionForm.PARSES) {
                         throw fail(expectedWhere + ": `parses:` is a criterion-level form");
                     }
                 }

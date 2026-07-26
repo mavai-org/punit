@@ -5,7 +5,7 @@ package org.mavai.punit.decl.model;
  * criterion declares a compatible subset, since all its forms must hold
  * together (a conjunction).
  */
-public enum Form {
+public enum PostconditionForm {
     EQUALS("equals"),
     ONE_OF("one-of"),
     CONTAINS("contains"),
@@ -15,7 +15,7 @@ public enum Form {
 
     private final String key;
 
-    Form(String key) {
+    PostconditionForm(String key) {
         this.key = key;
     }
 

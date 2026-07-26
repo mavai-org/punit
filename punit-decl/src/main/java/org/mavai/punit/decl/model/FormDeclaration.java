@@ -14,7 +14,7 @@ package org.mavai.punit.decl.model;
  * @param path the selection expression, or {@code null} when the form
  *     judges its subject whole
  */
-public record FormDeclaration(Form form, Object argument, String view, String path) {
+public record FormDeclaration(PostconditionForm form, Object argument, String view, String path) {
 
     /** The reserved name of the untransformed response. */
     public static final String RAW_VIEW = "raw";

@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.mavai.punit.decl.model.CriterionDeclaration;
-import org.mavai.punit.decl.model.Form;
 import org.mavai.punit.decl.model.FormDeclaration;
+import org.mavai.punit.decl.model.PostconditionForm;
 
 /**
  * One {@code criteria:} entry, parsed: the key allowlist (with the
@@ -118,7 +118,7 @@ final class CriteriaParser {
         }
 
         List<FormDeclaration> forms = new ArrayList<>();
-        for (Form form : Form.values()) {
+        for (PostconditionForm form : PostconditionForm.values()) {
             if (data.containsKey(form.key())) {
                 Map<String, Object> single = new LinkedHashMap<>();
                 single.put(form.key(), data.get(form.key()));
