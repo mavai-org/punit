@@ -1,0 +1,14 @@
+format: mavai-contract/1
+contract: judged-view-takes-a-jsonpath
+service: basket-builder
+transforms:
+  judged: basket-judge
+criteria:
+  - name: names-are-unique
+    threshold: 0.5
+    postconditions:
+      - in: judged
+        path: "$.namesUnique"
+        equals: "true"
+inputs:
+  - "a dozen eggs, please"

@@ -1,6 +1,12 @@
 package org.mavai.punit.decl.internal.run;
 
+import java.util.Map;
+import java.util.function.Function;
 import org.mavai.punit.decl.Binding;
+import org.mavai.punit.decl.BindingFactory;
+import org.mavai.punit.decl.Check;
+import org.mavai.punit.decl.Covariates;
+import org.mavai.punit.decl.Transform;
 
 /**
  * The conventional bindings class for this package's declarative-run
@@ -44,5 +50,38 @@ class MavaiBindings {
     @Binding("receipt-service")
     String receipt(String order) {
         return "<receipt><total>12.50</total></receipt>";
+    }
+
+    @Binding("dual-source")
+    String dualSourceBinding(String input) {
+        return "from-the-binding";
+    }
+
+    @BindingFactory("triage")
+    Function<String, String> triage(String tone, double certainty) {
+        return request -> "category: billing (" + tone + " at " + certainty + ")";
+    }
+
+    @Transform("basket-judge")
+    Map<String, Object> judge(String response) {
+        return Map.of("namesUnique", "true");
+    }
+
+    @Transform("receipt-dom")
+    org.w3c.dom.Document receiptDom(String response) throws Exception {
+        var factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        return factory.newDocumentBuilder()
+                .parse(new org.xml.sax.InputSource(new java.io.StringReader(response)));
+    }
+
+    @Check("mentions-category")
+    boolean mentionsCategory(String subject) {
+        return subject.contains("category");
+    }
+
+    @Covariates("triage-assistant")
+    Map<String, String> triageCovariates() {
+        return Map.of("rules-hash", "abc123");
     }
 }

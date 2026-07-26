@@ -1,0 +1,6 @@
+format: mavai-contract/1
+contract: definition-wins-service-resolution
+service: dual-source
+criteria:
+  - { threshold: 0.5, contains: "from-the-definition" }
+inputs: ["anything"]

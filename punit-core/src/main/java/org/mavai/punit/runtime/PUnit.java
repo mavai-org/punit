@@ -129,6 +129,13 @@ public final class PUnit {
         Declared bindings(Class<?> bindingsClass);
 
         /**
+         * An explicit service-definition file, overriding discovery
+         * (the conventional {@code mavai-services.yaml} beside the
+         * contract files, then the project root).
+         */
+        Declared services(java.nio.file.Path servicesFile);
+
+        /**
          * The target power for a risk-driven run (default 0.80) — the
          * {@code --power} flag's equivalent; property channel
          * {@code -Dpunit.power.<contract-name>=P}. One sizing source per

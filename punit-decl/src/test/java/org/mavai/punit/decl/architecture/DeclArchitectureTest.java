@@ -46,6 +46,10 @@ class DeclArchitectureTest {
                 .that().resideInAPackage("org.mavai.punit.decl")
                 .and().areTopLevelClasses()
                 .should().haveSimpleNameEndingWith("Binding")
+                .orShould().haveSimpleName("BindingFactory")
+                .orShould().haveSimpleName("Transform")
+                .orShould().haveSimpleName("Check")
+                .orShould().haveSimpleName("Covariates")
                 .orShould().haveSimpleName("ContractConfigurationException")
                 .because("everything beyond the author surface is internal enablement — "
                         + "new public types belong under internal.* unless they are "
@@ -71,7 +75,7 @@ class DeclArchitectureTest {
                 .collect(java.util.stream.Collectors.toSet());
         org.assertj.core.api.Assertions.assertThat(exported)
                 .as("packages exported by org.mavai.punit.decl")
-                .containsExactly("org.mavai.punit.decl");
+                .containsExactlyInAnyOrder("org.mavai.punit.decl", "org.mavai.punit.decl.spi");
     }
 
     @Test

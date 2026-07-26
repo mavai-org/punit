@@ -1,56 +1,47 @@
 package org.mavai.punit.decl.internal.run;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.decl.Binding;
+import org.mavai.punit.decl.BindingFactory;
+import org.mavai.punit.decl.Check;
 import org.mavai.punit.decl.ContractConfigurationException;
+import org.mavai.punit.decl.Covariates;
+import org.mavai.punit.decl.Transform;
+import org.mavai.punit.decl.internal.model.FormDeclaration;
 
 /**
- * The bindings-class registry: {@link Binding @Binding}-annotated
- * methods, resolved by name at load time with fail-fast duplicate and
- * unresolvable semantics. Discovery is the conventional
- * {@code MavaiBindings} class in the test's package, or the
- * compile-checked {@code .bindings(Class)} override.
+ * The bindings artefact's registries: {@link Binding @Binding} service
+ * bindings, {@link BindingFactory @BindingFactory} configurable service
+ * types, {@link Transform @Transform} named transformations,
+ * {@link Check @Check} named checks, and
+ * {@link Covariates @Covariates} computed covariate feeds — each
+ * resolved by name at load time with fail-fast duplicate and
+ * unresolvable semantics.
  */
 final class BindingsRegistry {
 
     private final Class<?> bindingsClass;
     private final Object instance;
-    private final Map<String, Method> bindings;
+    private final Map<String, Method> bindings = new LinkedHashMap<>();
+    private final Map<String, Method> factories = new LinkedHashMap<>();
+    private final Map<String, Method> transforms = new LinkedHashMap<>();
+    private final Map<String, Method> checks = new LinkedHashMap<>();
+    private final Map<String, Method> covariateFeeds = new LinkedHashMap<>();
 
-    private BindingsRegistry(Class<?> bindingsClass, Object instance, Map<String, Method> bindings) {
+    private BindingsRegistry(Class<?> bindingsClass, Object instance) {
         this.bindingsClass = bindingsClass;
         this.instance = instance;
-        this.bindings = bindings;
     }
 
     static BindingsRegistry of(Class<?> bindingsClass) {
-        Map<String, Method> bindings = new LinkedHashMap<>();
-        for (Method method : bindingsClass.getDeclaredMethods()) {
-            Binding annotation = method.getAnnotation(Binding.class);
-            if (annotation == null) {
-                continue;
-            }
-            String name = annotation.value();
-            if (name.isEmpty()) {
-                throw new ContractConfigurationException(
-                        "@Binding on " + bindingsClass.getSimpleName() + "." + method.getName()
-                                + " needs a non-empty name");
-            }
-            Method previous = bindings.putIfAbsent(name, method);
-            if (previous != null) {
-                throw new ContractConfigurationException(
-                        "binding '" + name + "' is registered twice in "
-                                + bindingsClass.getSimpleName() + " (" + previous.getName()
-                                + " and " + method.getName() + ") — binding names are unique");
-            }
-            method.setAccessible(true);
-        }
         Object instance;
         try {
             var constructor = bindingsClass.getDeclaredConstructor();
@@ -61,11 +52,67 @@ final class BindingsRegistry {
                     "cannot instantiate bindings class " + bindingsClass.getName()
                             + " — it needs an accessible no-argument constructor", error);
         }
-        return new BindingsRegistry(bindingsClass, instance, bindings);
+        BindingsRegistry registry = new BindingsRegistry(bindingsClass, instance);
+        for (Method method : bindingsClass.getDeclaredMethods()) {
+            registry.register(method, Binding.class, Binding::value, registry.bindings, "binding");
+            registry.register(method, BindingFactory.class, BindingFactory::value,
+                    registry.factories, "service type");
+            registry.register(method, Transform.class, Transform::value,
+                    registry.transforms, "transformation");
+            registry.register(method, Check.class, Check::value, registry.checks, "check");
+            registry.register(method, Covariates.class, Covariates::value,
+                    registry.covariateFeeds, "covariate feed");
+        }
+        for (String view : registry.transforms.keySet()) {
+            if (view.equals(FormDeclaration.RAW_VIEW)) {
+                throw new ContractConfigurationException(
+                        "@Transform(\"raw\") in " + bindingsClass.getSimpleName() + " — `raw` is "
+                                + "the reserved name of the untransformed response");
+            }
+        }
+        return registry;
     }
 
-    /** The resolved invoker for a service name, or a refusal naming the known bindings. */
-    Invoker resolve(String serviceName) {
+    private <A extends Annotation> void register(Method method, Class<A> annotationType,
+            Function<A, String> nameOf, Map<String, Method> registry, String what) {
+        A annotation = method.getAnnotation(annotationType);
+        if (annotation == null) {
+            return;
+        }
+        String name = nameOf.apply(annotation);
+        if (name.isEmpty()) {
+            throw new ContractConfigurationException(
+                    "@" + annotationType.getSimpleName() + " on " + bindingsClass.getSimpleName()
+                            + "." + method.getName() + " needs a non-empty name");
+        }
+        Method previous = registry.putIfAbsent(name, method);
+        if (previous != null) {
+            throw new ContractConfigurationException(
+                    what + " '" + name + "' is registered twice in "
+                            + bindingsClass.getSimpleName() + " (" + previous.getName()
+                            + " and " + method.getName() + ") — names are unique per registry");
+        }
+        method.setAccessible(true);
+    }
+
+    Class<?> bindingsClass() {
+        return bindingsClass;
+    }
+
+    Map<String, Method> factories() {
+        return factories;
+    }
+
+    boolean hasBinding(String serviceName) {
+        return bindings.containsKey(serviceName);
+    }
+
+    boolean hasTransform(String name) {
+        return transforms.containsKey(name);
+    }
+
+    /** The resolved invoker for a bare binding, or a refusal naming the known ones. */
+    Invoker resolveBinding(String serviceName) {
         Method method = bindings.get(serviceName);
         if (method == null) {
             String known = bindings.isEmpty() ? "none registered" : String.join(", ", bindings.keySet());
@@ -74,40 +121,98 @@ final class BindingsRegistry {
                             + bindingsClass.getSimpleName() + ": " + known
                             + " (register with @Binding(\"" + serviceName + "\"))");
         }
-        return input -> invoke(method, input);
+        return input -> asResponse(method, invoke(method, arguments(method, input)));
+    }
+
+    /** The named transformation, applied: the view's value or a transform failure. */
+    Outcome<Object> applyTransform(String name, String response) {
+        Method method = transforms.get(name);
+        Object result = invoke(method, new Object[] {response});
+        if (result instanceof Outcome.Fail<?> fail) {
+            @SuppressWarnings("unchecked")
+            Outcome<Object> failure = (Outcome<Object>) fail;
+            return failure;
+        }
+        if (result instanceof Outcome.Ok<?> ok) {
+            return Outcome.ok(ok.value());
+        }
+        return Outcome.ok(result);
+    }
+
+    /** The named check, applied to its subject: ok, or the check's failure. */
+    Outcome<?> applyCheck(String name, Object subject) {
+        Method method = checks.get(name);
+        if (method == null) {
+            String known = checks.isEmpty() ? "none registered" : String.join(", ", checks.keySet());
+            throw new ContractConfigurationException(
+                    "`satisfies: " + name + "` names no registered check; known checks in "
+                            + bindingsClass.getSimpleName() + ": " + known
+                            + " (register with @Check(\"" + name + "\"))");
+        }
+        Object result = invoke(method, new Object[] {subject});
+        if (result instanceof Outcome<?> outcome) {
+            return outcome;
+        }
+        if (result instanceof Boolean holds) {
+            return holds ? Outcome.ok() : Outcome.fail("check", "check '" + name + "' did not hold");
+        }
+        throw new ContractConfigurationException(
+                "check '" + name + "' must answer with a boolean or an Outcome, got "
+                        + (result == null ? "null" : result.getClass().getSimpleName()));
+    }
+
+    boolean hasCheck(String name) {
+        return checks.containsKey(name);
+    }
+
+    /** The service's computed covariate feed, invoked once; empty when none registered. */
+    Map<String, String> covariateFeed(String serviceName) {
+        Method method = covariateFeeds.get(serviceName);
+        if (method == null) {
+            return Map.of();
+        }
+        Object result = invoke(method, new Object[0]);
+        if (!(result instanceof Map<?, ?> feed)) {
+            throw new ContractConfigurationException(
+                    "@Covariates(\"" + serviceName + "\") must return Map<String, String>, got "
+                            + (result == null ? "null" : result.getClass().getSimpleName()));
+        }
+        Map<String, String> covariates = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : feed.entrySet()) {
+            covariates.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+        }
+        return covariates;
     }
 
     interface Invoker {
         Outcome<String> invoke(Object input);
     }
 
-    @SuppressWarnings("unchecked")
-    private Outcome<String> invoke(Method method, Object input) {
-        Object[] arguments;
-        int parameterCount = method.getParameterCount();
-        if (input instanceof List<?> tuple && parameterCount == tuple.size() && parameterCount != 1) {
-            arguments = tuple.toArray();
-        } else if (parameterCount == 1) {
-            arguments = new Object[] {input};
-        } else {
+    /** Adapts a factory-produced per-sample callable to the invoker seam. */
+    Invoker adaptCallable(String serviceName, Object callable) {
+        if (!(callable instanceof Function<?, ?>)) {
             throw new ContractConfigurationException(
-                    "binding '" + method.getName() + "' takes " + parameterCount
-                            + " parameters but the input " + display(input) + " does not fit — "
-                            + "an argument-list input must match the binding's arity");
+                    "the factory for service '" + serviceName + "' must return a "
+                            + "java.util.function.Function (the per-sample callable), got "
+                            + (callable == null ? "null" : callable.getClass().getSimpleName()));
         }
-        Object result;
+        @SuppressWarnings("unchecked")
+        Function<Object, Object> function = (Function<Object, Object>) callable;
+        return input -> asResponse(null, function.apply(input));
+    }
+
+    Object invoke(Method method, Object[] arguments) {
         try {
-            result = method.invoke(Modifier.isStatic(method.getModifiers()) ? null : instance, arguments);
+            return method.invoke(Modifier.isStatic(method.getModifiers()) ? null : instance, arguments);
         } catch (IllegalAccessException error) {
-            throw new IllegalStateException("binding invocation failed: " + error, error);
+            throw new IllegalStateException("bindings invocation failed: " + error, error);
         } catch (IllegalArgumentException error) {
             throw new ContractConfigurationException(
-                    "binding '" + method.getName() + "' cannot accept the input "
-                            + display(input) + ": " + error.getMessage(), error);
+                    method.getName() + " cannot accept the given arguments: " + error.getMessage(),
+                    error);
         } catch (InvocationTargetException error) {
-            // A defect inside the binding aborts the run — the family's
-            // expected-failure-versus-defect discipline: anticipated bad
-            // responses return as responses; only bugs throw.
+            // A defect inside the bindings class aborts the run — the
+            // family's expected-failure-versus-defect discipline.
             Throwable cause = error.getCause();
             if (cause instanceof RuntimeException runtime) {
                 throw runtime;
@@ -115,11 +220,28 @@ final class BindingsRegistry {
             if (cause instanceof Error fatal) {
                 throw fatal;
             }
-            throw new IllegalStateException("binding defect: " + cause, cause);
+            throw new IllegalStateException("bindings defect: " + cause, cause);
         }
+    }
+
+    private Object[] arguments(Method method, Object input) {
+        int parameterCount = method.getParameterCount();
+        if (input instanceof List<?> tuple && parameterCount == tuple.size() && parameterCount != 1) {
+            return tuple.toArray();
+        }
+        if (parameterCount == 1) {
+            return new Object[] {input};
+        }
+        throw new ContractConfigurationException(
+                "binding '" + method.getName() + "' takes " + parameterCount
+                        + " parameters but the input " + display(input) + " does not fit — "
+                        + "an argument-list input must match the binding's arity");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Outcome<String> asResponse(Method method, Object result) {
+        String who = method == null ? "the per-sample callable" : "binding '" + method.getName() + "'";
         if (result instanceof Outcome.Fail<?> fail) {
-            // An anticipated failure travels as data, straight through
-            // to the engine's failed-sample accounting.
             return (Outcome<String>) fail;
         }
         if (result instanceof Outcome.Ok<?> ok) {
@@ -127,16 +249,14 @@ final class BindingsRegistry {
                 return (Outcome<String>) ok;
             }
             throw new ContractConfigurationException(
-                    "binding '" + method.getName() + "' must carry the service's response as a "
-                            + "String, got Outcome of "
+                    who + " must carry the service's response as a String, got Outcome of "
                             + (ok.value() == null ? "null" : ok.value().getClass().getSimpleName()));
         }
         if (result instanceof String response) {
             return Outcome.ok(response);
         }
         throw new ContractConfigurationException(
-                "binding '" + method.getName() + "' must return the service's response as a "
-                        + "String (or an Outcome), got "
+                who + " must return the service's response as a String (or an Outcome), got "
                         + (result == null ? "null" : result.getClass().getSimpleName()));
     }
 

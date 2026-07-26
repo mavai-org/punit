@@ -1,0 +1,11 @@
+format: mavai-contract/1
+contract: triage-assistant-routes-requests
+service: triage-assistant
+criteria:
+  - name: request-is-routed
+    threshold: 0.7
+    postconditions:
+      - contains: "category"
+      - satisfies: mentions-category
+inputs:
+  - "I was charged twice for one invoice"
