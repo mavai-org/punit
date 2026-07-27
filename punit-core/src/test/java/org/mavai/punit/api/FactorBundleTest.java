@@ -82,7 +82,7 @@ class FactorBundleTest {
     void rejectsNonRecordNonEnum() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> FactorBundle.of("not a record"))
-                .withMessageContaining("must be a record or enum");
+                .withMessageContaining("must be a record, enum, or string-keyed map");
     }
 
     @Test
@@ -125,5 +125,34 @@ class FactorBundleTest {
                         + "\"streaming\":true,\"temperature\":0.3}");
         // Hash must be stable — equal across JVMs and across runs.
         assertThat(b.bundleHash()).matches("[0-9a-f]{4}");
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("lifts a string-keyed map in iteration order — the named-entries shape")
+    void liftsStringKeyedMap() {
+        java.util.Map<String, Object> named = new java.util.LinkedHashMap<>();
+        named.put("temperature", 0.2);
+        named.put("model", "small-model");
+        named.put("cached", true);
+        FactorBundle bundle = FactorBundle.of(named);
+        org.assertj.core.api.Assertions.assertThat(bundle.entries()).hasSize(3);
+        org.assertj.core.api.Assertions.assertThat(bundle.entries().get(0).name())
+                .isEqualTo("temperature");
+        org.assertj.core.api.Assertions.assertThat(bundle.canonicalJson())
+                .isEqualTo("{\"cached\":true,\"model\":\"small-model\",\"temperature\":0.2}");
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("rejects a map with a non-string key or inadmissible value")
+    void rejectsBadMapShapes() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> FactorBundle.of(java.util.Map.of(42, "x")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("keys must be strings");
+        java.util.Map<String, Object> withNull = new java.util.LinkedHashMap<>();
+        withNull.put("absent", null);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> FactorBundle.of(withNull))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("inadmissible value for 'absent'");
     }
 }

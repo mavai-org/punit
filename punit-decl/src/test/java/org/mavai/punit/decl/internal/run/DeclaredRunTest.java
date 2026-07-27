@@ -368,6 +368,48 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("explore")
+    class ExploreVerb {
+
+        @Test
+        @DisplayName("an explore run emits one descriptive artefact per grid configuration")
+        void exploreEmitsPerConfiguration(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.explorations.outputDir", directory.toString());
+            try {
+                PUnit.declared("triage-assistant-routes-requests").samplesPerConfig(3).explore();
+                try (var files = java.nio.file.Files.walk(directory)) {
+                    assertThat(files.filter(java.nio.file.Files::isRegularFile).count())
+                            .as("one artefact per grid point: baseline + two explorations")
+                            .isEqualTo(3);
+                }
+            } finally {
+                System.clearProperty("punit.explorations.outputDir");
+            }
+        }
+
+        @Test
+        @DisplayName("a bare code binding cannot be explored — it carries no grid")
+        void bareBindingRefused() {
+            Declared run = PUnit.declared("greeting-service-is-polite");
+            assertThatThrownBy(run::explore)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("no configuration grid")
+                    .hasMessageContaining("@BindingFactory");
+        }
+
+        @Test
+        @DisplayName("an exploration is sized per configuration, not per run")
+        void samplesRefusedOnExplore() {
+            Declared run = PUnit.declared("triage-assistant-routes-requests").samples(50);
+            assertThatThrownBy(run::explore)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining(".samplesPerConfig(");
+        }
+    }
+
+    @Nested
     @DisplayName("risk claims")
     class RiskClaimRules {
 

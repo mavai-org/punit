@@ -191,6 +191,25 @@ public final class PUnit {
          * asserts each declared bar was met.
          */
         void assertMeets();
+
+        /**
+         * The per-configuration sample count for an explore run
+         * (default 5 — descriptive, ungated: feasibility protects a
+         * verdict, and explore renders none).
+         */
+        Declared samplesPerConfig(int samplesPerConfig);
+
+        /**
+         * Runs the declared contract as an explore experiment: one
+         * measure-shaped, descriptive run per configuration of the
+         * referenced service definition's grid — the baseline
+         * {@code configuration:} plus each {@code explorations:} delta
+         * entry — one exploration artefact per configuration, no
+         * thresholds consulted, no verdict. Requires a service
+         * definition: a bare code binding carries no configuration
+         * grid.
+         */
+        void explore();
     }
 
     /**
