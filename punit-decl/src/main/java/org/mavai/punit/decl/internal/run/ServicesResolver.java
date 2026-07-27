@@ -31,6 +31,7 @@ final class ServicesResolver {
 
     private final Map<String, ServiceType> types = new LinkedHashMap<>();
     private final Map<String, ConfiguredService> configured = new LinkedHashMap<>();
+    private final Map<String, ServiceEntry> entries = new LinkedHashMap<>();
 
     private ServicesResolver() {}
 
@@ -64,6 +65,34 @@ final class ServicesResolver {
         return configured.get(serviceName);
     }
 
+    /** Whether a definition exists for the service name. */
+    boolean isDefined(String serviceName) {
+        return entries.containsKey(serviceName);
+    }
+
+    /**
+     * The definition's exploration grid as resolved configuration
+     * records: the baseline first, then each delta entry merged over
+     * it — {baseline} ∪ explorations, one point per population.
+     */
+    java.util.List<Map<String, Object>> explorationGrid(String serviceName) {
+        ServiceEntry entry = entries.get(serviceName);
+        java.util.List<Map<String, Object>> grid = new java.util.ArrayList<>();
+        grid.add(new LinkedHashMap<>(entry.configuration()));
+        for (Map<String, Object> deltas : entry.explorations()) {
+            Map<String, Object> merged = new LinkedHashMap<>(entry.configuration());
+            merged.putAll(deltas);
+            grid.add(merged);
+        }
+        return grid;
+    }
+
+    /** Configures the named service at one resolved grid point. */
+    ConfiguredService configurePoint(String serviceName, Map<String, Object> configuration) {
+        ServiceEntry entry = entries.get(serviceName);
+        return types.get(entry.type()).configure(serviceName, configuration);
+    }
+
     String registeredTypeNames() {
         return types.isEmpty() ? "none registered" : String.join(", ", new TreeMap<>(types).keySet());
     }
@@ -78,6 +107,7 @@ final class ServicesResolver {
                             + "class with @BindingFactory(\"" + entry.type() + "\"))");
         }
         configured.put(entry.name(), type.configure(entry.name(), entry.configuration()));
+        entries.put(entry.name(), entry);
         validateExplorations(entry, type);
     }
 

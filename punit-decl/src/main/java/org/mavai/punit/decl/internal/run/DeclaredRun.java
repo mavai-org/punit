@@ -30,6 +30,7 @@ public final class DeclaredRun implements Declared {
     private final String explicitName;
 
     private Integer samples;
+    private Integer samplesPerConfig;
     private Class<?> bindingsClass;
     private java.nio.file.Path servicesFile;
     private Double power;
@@ -51,6 +52,12 @@ public final class DeclaredRun implements Declared {
     @Override
     public Declared bindings(Class<?> bindingsClass) {
         this.bindingsClass = bindingsClass;
+        return this;
+    }
+
+    @Override
+    public Declared samplesPerConfig(int samplesPerConfig) {
+        this.samplesPerConfig = samplesPerConfig;
         return this;
     }
 
@@ -104,6 +111,133 @@ public final class DeclaredRun implements Declared {
         Sizing.Sized sized = measureBudget(instantiated.declaration());
         runPlan(instantiated.declaration(), sized);
         PUnit.measuring(instantiated.sampling(sized.samples())).assertMeets();
+    }
+
+    @Override
+    public void explore() {
+        ContractLocator.Located located = ContractLocator.locate(caller, methodName, explicitName);
+        ContractDeclaration declaration = located.declaration();
+        if (declaration.latency() != null && !declaration.latency().empirical().isEmpty()) {
+            throw new ContractConfigurationException(
+                    "the empirical `latency:` shape arrives with a later phase of the "
+                            + "declarative surface — declare explicit ceilings meanwhile");
+        }
+        if (samples != null) {
+            throw new ContractConfigurationException(
+                    ".samples(N) sizes a test or measure run — an exploration is sized per "
+                            + "configuration: use .samplesPerConfig(N) (default 5)");
+        }
+        if (power != null || tolerateBare != null || !tolerateNamed.isEmpty()) {
+            throw new ContractConfigurationException(
+                    "tolerate/power overrides target the test posture — an explore run is "
+                            + "descriptive and consults no claims");
+        }
+        BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
+        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        if (!services.isDefined(declaration.service())) {
+            if (registry.hasBinding(declaration.service())) {
+                throw new ContractConfigurationException(
+                        "service '" + declaration.service() + "' resolves to a bare code "
+                                + "binding, which carries no configuration grid — explore "
+                                + "needs a mavai-services.yaml definition (a configurable "
+                                + "@BindingFactory type with a configuration: block)");
+            }
+            throw new ContractConfigurationException(
+                    "service '" + declaration.service() + "' has no mavai-services.yaml "
+                            + "definition to explore (registered types: "
+                            + services.registeredTypeNames() + ")");
+        }
+        Map<String, String> covariateFeed = registry.covariateFeed(declaration.service());
+        StockViews views = new StockViews(declaration, registry);
+        AtomicReference<Object> currentInput = new AtomicReference<>();
+        CriteriaCompiler compiler = new CriteriaCompiler(
+                declaration, views, currentInput, Map.of(), null, registry);
+        compiler.validateEagerly();
+        Criteria<String> criteria = compiler.compile();
+
+        List<Map<String, Object>> grid = services.explorationGrid(declaration.service());
+        int perConfig = exploreBudget(declaration);
+        List<Object> inputs = declaration.inputs().stream()
+                .map(InputDeclaration::value)
+                .toList();
+
+        Sampling<Map<String, Object>, Object, String> sampling =
+                Sampling.<Map<String, Object>, Object, String>builder()
+                        .serviceContractFactory(configuration -> exploreContract(
+                                declaration, criteria, currentInput,
+                                services, covariateFeed, configuration))
+                        .inputs(inputs)
+                        .samples(perConfig)
+                        .build();
+
+        System.out.println("[PUNIT] run plan: contract '" + declaration.contract() + "', "
+                + grid.size() + " configurations x " + perConfig + " samples — explore");
+
+        PUnit.exploring(sampling).grid(grid).run();
+    }
+
+    private ServiceContract<Map<String, Object>, Object, String> exploreContract(
+            ContractDeclaration declaration,
+            Criteria<String> criteria,
+            AtomicReference<Object> currentInput,
+            ServicesResolver services,
+            Map<String, String> covariateFeed,
+            Map<String, Object> configuration) {
+        org.mavai.punit.decl.spi.ConfiguredService point =
+                services.configurePoint(declaration.service(), configuration);
+        Map<String, String> covariates =
+                new java.util.LinkedHashMap<>(point.configurationCovariates());
+        covariates.putAll(covariateFeed);
+        return new ServiceContract<>() {
+            @Override
+            public Criteria<String> criteria() {
+                return criteria;
+            }
+
+            @Override
+            public Outcome<String> invoke(Object input, TokenTracker tracker) {
+                currentInput.set(input);
+                return point.invoke(input);
+            }
+
+            @Override
+            public String id() {
+                return declaration.contract();
+            }
+
+            @Override
+            public List<org.mavai.punit.api.covariate.Covariate> covariates() {
+                return covariates.keySet().stream()
+                        .map(key -> org.mavai.punit.api.covariate.Covariate.custom(key,
+                                org.mavai.punit.api.covariate.CovariateCategory.CONFIGURATION))
+                        .toList();
+            }
+
+            @Override
+            public Map<String, java.util.function.Supplier<String>> customCovariateResolvers() {
+                Map<String, java.util.function.Supplier<String>> resolvers =
+                        new java.util.LinkedHashMap<>();
+                covariates.forEach((key, value) -> resolvers.put(key, () -> value));
+                return resolvers;
+            }
+        };
+    }
+
+    /** Explore is sized per configuration: property, builder, then the descriptive default 5. */
+    private int exploreBudget(ContractDeclaration declaration) {
+        String property = "punit.samplesPerConfig." + declaration.contract();
+        String propertyValue = System.getProperty(property);
+        if (propertyValue != null) {
+            return Integer.parseInt(propertyValue.trim());
+        }
+        if (samplesPerConfig != null) {
+            if (samplesPerConfig < 1) {
+                throw new ContractConfigurationException(
+                        ".samplesPerConfig(" + samplesPerConfig + ") must be positive");
+            }
+            return samplesPerConfig;
+        }
+        return 5;
     }
 
     /**

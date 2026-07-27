@@ -15,7 +15,7 @@ import java.util.TreeMap;
  * canonical form consumed by the baseline spec YAML and by the
  * {@code factorBundleHash} segment of the baseline filename.
  *
- * <p>The bundle is produced from one of two shapes:
+ * <p>The bundle is produced from one of three shapes:
  *
  * <ul>
  *   <li>A Java {@code record} — the multi-component shape. The record's
@@ -29,6 +29,11 @@ import java.util.TreeMap;
  *       sugar for service contracts parameterised over a single named, finite
  *       set of choices, where defining a one-component wrapper record
  *       would add ceremony without information.</li>
+ *   <li>A string-keyed {@code Map} — the named-entries shape, for
+ *       callers whose factor components exist only at run time (the
+ *       declarative reader's resolved configurations). Entries are
+ *       taken in the map's iteration order and each value is lifted
+ *       via {@link FactorValue#of(Object)}.</li>
  * </ul>
  *
  * <p>{@link #canonicalJson()} serialises the bundle with keys sorted
@@ -87,15 +92,46 @@ public final class FactorBundle {
      */
     public static <FT> FactorBundle of(FT factors) {
         Objects.requireNonNull(factors, "factors");
+        if (factors instanceof java.util.Map<?, ?> named) {
+            return fromMap(named);
+        }
         if (!(factors instanceof Enum<?>) && !factors.getClass().isRecord()) {
             throw new IllegalArgumentException(
-                    "factor type must be a record or enum, got "
+                    "factor type must be a record, enum, or string-keyed map, got "
                             + factors.getClass().getName());
         }
         if (factors instanceof Enum<?> e) {
             return fromEnum(e);
         }
         return fromRecord(factors);
+    }
+
+    /**
+     * The named-entries shape: a string-keyed map of admissible scalar
+     * values, in the map's iteration order — the form a declaratively
+     * resolved configuration takes, where no record type exists to
+     * carry the components. Canonicalisation and hashing are identical
+     * to the record shape's.
+     */
+    private static FactorBundle fromMap(java.util.Map<?, ?> named) {
+        if (named.isEmpty()) {
+            return EMPTY;
+        }
+        List<Entry> out = new ArrayList<>(named.size());
+        for (java.util.Map.Entry<?, ?> entry : named.entrySet()) {
+            if (!(entry.getKey() instanceof String name)) {
+                throw new IllegalArgumentException(
+                        "factor map keys must be strings, got "
+                                + (entry.getKey() == null ? "null" : entry.getKey().getClass().getName()));
+            }
+            try {
+                out.add(new Entry(name, FactorValue.of(entry.getValue())));
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException(
+                        "factor map has inadmissible value for '" + name + "': " + e.getMessage(), e);
+            }
+        }
+        return new FactorBundle(out);
     }
 
     private static FactorBundle fromEnum(Enum<?> e) {
