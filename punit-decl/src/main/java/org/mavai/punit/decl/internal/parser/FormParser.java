@@ -8,19 +8,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
+import org.mavai.punit.decl.internal.model.NumericValue;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 /**
  * One postcondition form entry, parsed: the form vocabulary, the
  * {@code in:} view and {@code path:} qualifiers, and the legality
- * checks — only the string forms take a {@code path:}, and
- * {@code parses:} names its view as its argument, never via
- * {@code in:}.
+ * checks — {@code path:} belongs to the string and value-comparison
+ * forms, a set form judges a selection collectively so it requires a
+ * declared view and a {@code path:}, and {@code parses:} names its
+ * view as its argument, never via {@code in:}.
  */
 final class FormParser {
-
-    private static final Set<PostconditionForm> STRING_FORMS =
-            Set.of(PostconditionForm.EQUALS, PostconditionForm.ONE_OF, PostconditionForm.CONTAINS, PostconditionForm.MATCHES);
 
     private FormParser() {}
 
@@ -59,13 +58,18 @@ final class FormParser {
         Object argument = entry.get(formKey);
         checkArgument(form, argument, where);
         if (path != null) {
-            if (!STRING_FORMS.contains(form)) {
-                throw fail(where + ": `path:` qualifies the string forms only");
+            if (!form.pathCapable()) {
+                throw fail(where + ": `path:` qualifies the string and value-comparison forms only");
             }
             if (view.equals(FormDeclaration.RAW_VIEW)) {
                 throw fail(where + ": `path:` requires `in:` naming a declared view — "
                         + "the raw response is unstructured text");
             }
+        }
+        if (form.collective() && (path == null || view.equals(FormDeclaration.RAW_VIEW))) {
+            throw fail(where + ": `" + form.key() + ":` judges the values a path selects, "
+                    + "collectively — it requires `in:` naming a declared view and a `path:` "
+                    + "(there is no collection over the raw text or a scalar)");
         }
         if (form == PostconditionForm.PARSES) {
             if (!view.equals(FormDeclaration.RAW_VIEW)) {
@@ -90,6 +94,18 @@ final class FormParser {
             }
             case EQUALS, CONTAINS, MATCHES -> {
                 if (!(argument instanceof String)) {
+                    // The guiding refusals (boolean amendment, 2026-07-27):
+                    // the intuitive-but-refused spellings name the form that
+                    // expresses the intent, instead of stranding the author
+                    // at the type rule.
+                    if (form == PostconditionForm.EQUALS && argument instanceof Boolean) {
+                        throw fail(where + ": `equals:` takes a string — a boolean field is "
+                                + "judged with `is: true` / `is: false`");
+                    }
+                    if (form == PostconditionForm.EQUALS && argument == null) {
+                        throw fail(where + ": `equals:` takes a string — a null expectation "
+                                + "is `is-null: true`");
+                    }
                     throw fail(where + ": `" + form.key() + ":` takes a string");
                 }
             }
@@ -102,7 +118,56 @@ final class FormParser {
                 // Checked against the declared views below, where the
                 // refusal can name them.
             }
+            case EQ, NE, LT, LE, GT, GE -> {
+                if (!NumericValue.interpretable(argument)) {
+                    throw fail(where + ": `" + form.key() + ":` takes a number or a numeric "
+                            + "string (sign/decimal/exponent), got "
+                            + Yaml.display(argument));
+                }
+            }
+            case NOT_EQUALS, EQUALS_CI -> {
+                if (!(argument instanceof String)) {
+                    throw fail(where + ": `" + form.key() + ":` takes a string");
+                }
+            }
+            case IS -> {
+                if (!(argument instanceof Boolean)) {
+                    throw fail(where + ": `is:` takes a boolean — it judges JSON true/false "
+                            + "by identity, and the string projections belong to `equals:`; "
+                            + "got " + Yaml.display(argument));
+                }
+            }
+            case IS_NULL -> {
+                if (!Boolean.TRUE.equals(argument)) {
+                    throw fail(where + ": `is-null:` takes the literal `true` and nothing "
+                            + "else — the negation is not offered");
+                }
+            }
+            case EQUALS_SET, CONTAINS_SET -> {
+                if (!(argument instanceof List<?> values)
+                        || values.isEmpty()
+                        || !values.stream().allMatch(FormParser::scalarElement)) {
+                    throw fail(where + ": `" + form.key() + ":` takes a non-empty list of "
+                            + "scalar values (an empty-selection assertion is `count-equals: 0`)");
+                }
+            }
+            case COUNT_EQUALS -> {
+                boolean nonNegativeInteger = !(argument instanceof Boolean)
+                        && argument instanceof Number count
+                        && count.longValue() >= 0
+                        && !(argument instanceof Double || argument instanceof Float);
+                if (!nonNegativeInteger) {
+                    throw fail(where + ": `count-equals:` takes a non-negative integer");
+                }
+            }
         }
+    }
+
+    private static boolean scalarElement(Object element) {
+        return element == null
+                || element instanceof String
+                || element instanceof Number
+                || element instanceof Boolean;
     }
 
     private static PostconditionForm forKey(String key) {

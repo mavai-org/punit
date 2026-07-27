@@ -102,6 +102,49 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("value-comparison forms")
+    class ValueComparisonForms {
+
+        @Test
+        @DisplayName("the scalar forms judge decimals, folded text, and null — per input too")
+        void quoteServiceExtractsExactValues() {
+            // Decimal semantics across spellings (2637.80 vs 2637.8,
+            // "500.00" vs "500.00" string subject), equals-ci folding,
+            // is-null on a null value and on an absent path.
+            assertThatCode(() ->
+                    PUnit.declared("quote-service-extracts-exact-values").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("the set forms judge the selection collectively")
+        void annotatorReturnsTheGoldSet() {
+            // Multiset equality with duplicates, containment across
+            // decimal spellings (950.50 vs 950.5), cardinality, and
+            // count-equals: 0 over an empty selection.
+            assertThatCode(() ->
+                    PUnit.declared("annotator-returns-the-gold-set").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("the boolean form judges JSON true/false by identity")
+        void annotatorFlagsCoverage() {
+            assertThatCode(() ->
+                    PUnit.declared("annotator-flags-coverage").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a type mismatch is a per-sample failure, never an abort")
+        void textUnderValueFormsFailsPerSample() {
+            Declared run = PUnit.declared("text-under-value-forms-fails-per-sample").samples(30);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(AssertionFailedError.class);
+        }
+    }
+
+    @Nested
     @DisplayName("measure")
     class MeasureVerb {
 

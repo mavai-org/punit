@@ -1,0 +1,28 @@
+format: mavai-contract/1
+contract: annotator-returns-the-gold-set
+service: buildings-annotator
+transforms:
+  doc: json
+criteria:
+  - name: extracted-sets-match-the-document
+    threshold: 0.9
+    postconditions:
+      - in: doc
+        path: "$.buildings[*].name"
+        equals-set: ["Hauptgebäude", "Nebengebäude", "Nebengebäude"]
+      - in: doc
+        path: "$.rents[*].amount"
+        contains-set: [1200, 950.50]
+      - in: doc
+        path: "$.rents[*].amount"
+        count-equals: 2
+      - in: doc
+        path: "$.vacancies[*]"
+        count-equals: 0
+inputs:
+  - "annotate the sample lease"
+  - input: "annotate the two-tenant lease"
+    expected:
+      - in: doc
+        path: "$.tenants[*].name"
+        contains-set: ["Muster AG"]

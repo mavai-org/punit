@@ -1,0 +1,20 @@
+format: mavai-contract/1
+contract: annotator-flags-coverage
+service: buildings-annotator
+transforms:
+  doc: json
+criteria:
+  - name: coverage-flags-match-the-document
+    threshold: 0.9
+    postconditions:
+      - in: doc
+        path: "$.buildings[0].isIncluded"
+        is: true
+      - in: doc
+        path: "$.buildings[1].isIncluded"
+        is: false
+      - in: doc
+        path: "$.buildings[*].isInsured"
+        is: true
+inputs:
+  - "annotate the sample lease"

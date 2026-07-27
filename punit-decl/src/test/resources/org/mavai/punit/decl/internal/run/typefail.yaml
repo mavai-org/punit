@@ -1,0 +1,14 @@
+format: mavai-contract/1
+contract: text-under-value-forms-fails-per-sample
+service: buildings-annotator
+transforms:
+  doc: json
+criteria:
+  - name: a-string-is-never-a-boolean
+    threshold: 0.9
+    postconditions:
+      - in: doc
+        path: "$.tenants[0].name"
+        is: true
+inputs:
+  - "annotate the sample lease"

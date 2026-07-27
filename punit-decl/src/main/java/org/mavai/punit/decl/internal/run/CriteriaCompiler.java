@@ -1,11 +1,14 @@
 package org.mavai.punit.decl.internal.run;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntPredicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import javax.xml.xpath.XPathConstants;
@@ -24,6 +27,7 @@ import org.mavai.punit.decl.internal.model.ContractDeclaration;
 import org.mavai.punit.decl.internal.model.CriterionDeclaration;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
+import org.mavai.punit.decl.internal.model.NumericValue;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
 import org.w3c.dom.NodeList;
 
@@ -184,6 +188,12 @@ final class CriteriaCompiler {
                 return parsed instanceof Outcome.Fail<?> fail ? fail : Outcome.ok();
             });
         }
+        if (form.form().collective()) {
+            return compileSetForm(form, name);
+        }
+        if (form.form().scalarValue()) {
+            return compileScalarValueForm(form, name);
+        }
         StringMatch match = stringMatch(form);
         if (form.view().equals(FormDeclaration.RAW_VIEW)) {
             return new Check(name, response -> match.holds(response)
@@ -250,6 +260,243 @@ final class CriteriaCompiler {
             return "null";
         }
         return null;
+    }
+
+    // ── Value-comparison forms ────────────────────────────────────
+    //
+    // These judge typed values, not text: a number by decimal
+    // comparison, a selection by strict JSON-value equality. The scalar
+    // forms judge one subject (fanned across a multi-valued selection,
+    // like the string forms — but judging the selected value itself,
+    // never a text projection); the collective set forms judge the
+    // whole selection at once.
+
+    /** A scalar value judgement: {@code null} = holds, else the failure reason. */
+    private interface ValueJudge {
+        String failure(Object value);
+    }
+
+    /** A collective judgement over the whole selection. */
+    private interface CollectiveJudge {
+        String failure(List<Object> selected);
+    }
+
+    private Check compileScalarValueForm(FormDeclaration form, String name) {
+        ValueJudge judge = valueJudge(form);
+        if (form.view().equals(FormDeclaration.RAW_VIEW)) {
+            return new Check(name, response -> judged(name, judge.failure(response)));
+        }
+        if (form.path() == null) {
+            return new Check(name, response -> {
+                Outcome<Object> parsed = views.view(form.view(), response);
+                if (parsed instanceof Outcome.Fail<?> fail) {
+                    return fail;
+                }
+                return judged(name, judge.failure(((Outcome.Ok<Object>) parsed).value()));
+            });
+        }
+        Selection selection = compileSelection(views.transformation(form.view()), form.path());
+        // is-null is null-or-absent: a path that selects nothing holds.
+        boolean emptySelectionHolds = form.form() == PostconditionForm.IS_NULL;
+        return new Check(name, response -> {
+            Outcome<Object> parsed = views.view(form.view(), response);
+            if (parsed instanceof Outcome.Fail<?> fail) {
+                return fail;
+            }
+            List<Object> selected;
+            try {
+                selected = selection.select(((Outcome.Ok<Object>) parsed).value());
+            } catch (RuntimeException error) {
+                return Outcome.fail("postcondition", name + " — selection failed: " + error.getMessage());
+            }
+            if (selected.isEmpty()) {
+                return emptySelectionHolds
+                        ? Outcome.ok()
+                        : Outcome.fail("postcondition", name + " — path selected nothing");
+            }
+            for (Object candidate : selected) {
+                String failure = judge.failure(candidate);
+                if (failure != null) {
+                    return Outcome.fail("postcondition", name + " — " + failure);
+                }
+            }
+            return Outcome.ok();
+        });
+    }
+
+    private Check compileSetForm(FormDeclaration form, String name) {
+        // The parser guarantees a declared view and a path — a collection
+        // only exists as a selection. The empty selection is the empty
+        // collection: count-equals: 0 holds, a non-empty operand fails.
+        Selection selection = compileSelection(views.transformation(form.view()), form.path());
+        CollectiveJudge judge = collectiveJudge(form);
+        return new Check(name, response -> {
+            Outcome<Object> parsed = views.view(form.view(), response);
+            if (parsed instanceof Outcome.Fail<?> fail) {
+                return fail;
+            }
+            List<Object> selected;
+            try {
+                selected = selection.select(((Outcome.Ok<Object>) parsed).value());
+            } catch (RuntimeException error) {
+                return Outcome.fail("postcondition", name + " — selection failed: " + error.getMessage());
+            }
+            return judged(name, judge.failure(selected));
+        });
+    }
+
+    private static Outcome<?> judged(String name, String failure) {
+        return failure == null
+                ? Outcome.ok()
+                : Outcome.fail("postcondition", name + " — " + failure);
+    }
+
+    private ValueJudge valueJudge(FormDeclaration form) {
+        if (form.form().numeric()) {
+            return numericJudge(form);
+        }
+        return switch (form.form()) {
+            case NOT_EQUALS -> {
+                String excluded = (String) form.argument();
+                yield value -> {
+                    if (!(value instanceof String text)) {
+                        return textTypeFailure("not-equals", value);
+                    }
+                    return text.equals(excluded)
+                            ? "response equals the excluded \"" + excluded + "\""
+                            : null;
+                };
+            }
+            case EQUALS_CI -> {
+                String expected = (String) form.argument();
+                String foldedExpected = folded(expected);
+                yield value -> {
+                    if (!(value instanceof String text)) {
+                        return textTypeFailure("equals-ci", value);
+                    }
+                    return folded(text).equals(foldedExpected)
+                            ? null
+                            : "response does not equal \"" + expected
+                                    + "\" (case/whitespace-insensitively)";
+                };
+            }
+            case IS_NULL -> value -> value == null
+                    ? null
+                    : "value " + Display.of(value) + " is not null";
+            case IS -> {
+                boolean operand = (Boolean) form.argument();
+                yield value -> {
+                    if (value instanceof Boolean actual) {
+                        return actual == operand ? null : "value is " + actual + ", not " + operand;
+                    }
+                    return "subject " + Display.of(value) + " is not a boolean — the form "
+                            + "judges JSON true/false by identity";
+                };
+            }
+            default -> throw new IllegalStateException("not a scalar value form: " + form.form());
+        };
+    }
+
+    private ValueJudge numericJudge(FormDeclaration form) {
+        BigDecimal operand = NumericValue.of(form.argument());
+        IntPredicate holds = switch (form.form()) {
+            case EQ -> comparison -> comparison == 0;
+            case NE -> comparison -> comparison != 0;
+            case LT -> comparison -> comparison < 0;
+            case LE -> comparison -> comparison <= 0;
+            case GT -> comparison -> comparison > 0;
+            case GE -> comparison -> comparison >= 0;
+            default -> throw new IllegalStateException("not a numeric form: " + form.form());
+        };
+        String key = form.form().key();
+        String operandDisplay = Display.of(form.argument());
+        return value -> {
+            BigDecimal actual = NumericValue.of(value);
+            if (actual == null) {
+                return "subject " + Display.of(value) + " is not a number — a numeric form "
+                        + "judges a number or a numeric string";
+            }
+            return holds.test(actual.compareTo(operand))
+                    ? null
+                    : "value " + Display.of(value) + " is not " + key + " " + operandDisplay;
+        };
+    }
+
+    private static String textTypeFailure(String form, Object value) {
+        return form + ": subject " + Display.of(value) + " is not text — a string form judges text";
+    }
+
+    private static final Pattern WHITESPACE_RUN =
+            Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
+
+    /**
+     * The equals-ci normalisation, exactly: Unicode case-fold, trim, and
+     * internal-whitespace-run collapse to a single space — nothing more.
+     * Upper-then-lower is Java's realisation of the full case fold
+     * ({@code ß} → {@code ss}), held to the family semantics by test.
+     */
+    private static String folded(String text) {
+        String cased = text.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        return WHITESPACE_RUN.matcher(cased.strip()).replaceAll(" ");
+    }
+
+    private CollectiveJudge collectiveJudge(FormDeclaration form) {
+        return switch (form.form()) {
+            case EQUALS_SET -> {
+                List<?> operand = (List<?>) form.argument();
+                Map<Object, Long> expected = multiset(operand);
+                yield selected -> multiset(selected).equals(expected)
+                        ? null
+                        : "selected values " + Display.of(selected) + " do not equal "
+                                + Display.of(operand) + " as a multiset";
+            }
+            case CONTAINS_SET -> {
+                List<?> operand = (List<?>) form.argument();
+                Map<Object, Long> expected = multiset(operand);
+                yield selected -> {
+                    Map<Object, Long> actual = multiset(selected);
+                    boolean missing = expected.entrySet().stream()
+                            .anyMatch(entry -> actual.getOrDefault(entry.getKey(), 0L) < entry.getValue());
+                    return missing
+                            ? "selected values " + Display.of(selected) + " do not contain "
+                                    + "all of " + Display.of(operand)
+                            : null;
+                };
+            }
+            case COUNT_EQUALS -> {
+                int expected = ((Number) form.argument()).intValue();
+                yield selected -> selected.size() == expected
+                        ? null
+                        : "path selected " + selected.size() + " value(s), not " + expected;
+            }
+            default -> throw new IllegalStateException("not a set form: " + form.form());
+        };
+    }
+
+    private static Map<Object, Long> multiset(List<?> values) {
+        Map<Object, Long> counts = new HashMap<>();
+        for (Object value : values) {
+            counts.merge(elementKey(value), 1L, Long::sum);
+        }
+        return counts;
+    }
+
+    /**
+     * Strict JSON-value equality as a type-tagged key: numbers compare
+     * numerically (decimal), strings exactly, booleans and null by
+     * identity — a number never equals its string spelling.
+     */
+    private static Object elementKey(Object value) {
+        if (value instanceof Boolean) {
+            return List.of("bool", value);
+        }
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Number) {
+            return List.of("num", NumericValue.of(value).stripTrailingZeros());
+        }
+        return List.of("str", String.valueOf(value));
     }
 
     // ── String forms ──────────────────────────────────────────────

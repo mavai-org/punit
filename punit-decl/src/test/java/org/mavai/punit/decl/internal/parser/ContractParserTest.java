@@ -446,7 +446,7 @@ class ContractParserTest {
         }
 
         @Test
-        @DisplayName("path on a non-string form is refused")
+        @DisplayName("path on a form outside the path-capable vocabulary is refused")
         void pathOnNonStringForm() {
             assertRefused("""
                     format: mavai-contract/1
@@ -461,7 +461,7 @@ class ContractParserTest {
                             path: "$.items"
                             satisfies: looks-right
                     inputs: ["Alice"]
-                    """, "string forms only");
+                    """, "string and value-comparison forms only");
         }
 
         @Test
@@ -526,6 +526,194 @@ class ContractParserTest {
         void unknownForm() {
             assertRefused(MINIMAL.replace("contains: \"hello\"", "postconditions: [{ resembles: \"x\" }]"),
                     "unknown postcondition form `resembles`");
+        }
+    }
+
+    @Nested
+    @DisplayName("value-comparison forms")
+    class ValueComparisonForms {
+
+        @Test
+        @DisplayName("the scalar value-comparison vocabulary parses, per input too")
+        void scalarForms() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: quote-service-extracts-exact-values
+                    service: quote-service
+                    transforms:
+                      quote: json
+                    criteria:
+                      - name: extracted-values-match-the-document
+                        threshold: 0.95
+                        not-equals: "ERROR"
+                        postconditions:
+                          - in: quote
+                            path: "$.premium"
+                            eq: 2637.80
+                          - in: quote
+                            path: "$.excess"
+                            eq: "500.00"
+                          - in: quote
+                            path: "$.instalment-fee"
+                            ne: 0
+                          - in: quote
+                            path: "$.items[*].price"
+                            ge: 0
+                          - in: quote
+                            path: "$.tax-rate"
+                            lt: "0.2"
+                          - in: quote
+                            path: "$.term-months"
+                            gt: 0
+                          - in: quote
+                            path: "$.instalments"
+                            le: 12
+                          - in: quote
+                            path: "$.holder"
+                            equals-ci: "Frau  Beispiel"
+                          - in: quote
+                            path: "$.status"
+                            not-equals: "declined"
+                          - in: quote
+                            path: "$.cancellation-date"
+                            is-null: true
+                    inputs:
+                      - "quote the sample policy"
+                      - input: "quote the premium-only policy"
+                        expected:
+                          - in: quote
+                            path: "$.premium"
+                            eq: "1049.10"
+                    """);
+            var forms = declaration.criteria().get(0).forms();
+            assertThat(forms).extracting(f -> f.form()).containsExactly(
+                    PostconditionForm.NOT_EQUALS,
+                    PostconditionForm.EQ, PostconditionForm.EQ, PostconditionForm.NE,
+                    PostconditionForm.GE, PostconditionForm.LT, PostconditionForm.GT,
+                    PostconditionForm.LE, PostconditionForm.EQUALS_CI,
+                    PostconditionForm.NOT_EQUALS, PostconditionForm.IS_NULL);
+            assertThat(forms.get(0).view()).isEqualTo("raw");
+            assertThat(declaration.inputs().get(1).expected().get(0).form())
+                    .isEqualTo(PostconditionForm.EQ);
+        }
+
+        @Test
+        @DisplayName("the set forms and the boolean form parse, per input too")
+        void setAndBooleanForms() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: annotator-returns-the-gold-set
+                    service: buildings-annotator
+                    transforms:
+                      doc: json
+                    criteria:
+                      - name: extracted-sets-match-the-document
+                        threshold: 0.9
+                        postconditions:
+                          - in: doc
+                            path: "$.buildings[*].name"
+                            equals-set: ["Hauptgebäude", "Nebengebäude", "Nebengebäude"]
+                          - in: doc
+                            path: "$.rents[*].amount"
+                            contains-set: [1200, 950.50]
+                          - in: doc
+                            path: "$.rents[*].amount"
+                            count-equals: 2
+                          - in: doc
+                            path: "$.buildings[0].isIncluded"
+                            is: true
+                    inputs:
+                      - "annotate the sample lease"
+                      - input: "annotate the two-tenant lease"
+                        expected:
+                          - in: doc
+                            path: "$.tenants[*].name"
+                            contains-set: ["Muster AG"]
+                    """);
+            var forms = declaration.criteria().get(0).forms();
+            assertThat(forms).extracting(f -> f.form()).containsExactly(
+                    PostconditionForm.EQUALS_SET, PostconditionForm.CONTAINS_SET,
+                    PostconditionForm.COUNT_EQUALS, PostconditionForm.IS);
+            assertThat(forms.get(3).argument()).isEqualTo(Boolean.TRUE);
+        }
+
+        @Test
+        @DisplayName("a malformed numeric operand is refused")
+        void valueOperandMalformed() {
+            assertRefused(withQuoteForm("eq: \"twelve\""),
+                    "`eq:` takes a number or a numeric string");
+        }
+
+        @Test
+        @DisplayName("is-null takes the literal true and nothing else")
+        void isNullOperand() {
+            assertRefused(withQuoteForm("is-null: false"), "the negation is not offered");
+        }
+
+        @Test
+        @DisplayName("is takes a boolean operand and nothing else")
+        void isOperandNotBoolean() {
+            assertRefused(withQuoteForm("is: \"true\""), "`is:` takes a boolean");
+        }
+
+        @Test
+        @DisplayName("a set form without a declared view and path is refused")
+        void setFormWithoutPath() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - in: doc
+                            equals-set: ["a", "b"]
+                    inputs: ["Alice"]
+                    """, "requires `in:` naming a declared view and a `path:`");
+        }
+
+        @Test
+        @DisplayName("a set form's operand lists at least one scalar element")
+        void setOperandEmpty() {
+            assertRefused(withQuoteForm("contains-set: []"),
+                    "non-empty list of scalar values");
+        }
+
+        @Test
+        @DisplayName("count-equals takes a non-negative integer")
+        void countEqualsOperand() {
+            assertRefused(withQuoteForm("count-equals: -1"),
+                    "`count-equals:` takes a non-negative integer");
+            assertRefused(withQuoteForm("count-equals: 2.5"),
+                    "`count-equals:` takes a non-negative integer");
+        }
+
+        @Test
+        @DisplayName("the intuitive-but-refused spellings name the intended form")
+        void guidingRefusals() {
+            assertRefused(MINIMAL.replace("contains: \"hello\"", "equals: true"),
+                    "`is: true` / `is: false`");
+            assertRefused(MINIMAL.replace("contains: \"hello\"", "equals: null"),
+                    "a null expectation is `is-null: true`");
+        }
+
+        private static String withQuoteForm(String form) {
+            return """
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - in: doc
+                            path: "$.value"
+                            %s
+                    inputs: ["Alice"]
+                    """.formatted(form);
         }
     }
 

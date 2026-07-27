@@ -25,20 +25,23 @@ final class CriteriaParser {
     /** The bar-provenance categories — a closed set; an unknown origin is refused. */
     static final List<String> THRESHOLD_ORIGINS = List.of("sla", "slo", "policy");
 
-    private static final Set<String> CRITERION_KEYS = Set.of(
-            "name",
-            "threshold",
-            "threshold-origin",
-            "contract-ref",
-            "tolerate",
-            "confidence",
-            "postconditions",
-            "equals",
-            "one-of",
-            "contains",
-            "matches",
-            "parses",
-            "satisfies");
+    private static final Set<String> CRITERION_KEYS = criterionKeys();
+
+    private static Set<String> criterionKeys() {
+        Set<String> keys = new java.util.HashSet<>(Set.of(
+                "name",
+                "threshold",
+                "threshold-origin",
+                "contract-ref",
+                "tolerate",
+                "confidence",
+                "postconditions"));
+        // Every form has a single-form spelling directly on the entry.
+        for (PostconditionForm form : PostconditionForm.values()) {
+            keys.add(form.key());
+        }
+        return Set.copyOf(keys);
+    }
 
     private CriteriaParser() {}
 
