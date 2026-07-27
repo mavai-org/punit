@@ -8,6 +8,18 @@ services:
     explorations:
       - certainty: 0.7
       - tone: reassuring
+    optimizations:
+      - id: certainty-sweep
+        stepper: certainty-stepper
+        stepper-config: { step: 0.05, stop: 1.0 }
+        max-iterations: 4
+        no-improvement-window: 2
+      - id: tone-flip
+        stepper: certainty-stepper
+        stepper-config: { step: 0.1, stop: 1.0 }
+        scorer: pass-rate
+        objective: maximize
+        max-iterations: 2
   echo-service:
     type: echo-model
     configuration:

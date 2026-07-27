@@ -210,6 +210,28 @@ public final class PUnit {
          * grid.
          */
         void explore();
+
+        /**
+         * The per-iteration sample count for an optimize run
+         * (default 5).
+         */
+        Declared samplesPerIteration(int samplesPerIteration);
+
+        /**
+         * Runs the service definition's sole {@code optimizations:}
+         * entry — the no-argument form for a definition declaring
+         * exactly one.
+         */
+        void optimize();
+
+        /**
+         * Runs the named {@code optimizations:} entry: the registered
+         * stepper proposes each next configuration, the scorer judges
+         * each iteration, and one optimization artefact records the
+         * iteration history and convergence. Descriptive posture —
+         * no thresholds, no verdict.
+         */
+        void optimize(String id);
     }
 
     /**

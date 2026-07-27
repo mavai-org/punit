@@ -31,6 +31,7 @@ public final class DeclaredRun implements Declared {
 
     private Integer samples;
     private Integer samplesPerConfig;
+    private Integer samplesPerIteration;
     private Class<?> bindingsClass;
     private java.nio.file.Path servicesFile;
     private Double power;
@@ -58,6 +59,12 @@ public final class DeclaredRun implements Declared {
     @Override
     public Declared samplesPerConfig(int samplesPerConfig) {
         this.samplesPerConfig = samplesPerConfig;
+        return this;
+    }
+
+    @Override
+    public Declared samplesPerIteration(int samplesPerIteration) {
+        this.samplesPerIteration = samplesPerIteration;
         return this;
     }
 
@@ -174,6 +181,139 @@ public final class DeclaredRun implements Declared {
                 + grid.size() + " configurations x " + perConfig + " samples — explore");
 
         PUnit.exploring(sampling).grid(grid).run();
+    }
+
+    @Override
+    public void optimize() {
+        optimize(null);
+    }
+
+    @Override
+    public void optimize(String id) {
+        ContractLocator.Located located = ContractLocator.locate(caller, methodName, explicitName);
+        ContractDeclaration declaration = located.declaration();
+        if (samples != null) {
+            throw new ContractConfigurationException(
+                    ".samples(N) sizes a test or measure run — an optimization is sized per "
+                            + "iteration: use .samplesPerIteration(N) (default 5)");
+        }
+        if (power != null || tolerateBare != null || !tolerateNamed.isEmpty()) {
+            throw new ContractConfigurationException(
+                    "tolerate/power overrides target the test posture — an optimize run is "
+                            + "descriptive and consults no claims");
+        }
+        BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
+        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        if (!services.isDefined(declaration.service())) {
+            throw new ContractConfigurationException(
+                    "service '" + declaration.service() + "' has no mavai-services.yaml "
+                            + "definition — an optimize run consumes the definition's "
+                            + "`optimizations:` entries");
+        }
+        List<org.mavai.punit.decl.internal.model.OptimizationDeclaration> entries =
+                services.optimizations(declaration.service());
+        if (entries.isEmpty()) {
+            throw new ContractConfigurationException(
+                    "service '" + declaration.service() + "' declares no `optimizations:` "
+                            + "entries — add one to its mavai-services.yaml definition");
+        }
+        org.mavai.punit.decl.internal.model.OptimizationDeclaration entry;
+        if (id == null) {
+            if (entries.size() > 1) {
+                throw new ContractConfigurationException(
+                        "service '" + declaration.service() + "' declares "
+                                + entries.size() + " optimizations — name one: "
+                                + entries.stream()
+                                        .map(org.mavai.punit.decl.internal.model.OptimizationDeclaration::id)
+                                        .reduce((a, b) -> a + ", " + b).orElse(""));
+            }
+            entry = entries.get(0);
+        } else {
+            entry = entries.stream().filter(e -> e.id().equals(id)).findFirst()
+                    .orElseThrow(() -> new ContractConfigurationException(
+                            "no optimization '" + id + "' on service '" + declaration.service()
+                                    + "' — declared: " + entries.stream()
+                                            .map(org.mavai.punit.decl.internal.model.OptimizationDeclaration::id)
+                                            .reduce((a, b) -> a + ", " + b).orElse("none")));
+        }
+
+        java.lang.reflect.Method stepperFactory = registry.stepperFactory(entry.stepper());
+        Object[] stepperArguments = ConfigBinding.bind(
+                "optimization '" + entry.id() + "'", entry.stepper(), stepperFactory,
+                entry.stepperConfig());
+        Object stepper = registry.invoke(stepperFactory, stepperArguments);
+        if (!(stepper instanceof org.mavai.punit.api.spec.FactorsStepper)) {
+            throw new ContractConfigurationException(
+                    "@Stepper(\"" + entry.stepper() + "\") must return an "
+                            + "org.mavai.punit.api.spec.FactorsStepper, got "
+                            + (stepper == null ? "null" : stepper.getClass().getSimpleName()));
+        }
+        @SuppressWarnings("unchecked")
+        org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>> typedStepper =
+                (org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>>) stepper;
+        org.mavai.punit.api.spec.Scorer scorer = registry.resolveScorer(entry.scorer());
+
+        Map<String, String> covariateFeed = registry.covariateFeed(declaration.service());
+        StockViews views = new StockViews(declaration, registry);
+        AtomicReference<Object> currentInput = new AtomicReference<>();
+        CriteriaCompiler compiler = new CriteriaCompiler(
+                declaration, views, currentInput, Map.of(), null, registry);
+        compiler.validateEagerly();
+        Criteria<String> criteria = compiler.compile();
+
+        Map<String, Object> initial = new java.util.LinkedHashMap<>(
+                services.baselineConfiguration(declaration.service()));
+        initial.putAll(entry.initial());
+        // Validate iteration 0's configuration at load.
+        services.configurePoint(declaration.service(), initial);
+
+        int perIteration = optimizeBudget(declaration);
+        List<Object> inputs = declaration.inputs().stream()
+                .map(InputDeclaration::value)
+                .toList();
+        Sampling<Map<String, Object>, Object, String> sampling =
+                Sampling.<Map<String, Object>, Object, String>builder()
+                        .serviceContractFactory(configuration -> exploreContract(
+                                declaration, criteria, currentInput,
+                                services, covariateFeed, configuration))
+                        .inputs(inputs)
+                        .samples(perIteration)
+                        .build();
+
+        System.out.println("[PUNIT] run plan: contract '" + declaration.contract()
+                + "', optimization '" + entry.id() + "', up to " + entry.maxIterations()
+                + " iterations x " + perIteration + " samples — optimize");
+
+        var builder = PUnit.optimizing(sampling)
+                .initialFactors(initial)
+                .stepper(typedStepper)
+                .maxIterations(entry.maxIterations())
+                .experimentId(entry.id());
+        builder = entry.objective()
+                        == org.mavai.punit.decl.internal.model.OptimizationDeclaration.Objective.MINIMIZE
+                ? builder.minimize(scorer)
+                : builder.maximize(scorer);
+        builder = entry.noImprovementWindow() != null
+                ? builder.noImprovementWindow(entry.noImprovementWindow())
+                : builder.disableEarlyTermination();
+        builder.run();
+    }
+
+    /** Optimize is sized per iteration: property, builder, then the default 5. */
+    private int optimizeBudget(ContractDeclaration declaration) {
+        String property = "punit.samplesPerIteration." + declaration.contract();
+        String propertyValue = System.getProperty(property);
+        if (propertyValue != null) {
+            return Integer.parseInt(propertyValue.trim());
+        }
+        if (samplesPerIteration != null) {
+            if (samplesPerIteration < 1) {
+                throw new ContractConfigurationException(
+                        ".samplesPerIteration(" + samplesPerIteration + ") must be positive");
+            }
+            return samplesPerIteration;
+        }
+        return 5;
     }
 
     private ServiceContract<Map<String, Object>, Object, String> exploreContract(

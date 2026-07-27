@@ -410,6 +410,92 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("optimize")
+    class OptimizeVerb {
+
+        @Test
+        @DisplayName("a named optimization runs its stepper and records the iteration history")
+        void optimizeRunsAndRecords(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.optimizations.outputDir", directory.toString());
+            try {
+                PUnit.declared("triage-assistant-routes-requests")
+                        .samplesPerIteration(3)
+                        .optimize("certainty-sweep");
+                try (var files = java.nio.file.Files.walk(directory)) {
+                    assertThat(files.filter(java.nio.file.Files::isRegularFile).count())
+                            .as("the optimization artefact")
+                            .isPositive();
+                }
+            } finally {
+                System.clearProperty("punit.optimizations.outputDir");
+            }
+        }
+
+        @Test
+        @DisplayName("with several optimizations declared, the run must name one")
+        void severalEntriesNeedAName() {
+            Declared run = PUnit.declared("triage-assistant-routes-requests");
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("certainty-sweep, tone-flip");
+        }
+
+        @Test
+        @DisplayName("an unknown optimization id is refused naming the declared ones")
+        void unknownId() {
+            Declared run = PUnit.declared("triage-assistant-routes-requests");
+            assertThatThrownBy(() -> run.optimize("no-such-run"))
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("no optimization 'no-such-run'")
+                    .hasMessageContaining("certainty-sweep");
+        }
+
+        @Test
+        @DisplayName("a definition without optimizations is refused constructively")
+        void noOptimizations() {
+            Declared run = PUnit.declared("built-in-type-resolves-via-service-loader");
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("no `optimizations:` entries");
+        }
+
+        @Test
+        @DisplayName("an optimization is sized per iteration, not per run")
+        void samplesRefusedOnOptimize() {
+            Declared run = PUnit.declared("triage-assistant-routes-requests").samples(50);
+            assertThatThrownBy(() -> run.optimize("certainty-sweep"))
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining(".samplesPerIteration(");
+        }
+
+        @Test
+        @DisplayName("a stepper-config misfit is refused with the stepper factory's signature")
+        void stepperConfigMisfit(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      triage-assistant:
+                        type: triage
+                        configuration:
+                          tone: matter-of-fact
+                          certainty: 0.9
+                        optimizations:
+                          - stepper: certainty-stepper
+                            stepper-config: { step: "wide" }
+                            max-iterations: 3
+                    """);
+            Declared run = PUnit.declared("triage-assistant-routes-requests").services(services);
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("certainty-stepper(step: double, stop: double)");
+        }
+    }
+
+    @Nested
     @DisplayName("risk claims")
     class RiskClaimRules {
 

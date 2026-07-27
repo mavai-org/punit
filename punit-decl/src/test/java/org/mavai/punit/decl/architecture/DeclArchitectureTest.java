@@ -50,6 +50,8 @@ class DeclArchitectureTest {
                 .orShould().haveSimpleName("Transform")
                 .orShould().haveSimpleName("Check")
                 .orShould().haveSimpleName("Covariates")
+                .orShould().haveSimpleName("Stepper")
+                .orShould().haveSimpleName("Scorer")
                 .orShould().haveSimpleName("ContractConfigurationException")
                 .because("everything beyond the author surface is internal enablement — "
                         + "new public types belong under internal.* unless they are "
