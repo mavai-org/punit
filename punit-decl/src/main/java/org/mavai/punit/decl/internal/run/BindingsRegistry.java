@@ -14,6 +14,8 @@ import org.mavai.punit.decl.BindingFactory;
 import org.mavai.punit.decl.Check;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.Covariates;
+import org.mavai.punit.decl.Scorer;
+import org.mavai.punit.decl.Stepper;
 import org.mavai.punit.decl.Transform;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
 
@@ -35,6 +37,8 @@ final class BindingsRegistry {
     private final Map<String, Method> transforms = new LinkedHashMap<>();
     private final Map<String, Method> checks = new LinkedHashMap<>();
     private final Map<String, Method> covariateFeeds = new LinkedHashMap<>();
+    private final Map<String, Method> steppers = new LinkedHashMap<>();
+    private final Map<String, Method> scorers = new LinkedHashMap<>();
 
     private BindingsRegistry(Class<?> bindingsClass, Object instance) {
         this.bindingsClass = bindingsClass;
@@ -62,6 +66,8 @@ final class BindingsRegistry {
             registry.register(method, Check.class, Check::value, registry.checks, "check");
             registry.register(method, Covariates.class, Covariates::value,
                     registry.covariateFeeds, "covariate feed");
+            registry.register(method, Stepper.class, Stepper::value, registry.steppers, "stepper");
+            registry.register(method, Scorer.class, Scorer::value, registry.scorers, "scorer");
         }
         for (String view : registry.transforms.keySet()) {
             if (view.equals(FormDeclaration.RAW_VIEW)) {
@@ -182,6 +188,41 @@ final class BindingsRegistry {
             covariates.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
         }
         return covariates;
+    }
+
+    /** The named stepper's factory method, or a refusal naming the registered ones. */
+    Method stepperFactory(String name) {
+        Method method = steppers.get(name);
+        if (method == null) {
+            String known = steppers.isEmpty() ? "none registered" : String.join(", ", steppers.keySet());
+            throw new ContractConfigurationException(
+                    "`stepper: " + name + "` names no registered stepper; known steppers in "
+                            + bindingsClass.getSimpleName() + ": " + known
+                            + " (register with @Stepper(\"" + name + "\"))");
+        }
+        return method;
+    }
+
+    /** The named scorer, resolved — {@code pass-rate} is built in. */
+    org.mavai.punit.api.spec.Scorer resolveScorer(String name) {
+        if (name.equals("pass-rate")) {
+            return org.mavai.punit.api.spec.Scorer.observedPassRate();
+        }
+        Method method = scorers.get(name);
+        if (method == null) {
+            String known = scorers.isEmpty() ? "pass-rate (built in)"
+                    : "pass-rate (built in), " + String.join(", ", scorers.keySet());
+            throw new ContractConfigurationException(
+                    "`scorer: " + name + "` names no registered scorer; known scorers: " + known
+                            + " (register with @Scorer(\"" + name + "\"))");
+        }
+        Object result = invoke(method, new Object[0]);
+        if (!(result instanceof org.mavai.punit.api.spec.Scorer scorer)) {
+            throw new ContractConfigurationException(
+                    "@Scorer(\"" + name + "\") must return an org.mavai.punit.api.spec.Scorer, got "
+                            + (result == null ? "null" : result.getClass().getSimpleName()));
+        }
+        return scorer;
     }
 
     interface Invoker {

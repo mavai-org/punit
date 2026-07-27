@@ -87,6 +87,17 @@ final class ServicesResolver {
         return grid;
     }
 
+    /** The definition's baseline configuration record. */
+    Map<String, Object> baselineConfiguration(String serviceName) {
+        return new LinkedHashMap<>(entries.get(serviceName).configuration());
+    }
+
+    /** The definition's declared optimizations. */
+    java.util.List<org.mavai.punit.decl.internal.model.OptimizationDeclaration> optimizations(
+            String serviceName) {
+        return entries.get(serviceName).optimizations();
+    }
+
     /** Configures the named service at one resolved grid point. */
     ConfiguredService configurePoint(String serviceName, Map<String, Object> configuration) {
         ServiceEntry entry = entries.get(serviceName);

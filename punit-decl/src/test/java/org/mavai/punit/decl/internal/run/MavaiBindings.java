@@ -95,4 +95,18 @@ class MavaiBindings {
     Map<String, String> triageCovariates() {
         return Map.of("rules-hash", "abc123");
     }
+
+    @org.mavai.punit.decl.Stepper("certainty-stepper")
+    org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>> certaintyStepper(
+            double step, double stop) {
+        return (current, history) -> {
+            double certainty = ((Number) current.get("certainty")).doubleValue() + step;
+            if (certainty > stop) {
+                return org.mavai.punit.api.spec.NextFactor.stop();
+            }
+            Map<String, Object> next = new java.util.LinkedHashMap<>(current);
+            next.put("certainty", certainty);
+            return org.mavai.punit.api.spec.NextFactor.next(next);
+        };
+    }
 }
