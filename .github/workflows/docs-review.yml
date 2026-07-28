@@ -29,12 +29,12 @@ jobs:
       id-token: write
     steps:
       - name: Checkout the PR under review
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Fetch the private QA source (docs persona)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mavai-org/mavai-orchestrator
           token: ${{ secrets.MAXIMS_SOURCE_TOKEN }}
