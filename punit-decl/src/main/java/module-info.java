@@ -24,7 +24,7 @@ module org.mavai.punit.decl {
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.core;
-    requires org.snakeyaml.engine.v2;
+    requires org.snakeyaml.engine;
     requires com.fasterxml.jackson.databind;
     requires java.xml;
     // Explicitly NO requires for JUnit.
