@@ -12,8 +12,13 @@ on:
 jobs:
   architect:
     # Skip on fork PRs: secrets (and thus the private maxims source) are withheld
-    # from forked pull_request runs. Same-repo branch PRs only.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # from forked pull_request runs. Same-repo branch PRs only. Likewise skip
+    # Dependabot-triggered runs: they see only the Dependabot secrets store, so
+    # the checkout token resolves empty — and a maxims review of a version-bump
+    # diff has no value anyway.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
