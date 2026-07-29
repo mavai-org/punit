@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Partial credit for optional postconditions.** A criterion check may
+  be declared `optional` (programmatic `.optional()`, declarative
+  `optional: true`), and the criterion may grant an `optional-slack`
+  budget — an absolute count or an `"N%"` floor over the applicable
+  optional checks. A trial still resolves to a single Bernoulli
+  outcome: it fails when any required check fails, or when the number
+  of failed optional checks exceeds the slack budget. Both marks are a
+  double opt-in — an `optional` check without a slack budget binds
+  exactly as before, and a slack budget with no optional checks is
+  inert. Recorded per-check outcomes stay true; only the acceptance
+  predicate changes. Per the family partial-credit ruling (2026-07).
+
+- **Postcondition standings.** Every run now states a descriptive
+  per-`(input, check)` tally — passed, failed, skipped, and the
+  observed fraction — beside the verdict, with the declared
+  optional-slack budget verbatim. Descriptive vocabulary only: no
+  intervals, no thresholds, no per-check verdicts; the criterion stays
+  the only judged unit. The standings surface everywhere a run
+  reports: the console verdict, the verdict XML record (schema version
+  1.4, first-class `<postcondition-standings>` element), the MEASURE
+  baseline YAML, and the per-criterion statistics of the explore and
+  optimize artefacts.
+
 - **The default subject view (declarative contracts).** A `path:`-bearing
   check may now omit `in:`: its subject resolves to the view named by the
   owning criterion's single `parses:` form, else the contract's sole

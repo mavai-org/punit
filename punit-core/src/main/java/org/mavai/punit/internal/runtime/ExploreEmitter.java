@@ -102,10 +102,12 @@ public final class ExploreEmitter {
                 for (PerConfigSummary<?, ?> entry : entries) {
                     @SuppressWarnings("unchecked")
                     FT factors = (FT) entry.factors();
-                    String serviceContractId = typed.serviceContractFactory().apply(factors).id();
+                    var contract = typed.serviceContractFactory().apply(factors);
+                    String serviceContractId = contract.id();
                     FactorBundle bundle = FactorBundle.of(factors);
                     String stem = writer.filenameFor(bundle);
-                    String yaml = writer.writeYaml(serviceContractId, bundle, entry);
+                    String yaml = writer.writeYaml(
+                            serviceContractId, bundle, entry, contract.effectiveCriteria());
                     sink.accept(serviceContractId + "/" + stem + ".yaml", yaml);
                 }
                 return null;

@@ -64,7 +64,27 @@ public record BaselineRecord(
         CovariateProfile covariateProfile,
         LatencyIndicator latencyIndicator,
         int expiresInDays,
-        List<NormativeJudgement> normativeJudgements) {
+        List<NormativeJudgement> normativeJudgements,
+        java.util.Optional<org.mavai.punit.api.spec.PostconditionStandings>
+                postconditionStandings) {
+
+    /** Backward-compatible constructor without the standings; defaults them absent. */
+    public BaselineRecord(
+            String serviceContractId,
+            String methodName,
+            String factorsFingerprint,
+            String inputsIdentity,
+            int sampleCount,
+            Instant generatedAt,
+            Map<String, BaselineStatistics> statisticsByCriterionName,
+            CovariateProfile covariateProfile,
+            LatencyIndicator latencyIndicator,
+            int expiresInDays,
+            List<NormativeJudgement> normativeJudgements) {
+        this(serviceContractId, methodName, factorsFingerprint, inputsIdentity, sampleCount,
+                generatedAt, statisticsByCriterionName, covariateProfile, latencyIndicator,
+                expiresInDays, normativeJudgements, java.util.Optional.empty());
+    }
 
     public BaselineRecord {
         Objects.requireNonNull(serviceContractId, "serviceContractId");

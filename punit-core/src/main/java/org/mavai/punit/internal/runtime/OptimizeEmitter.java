@@ -108,6 +108,8 @@ public final class OptimizeEmitter {
 
         OptimizeOutputWriter writer = new OptimizeOutputWriter();
         String serviceContractId = serviceContractIdFor(experiment, history.get(0).factors());
+        List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria =
+                criteriaFor(experiment, history.get(0).factors());
         String yaml = writer.writeYaml(
                 serviceContractId,
                 experimentId,
@@ -116,8 +118,22 @@ public final class OptimizeEmitter {
                 history,
                 iterationSummaries,
                 best.orElse(null),
-                terminationReason);
+                terminationReason,
+                criteria);
         sink.accept(serviceContractId + "/" + experimentId + ".yaml", yaml);
+    }
+
+    private static List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteriaFor(
+            Experiment experiment, Object factors) {
+        return experiment.dispatch(new Spec.Dispatcher<
+                List<? extends org.mavai.punit.api.criterion.Criterion<?>>>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <FT, IT, OT> List<? extends org.mavai.punit.api.criterion.Criterion<?>> apply(
+                    TypedSpec<FT, IT, OT> typed) {
+                return typed.serviceContractFactory().apply((FT) factors).effectiveCriteria();
+            }
+        });
     }
 
     private static String serviceContractIdFor(Experiment experiment, Object factors) {

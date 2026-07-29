@@ -220,7 +220,9 @@ public final class BaselineEmitter {
                 profile,
                 latencyIndicator,
                 expiresInDays,
-                judgeNormativeCriteria(serviceContract, summary));
+                judgeNormativeCriteria(serviceContract, summary),
+                java.util.Optional.of(org.mavai.punit.api.spec.PostconditionStandings.from(
+                        summary, serviceContract.effectiveCriteria())));
     }
 
     /**

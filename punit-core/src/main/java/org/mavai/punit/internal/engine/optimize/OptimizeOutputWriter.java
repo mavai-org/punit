@@ -18,6 +18,7 @@ import org.mavai.punit.internal.engine.emit.EmittedKeys;
 import org.mavai.punit.internal.engine.emit.FailureDistributions;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.internal.engine.emit.ResultProjections;
+import org.mavai.punit.internal.engine.emit.StandingsBlocks;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
@@ -75,6 +76,27 @@ public final class OptimizeOutputWriter {
             List<? extends SampleSummary<?>> iterationSummaries,
             IterationResult<?> bestIteration,
             String terminationReason) {
+        return writeYaml(serviceContractId, experimentId, objective, scorerName,
+                history, iterationSummaries, bestIteration, terminationReason, List.of());
+    }
+
+    /**
+     * As above, with the run's criteria — each iteration's
+     * per-criterion statistics then state the postcondition standings
+     * (the {@code mavai-optimize-1} schema's binding-when-present
+     * {@code standings} block, identical in shape to the exploration
+     * artefact's per the family's identical-statistics-shape rule).
+     */
+    public String writeYaml(
+            String serviceContractId,
+            String experimentId,
+            String objective,
+            String scorerName,
+            List<? extends IterationResult<?>> history,
+            List<? extends SampleSummary<?>> iterationSummaries,
+            IterationResult<?> bestIteration,
+            String terminationReason,
+            List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria) {
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
@@ -85,7 +107,7 @@ public final class OptimizeOutputWriter {
             root.put("scorer", scorerName);
         }
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
-        root.put("iterations", iterationsBlock(history, iterationSummaries));
+        root.put("iterations", iterationsBlock(history, iterationSummaries, criteria));
         root.put("convergence", convergenceBlock(history, bestIteration, terminationReason));
 
         String dump = yaml().dump(root);
@@ -109,7 +131,8 @@ public final class OptimizeOutputWriter {
 
     private static List<Map<String, Object>> iterationsBlock(
             List<? extends IterationResult<?>> history,
-            List<? extends SampleSummary<?>> iterationSummaries) {
+            List<? extends SampleSummary<?>> iterationSummaries,
+            List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria) {
         List<Map<String, Object>> out = new ArrayList<>(history.size());
         for (int idx = 0; idx < history.size(); idx++) {
             IterationResult<?> ir = history.get(idx);
@@ -126,7 +149,7 @@ public final class OptimizeOutputWriter {
             SampleSummary<?> iterSummary = idx < iterationSummaries.size()
                     ? iterationSummaries.get(idx) : null;
             entry.put("execution", executionBlock(ir, iterSummary));
-            entry.put("statistics", statisticsBlock(ir, iterSummary));
+            entry.put("statistics", statisticsBlock(ir, iterSummary, criteria));
             if (iterSummary != null) {
                 entry.put("cost", costBlock(iterSummary));
                 LatencySection.blockFor(iterSummary)
@@ -150,7 +173,8 @@ public final class OptimizeOutputWriter {
     }
 
     private static Map<String, Object> statisticsBlock(
-            IterationResult<?> ir, SampleSummary<?> iterSummary) {
+            IterationResult<?> ir, SampleSummary<?> iterSummary,
+            List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria) {
         Map<String, Object> block = new LinkedHashMap<>();
         int total = ir.samplesExecuted();
         double observed = total == 0 ? 0.0 : (double) ir.successes() / (double) total;
@@ -169,7 +193,15 @@ public final class OptimizeOutputWriter {
         // single-criterion case). conditionFail / transformFail are
         // permitted informational extras beyond the canonical fields.
         if (iterSummary != null) {
-            Map<String, Object> criteria = new LinkedHashMap<>();
+            // The iteration's standings, derived once and joined onto
+            // each criterion's row — the per-check tally is stated
+            // beside the counts, binding when present.
+            Map<String, Map<String, Object>> standingsByCriterion = criteria.isEmpty()
+                    ? Map.of()
+                    : StandingsBlocks.byCriterion(
+                            org.mavai.punit.api.spec.PostconditionStandings.from(
+                                    iterSummary, criteria));
+            Map<String, Object> criteriaBlock = new LinkedHashMap<>();
             for (CriterionSampleCounts c : iterSummary.criterionSampleCounts()) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("observedPassRate", c.observedPassRate());
@@ -177,9 +209,14 @@ public final class OptimizeOutputWriter {
                 row.put("fail", c.fail());
                 row.put("conditionFail", c.conditionFail());
                 row.put("transformFail", c.transformFail());
-                criteria.put(EmittedKeys.bound(c.criterionId()), row);
+                Map<String, Object> standings =
+                        standingsByCriterion.get(EmittedKeys.bound(c.criterionId()));
+                if (standings != null) {
+                    row.put("standings", standings);
+                }
+                criteriaBlock.put(EmittedKeys.bound(c.criterionId()), row);
             }
-            block.put("criteria", criteria);
+            block.put("criteria", criteriaBlock);
         }
         return block;
     }

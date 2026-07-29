@@ -67,6 +67,18 @@ public final class ExploreOutputWriter {
      * @return YAML matching the canonical exploration interchange schema.
      */
     public String writeYaml(String serviceContractId, FactorBundle factorBundle, PerConfigSummary<?, ?> entry) {
+        return writeYaml(serviceContractId, factorBundle, entry, java.util.List.of());
+    }
+
+    /**
+     * As above, with the run's criteria — the configuration's
+     * per-criterion statistics then state the postcondition standings
+     * (the {@code mavai-explore-1} schema's binding-when-present
+     * {@code standings} block).
+     */
+    public String writeYaml(String serviceContractId, FactorBundle factorBundle,
+            PerConfigSummary<?, ?> entry,
+            java.util.List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
         root.put("serviceContractId", serviceContractId);
@@ -74,7 +86,7 @@ public final class ExploreOutputWriter {
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
         root.put("factors", factorsBlock(factorBundle));
         root.put("execution", executionBlock(entry));
-        root.put("statistics", statisticsBlock(entry.summary()));
+        root.put("statistics", statisticsBlock(entry.summary(), criteria));
         root.put("cost", costBlock(entry.summary()));
         // Latency block - passing-only percentiles + population
         // indicator. Inserted before resultProjection so the
@@ -132,7 +144,8 @@ public final class ExploreOutputWriter {
         return block;
     }
 
-    private static Map<String, Object> statisticsBlock(SampleSummary<?> summary) {
+    private static Map<String, Object> statisticsBlock(SampleSummary<?> summary,
+            java.util.List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteriaDecls) {
         Map<String, Object> block = new LinkedHashMap<>();
         block.put("observed", summary.passRate());
         block.put("successes", summary.successes());
@@ -150,6 +163,11 @@ public final class ExploreOutputWriter {
         // compare explore vs measure emissions of the same contract
         // criterion-by-criterion. conditionFail / transformFail are
         // permitted informational extras beyond the canonical fields.
+        Map<String, Map<String, Object>> standingsByCriterion = criteriaDecls.isEmpty()
+                ? Map.of()
+                : org.mavai.punit.internal.engine.emit.StandingsBlocks.byCriterion(
+                        org.mavai.punit.api.spec.PostconditionStandings.from(
+                                summary, criteriaDecls));
         Map<String, Object> criteria = new LinkedHashMap<>();
         for (org.mavai.punit.api.spec.CriterionSampleCounts counts
                 : summary.criterionSampleCounts()) {
@@ -159,6 +177,11 @@ public final class ExploreOutputWriter {
             row.put("fail", counts.fail());
             row.put("conditionFail", counts.conditionFail());
             row.put("transformFail", counts.transformFail());
+            Map<String, Object> standings =
+                    standingsByCriterion.get(EmittedKeys.bound(counts.criterionId()));
+            if (standings != null) {
+                row.put("standings", standings);
+            }
             criteria.put(EmittedKeys.bound(counts.criterionId()), row);
         }
         block.put("criteria", criteria);
