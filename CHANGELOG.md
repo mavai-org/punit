@@ -17,10 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   so evolving what is swept opens a fresh directory: a superseded
   artefact can never sit beside fresh ones, and a no-sweep run and a
   sweep never share a directory. Artefact contents and filenames
-  within a directory are unchanged. The exploration comparison report
-  discovers artefacts recursively, so the previous flat layout still
-  reads. Adopts the family layout (2026-07-29); existing flat
-  directories are operator-owned working output and are not migrated.
+  within a directory are unchanged. Adopts the family layout
+  (2026-07-29); existing flat directories are operator-owned working
+  output and are not migrated. (The in-punit exploration comparison
+  report was left untouched: punit's report module is slated to be
+  dropped in favour of the shared `mavai` renderer.)
 
 ### Added
 

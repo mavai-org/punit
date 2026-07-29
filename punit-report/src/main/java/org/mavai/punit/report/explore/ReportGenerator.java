@@ -18,12 +18,10 @@ import java.util.stream.Stream;
  * Public API entry point for the Explore-experiment comparison report.
  *
  * <p>Walks an explorations root directory laid out as
- * {@code <root>/<service>/<swept-keys>/*.yaml} — one sub-directory per
- * service contract, one experiment-level sub-directory named by the
- * swept factors, one YAML file per evaluated variant — and writes a
- * single, self-contained {@code index.html} comparing the variants of
- * each service against one another. Discovery recurses, so the
- * pre-swept-keys flat layout ({@code <service>/*.yaml}) still reads.
+ * {@code <root>/<service>/*.yaml} — one sub-directory per service
+ * contract, one YAML file per evaluated variant — and writes a single,
+ * self-contained {@code index.html} comparing the variants of each
+ * service against one another.
  *
  * <p>The method shape mirrors the test report's
  * {@code ReportGenerator.generate(Path, Path)} so the Gradle plugin can
@@ -74,7 +72,7 @@ public final class ReportGenerator {
 
     private List<YamlReader.ParsedVariant> readVariants(Path serviceDir) {
         List<YamlReader.ParsedVariant> parsed = new ArrayList<>();
-        try (Stream<Path> files = Files.walk(serviceDir)) {
+        try (Stream<Path> files = Files.list(serviceDir)) {
             files.filter(p -> p.toString().endsWith(".yaml"))
                     .sorted()
                     .forEach(path -> {
