@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Exploration output is laid out by swept keys.** Each EXPLORE run
+  writes its per-configuration artefacts into an experiment-level
+  sub-directory named by the factors the experiment sweeps —
+  `explorations/<contract>/temperature/`,
+  `…/temperature+model/`, or `…/baseline-only/` when nothing varies —
+  so evolving what is swept opens a fresh directory: a superseded
+  artefact can never sit beside fresh ones, and a no-sweep run and a
+  sweep never share a directory. Artefact contents and filenames
+  within a directory are unchanged. The exploration comparison report
+  discovers artefacts recursively, so the previous flat layout still
+  reads. Adopts the family layout (2026-07-29); existing flat
+  directories are operator-owned working output and are not migrated.
+
 ### Added
 
 - **The declarative-format conformance gate.** punit-decl's test suite

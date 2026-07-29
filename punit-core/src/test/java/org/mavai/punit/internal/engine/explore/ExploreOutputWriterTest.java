@@ -182,7 +182,7 @@ class ExploreOutputWriterTest {
     }
 
     @Test
-    @DisplayName("ExploreEmitter writes one entry per FT to the in-memory sink, keyed by serviceContractId/{stem}.yaml")
+    @DisplayName("ExploreEmitter keys the sink by serviceContractId/{sweptKeys}/{stem}.yaml")
     void emitterCapturesOnePerConfig() {
         Sampling<LlmFactors, String, Integer> sampling = Sampling
                 .<LlmFactors, String, Integer>builder()
@@ -202,15 +202,34 @@ class ExploreOutputWriterTest {
         ExploreEmitter.emit(experiment, capture);
 
         assertThat(sink).hasSize(2);
+        // The middle segment names the swept factors — the model is
+        // constant across the grid, so only temperature names the
+        // experiment.
         assertThat(sink).containsKeys(
-                "explore-test/model-gpt-4o_temperature-0.3.yaml",
-                "explore-test/model-gpt-4o_temperature-0.7.yaml");
+                "explore-test/temperature/model-gpt-4o_temperature-0.3.yaml",
+                "explore-test/temperature/model-gpt-4o_temperature-0.7.yaml");
         // Each captured value parses as YAML carrying the explore-output schema header.
         for (String yaml : sink.values()) {
             Map<String, Object> parsed = new Yaml().load(yaml);
             assertThat(parsed).containsEntry("schemaVersion", "mavai-explore-1");
             assertThat(parsed).containsEntry("serviceContractId", "explore-test");
         }
+    }
+
+    @Test
+    @DisplayName("the experiment directory names the swept factors — + joined, baseline-only when nothing varies")
+    void experimentDirectoryNamesTheSweep() {
+        ExploreOutputWriter writer = new ExploreOutputWriter();
+        var a = org.mavai.punit.api.FactorBundle.of(new LlmFactors("gpt-4o", 0.3));
+        var b = org.mavai.punit.api.FactorBundle.of(new LlmFactors("gpt-4o", 0.7));
+        var c = org.mavai.punit.api.FactorBundle.of(new LlmFactors("o3", 0.7));
+        // One varying factor names the question; two name both, in
+        // factor-record declaration order; a grid where nothing varies
+        // is baseline-only, so a no-sweep run and a sweep of the same
+        // contract never share a directory.
+        assertThat(writer.experimentDirectory(List.of(a, b))).isEqualTo("temperature");
+        assertThat(writer.experimentDirectory(List.of(a, b, c))).isEqualTo("model+temperature");
+        assertThat(writer.experimentDirectory(List.of(a))).isEqualTo("baseline-only");
     }
 
     @Test

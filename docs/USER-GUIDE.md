@@ -1624,8 +1624,13 @@ experiment (one factor combination — model, temperature, system prompt, …
 ./gradlew explorationReport
 ```
 
-Reads the exploration YAML under `build/punit/explorations/<service>/`
-(the `explorationsDir`) and writes
+Reads the exploration YAML under
+`build/punit/explorations/<service>/<swept-keys>/` (the `explorationsDir`;
+the experiment-level sub-directory is named by the factors the experiment
+sweeps, joined with `+` — `temperature`, `temperature+model` — or
+`baseline-only` when nothing varies, so evolving what is swept opens a
+fresh directory and never strands a superseded artefact beside fresh
+ones) and writes
 `build/reports/punit-explorations/html/index.html`. Per service it shows a
 ranked leaderboard (overall pass rate, then latency, then cost), a
 per-criterion matrix comparing the variants check-by-check, and a
