@@ -144,6 +144,40 @@ final class ServicesResolver {
                 : type.explorePoint(entry.name(), entry.configuration()).service());
         entries.put(entry.name(), entry);
         validateExplorations(entry, type);
+        validateOptimizations(entry, type);
+    }
+
+    /**
+     * The inert-overlay refusal: an {@code initial:} that resolves to
+     * the baseline's own covariate point changes nothing — iteration 0
+     * starts from the baseline by default, so restating it is at best a
+     * no-op and at worst a misread of what the overlay does.
+     */
+    private void validateOptimizations(ServiceEntry entry, ServiceType type) {
+        if (entry.optimizations().isEmpty()) {
+            return;
+        }
+        Map<String, String> baseline = type.explorePoint(entry.name(), entry.configuration())
+                .service().configurationCovariates();
+        int index = 0;
+        for (org.mavai.punit.decl.internal.model.OptimizationDeclaration optimization
+                : entry.optimizations()) {
+            index++;
+            if (optimization.initial().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> merged = new LinkedHashMap<>(entry.configuration());
+            merged.putAll(optimization.initial());
+            Map<String, String> point = type.explorePoint(entry.name(), merged)
+                    .service().configurationCovariates();
+            if (point.equals(baseline)) {
+                throw new ContractConfigurationException(
+                        "service '" + entry.name() + "': optimization entry " + index
+                                + ": `initial:` merely restates the baseline `configuration:` — "
+                                + "iteration 0 starts from the baseline by default; omit the "
+                                + "overlay, or state a different starting point");
+            }
+        }
     }
 
     /**
