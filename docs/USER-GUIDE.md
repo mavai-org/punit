@@ -1006,6 +1006,16 @@ void compareModels() {
 }
 ```
 
+Artefacts land under
+`build/punit/explorations/<service>/<swept-keys>/` — the experiment-level
+sub-directory is named by the factors the experiment sweeps, joined with
+`+` (`temperature`, `temperature+model`), or `baseline-only` when nothing
+varies, so evolving what is swept opens a fresh directory and never
+strands a superseded artefact beside fresh ones. Render them with the
+shared `mavai explore` report (the in-punit `explorationReport` task
+predates this layout and is slated for removal in favour of the `mavai`
+renderer).
+
 Output is an exploration grid file: one row per configuration with
 observed pass rate, latency percentiles, postcondition failure
 histogram, and exemplars. The diff format makes per-postcondition

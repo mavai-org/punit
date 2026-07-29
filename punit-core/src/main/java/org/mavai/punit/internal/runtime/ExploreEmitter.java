@@ -28,7 +28,7 @@ import org.mavai.punit.internal.engine.explore.ExploreOutputWriter;
  * <ul>
  *   <li>{@link #emit(Experiment, Path)} — production: writes one
  *       file per configuration under
- *       {@code {baseDir}/{serviceContractId}/{readableStem}.yaml}.</li>
+ *       {@code {baseDir}/{serviceContractId}/{sweptKeys}/{readableStem}.yaml}.</li>
  *   <li>{@link #emit(Experiment, BiConsumer)} — test seam: yields
  *       {@code (relativePath, content)} pairs to the supplied sink so
  *       tests can scrutinise the output without touching disk.</li>
@@ -71,7 +71,10 @@ public final class ExploreEmitter {
     /**
      * Emit EXPLORE artefacts to a sink. The sink receives one
      * {@code (relativePath, yamlContent)} pair per configuration —
-     * {@code relativePath} is {@code {serviceContractId}/{readableStem}.yaml}.
+     * {@code relativePath} is
+     * {@code {serviceContractId}/{sweptKeys}/{readableStem}.yaml} — the
+     * middle segment names the experiment's swept factors ({@code +}
+     * joined; {@code baseline-only} when nothing varies).
      *
      * <p>This is the test-seam overload: a test passes a
      * {@code BiConsumer} that captures into a {@code Map<String, String>}
@@ -96,6 +99,14 @@ public final class ExploreEmitter {
             // executed any. Nothing to emit; not an error.
             return;
         }
+        // The experiment-level segment derives from the whole grid — a
+        // factor is swept when its value varies across configurations —
+        // so a superseded artefact can never sit beside fresh ones and
+        // a no-sweep run and a sweep never share a directory.
+        List<FactorBundle> grid = entries.stream()
+                .map(entry -> FactorBundle.of(entry.factors()))
+                .toList();
+        String experimentDirectory = writer.experimentDirectory(grid);
         experiment.dispatch(new Spec.Dispatcher<Void>() {
             @Override
             public <FT, IT, OT> Void apply(TypedSpec<FT, IT, OT> typed) {
@@ -108,7 +119,8 @@ public final class ExploreEmitter {
                     String stem = writer.filenameFor(bundle);
                     String yaml = writer.writeYaml(
                             serviceContractId, bundle, entry, contract.effectiveCriteria());
-                    sink.accept(serviceContractId + "/" + stem + ".yaml", yaml);
+                    sink.accept(serviceContractId + "/" + experimentDirectory + "/"
+                            + stem + ".yaml", yaml);
                 }
                 return null;
             }

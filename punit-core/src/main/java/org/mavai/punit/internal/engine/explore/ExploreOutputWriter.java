@@ -128,6 +128,39 @@ public final class ExploreOutputWriter {
         return sanitise(stem.toString());
     }
 
+    /**
+     * The experiment-level directory segment: the swept factor names,
+     * joined with {@code +}. A factor is swept when its value varies
+     * across the experiment's configurations — the segment names the
+     * <em>question</em> the experiment asks ({@code temperature},
+     * {@code temperature+model}), so evolving what is swept opens a
+     * fresh directory and cannot strand a superseded artefact beside
+     * fresh ones; a run sweeping nothing is {@code baseline-only}, so
+     * a no-sweep run and a sweep of the same contract never share a
+     * directory. Names keep factor-record declaration order.
+     */
+    public String experimentDirectory(java.util.List<FactorBundle> grid) {
+        java.util.Map<String, java.util.Set<String>> values = new LinkedHashMap<>();
+        for (FactorBundle bundle : grid) {
+            for (FactorBundle.Entry e : bundle.entries()) {
+                values.computeIfAbsent(e.name(), name -> new java.util.LinkedHashSet<>())
+                        .add(e.value().canonical());
+            }
+        }
+        StringBuilder segment = new StringBuilder();
+        for (Map.Entry<String, java.util.Set<String>> factor : values.entrySet()) {
+            if (factor.getValue().size() > 1) {
+                if (segment.length() > 0) {
+                    // The family's joiner, kept out of sanitise's reach —
+                    // each name is sanitised on its own.
+                    segment.append('+');
+                }
+                segment.append(sanitise(factor.getKey()));
+            }
+        }
+        return segment.length() == 0 ? "baseline-only" : segment.toString();
+    }
+
     private static Map<String, Object> factorsBlock(FactorBundle bundle) {
         Map<String, Object> block = new LinkedHashMap<>();
         for (FactorBundle.Entry e : bundle.entries()) {
