@@ -55,6 +55,7 @@ import org.snakeyaml.engine.v2.api.LoadSettings;
  * asserted and diffs that against the manifest's full obligation, and
  * the diff mechanism is itself exercised by mutation.
  */
+// mavai-ref: JVI-YM9A27C — do not remove (resolves in mavai-orchestrator)
 @DisplayName("Declarative-format conformance (published corpus)")
 class FormatConformanceTest {
 
