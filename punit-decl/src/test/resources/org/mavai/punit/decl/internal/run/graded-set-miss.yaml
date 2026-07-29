@@ -1,0 +1,17 @@
+format: mavai-contract/1
+contract: annotator-misses-the-graded-set
+service: buildings-annotator
+transforms:
+  doc: json
+criteria:
+  - name: annotated-sets-fall-short-of-the-claim
+    threshold: 0.9
+    postconditions:
+      - in: doc
+        path: "$.buildings[*].name"
+        set-of:
+          required: ["Verwaltungsgebäude"]
+          optional: ["Hauptgebäude", "Anbau"]
+          min-present: 1
+inputs:
+  - "annotate the sample lease"

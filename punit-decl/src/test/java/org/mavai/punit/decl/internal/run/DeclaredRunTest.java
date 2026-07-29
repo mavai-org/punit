@@ -155,6 +155,27 @@ class DeclaredRunTest {
         }
 
         @Test
+        @DisplayName("the graded set claim judges membership — a set is a set")
+        void annotatorStatesTheGradedSet() {
+            // Required membership, distinct-optional floors (count and
+            // percent-by-floor), extras refused by default, a duplicated
+            // subject element as one member present.
+            assertThatCode(() ->
+                    PUnit.declared("annotator-states-the-graded-set").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a graded set claim falling short fails per sample")
+        void annotatorMissesTheGradedSet() {
+            // A missing required member and an undeclared extra — the
+            // stated arithmetic fails every trial.
+            Declared run = PUnit.declared("annotator-misses-the-graded-set").samples(30);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(AssertionFailedError.class);
+        }
+
+        @Test
         @DisplayName("the boolean form judges JSON true/false by identity")
         void annotatorFlagsCoverage() {
             assertThatCode(() ->

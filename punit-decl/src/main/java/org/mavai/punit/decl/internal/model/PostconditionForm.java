@@ -32,7 +32,8 @@ public enum PostconditionForm {
     IS("is", Category.SCALAR_VALUE),
     EQUALS_SET("equals-set", Category.COLLECTIVE),
     CONTAINS_SET("contains-set", Category.COLLECTIVE),
-    COUNT_EQUALS("count-equals", Category.COLLECTIVE);
+    COUNT_EQUALS("count-equals", Category.COLLECTIVE),
+    SET_OF("set-of", Category.COLLECTIVE);
 
     private enum Category { STRING, STRUCTURAL, NUMERIC, SCALAR_VALUE, COLLECTIVE }
 

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -11,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntPredicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
@@ -29,6 +31,8 @@ import org.mavai.punit.decl.internal.model.FormDeclaration;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
 import org.mavai.punit.decl.internal.model.NumericValue;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.SetElements;
+import org.mavai.punit.decl.internal.model.SetOfDeclaration;
 import org.w3c.dom.NodeList;
 
 /**
@@ -454,17 +458,17 @@ final class CriteriaCompiler {
         return switch (form.form()) {
             case EQUALS_SET -> {
                 List<?> operand = (List<?>) form.argument();
-                Map<Object, Long> expected = multiset(operand);
-                yield selected -> multiset(selected).equals(expected)
+                Map<Object, Long> expected = SetElements.multiset(operand);
+                yield selected -> SetElements.multiset(selected).equals(expected)
                         ? null
                         : "selected values " + Display.of(selected) + " do not equal "
                                 + Display.of(operand) + " as a multiset";
             }
             case CONTAINS_SET -> {
                 List<?> operand = (List<?>) form.argument();
-                Map<Object, Long> expected = multiset(operand);
+                Map<Object, Long> expected = SetElements.multiset(operand);
                 yield selected -> {
-                    Map<Object, Long> actual = multiset(selected);
+                    Map<Object, Long> actual = SetElements.multiset(selected);
                     boolean missing = expected.entrySet().stream()
                             .anyMatch(entry -> actual.getOrDefault(entry.getKey(), 0L) < entry.getValue());
                     return missing
@@ -479,34 +483,76 @@ final class CriteriaCompiler {
                         ? null
                         : "path selected " + selected.size() + " value(s), not " + expected;
             }
+            case SET_OF -> setOfJudge((SetOfDeclaration) form.argument());
             default -> throw new IllegalStateException("not a set form: " + form.form());
         };
     }
 
-    private static Map<Object, Long> multiset(List<?> values) {
-        Map<Object, Long> counts = new HashMap<>();
-        for (Object value : values) {
-            counts.merge(elementKey(value), 1L, Long::sum);
-        }
-        return counts;
+    /**
+     * The graded set claim, judged by membership — a set is a set.
+     * Holds iff every required member appears in the selection, at
+     * least min-present distinct optional members appear, and — under
+     * refuse-extras — every selected element is a declared member.
+     * Duplicates collapse to membership on both sides: a subject
+     * element appearing twice is one member present, never an extra.
+     * The failure reason states the arithmetic — the missing required
+     * members, the present-versus-floor count, and any extras — each
+     * list bounded.
+     */
+    private static CollectiveJudge setOfJudge(SetOfDeclaration claim) {
+        Map<Object, Object> requiredKeys = memberKeys(claim.required());
+        Map<Object, Object> optionalKeys = memberKeys(claim.optional());
+        return selected -> {
+            Map<Object, Object> selectedKeys = new LinkedHashMap<>();
+            for (Object value : selected) {
+                selectedKeys.putIfAbsent(SetElements.key(value), value);
+            }
+            List<Object> missing = new ArrayList<>();
+            requiredKeys.forEach((key, member) -> {
+                if (!selectedKeys.containsKey(key)) {
+                    missing.add(member);
+                }
+            });
+            long present = optionalKeys.keySet().stream().filter(selectedKeys::containsKey).count();
+            List<Object> extras = new ArrayList<>();
+            selectedKeys.forEach((key, value) -> {
+                if (!requiredKeys.containsKey(key) && !optionalKeys.containsKey(key)) {
+                    extras.add(value);
+                }
+            });
+            List<String> parts = new ArrayList<>();
+            if (!missing.isEmpty()) {
+                parts.add("missing required: " + memberDisplay(missing));
+            }
+            if (present < claim.minPresent()) {
+                parts.add("optional members present " + present + " of "
+                        + claim.optional().size() + " (min-present " + claim.minPresent() + ")");
+            }
+            if (claim.refuseExtras() && !extras.isEmpty()) {
+                parts.add("extras: " + memberDisplay(extras));
+            }
+            return parts.isEmpty() ? null : "set-of: " + String.join("; ", parts);
+        };
     }
 
-    /**
-     * Strict JSON-value equality as a type-tagged key: numbers compare
-     * numerically (decimal), strings exactly, booleans and null by
-     * identity — a number never equals its string spelling.
-     */
-    private static Object elementKey(Object value) {
-        if (value instanceof Boolean) {
-            return List.of("bool", value);
+    /** The declared members by element key, insertion order kept for display. */
+    private static Map<Object, Object> memberKeys(List<Object> members) {
+        Map<Object, Object> keys = new LinkedHashMap<>();
+        for (Object member : members) {
+            keys.putIfAbsent(SetElements.key(member), member);
         }
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof Number) {
-            return List.of("num", NumericValue.of(value).stripTrailingZeros());
-        }
-        return List.of("str", String.valueOf(value));
+        return keys;
+    }
+
+    /** A bounded member listing for reasons: the first few, the rest counted. */
+    private static String memberDisplay(List<Object> members) {
+        int limit = 3;
+        String shown = members.stream()
+                .limit(limit)
+                .map(Display::of)
+                .collect(Collectors.joining(", "));
+        int remainder = members.size() - limit;
+        return remainder <= 0 ? shown : shown + " (+" + remainder + " more)";
     }
 
     // ── String forms ──────────────────────────────────────────────
@@ -638,8 +684,23 @@ final class CriteriaCompiler {
         if (form.path() != null) {
             description.append(form.path()).append(' ');
         }
-        description.append(form.form().key()).append(' ').append(Display.of(form.argument()));
+        description.append(form.form().key()).append(' ').append(argumentDisplay(form));
         return description.toString();
+    }
+
+    /**
+     * The form's operand for a check name: the composite claim as its
+     * summary arithmetic — never a raw record dump — everything else
+     * bounded verbatim.
+     */
+    private static String argumentDisplay(FormDeclaration form) {
+        if (form.argument() instanceof SetOfDeclaration claim) {
+            return "(" + claim.required().size() + " required, "
+                    + claim.optional().size() + " optional, min-present "
+                    + claim.minPresent()
+                    + (claim.refuseExtras() ? "" : ", extras allowed") + ")";
+        }
+        return Display.of(form.argument());
     }
 
     static final class Display {
