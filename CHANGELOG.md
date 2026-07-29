@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The declarative-format conformance gate.** punit-decl's test suite
+  now drives the format layer — contract parsing plus the load-time
+  construction walk, and full services-file resolution — over every
+  case of the family's published conformance corpus, fetched from the
+  latest mavai-R release on each build (`fetchPublishedFormats`; local
+  override `-PformatsDir`). The corpus manifest's binding obligations
+  (outcome, and refusal *category*; wording stays punit's own) are
+  asserted case by case, the run diffs its assertions against the full
+  obligation so selective assertion fails the build, and obligations
+  punit does not yet meet sit on a known-unmet ledger asserted
+  inverted — an entry names the directive that retires it, and the
+  ledger only shrinks truthfully.
+
+### Fixed
+
+- **An `initial:` overlay restating the baseline is now refused.** The
+  conformance gate's first catch: an optimization's `initial:` that
+  resolves to the baseline configuration's own covariate point changes
+  nothing (iteration 0 starts from the baseline by default) and is now
+  a load refusal, per the services format.
+
 - **The graded set claim (declarative contracts).** A new composite
   postcondition form, `set-of:`, states a graded membership claim over
   a path's selection as one check: `required:` members must all
