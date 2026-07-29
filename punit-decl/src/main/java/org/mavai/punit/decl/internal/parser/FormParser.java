@@ -47,6 +47,15 @@ final class FormParser {
             path = expression;
             keys.remove("path");
         }
+        boolean optional = false;
+        if (keys.contains("optional")) {
+            if (!Boolean.TRUE.equals(entry.get("optional"))) {
+                throw fail(where + ": `optional:` takes the literal `true` and nothing else — "
+                        + "required is the default, not a spelling");
+            }
+            optional = true;
+            keys.remove("optional");
+        }
         if (keys.size() != 1) {
             throw fail(where + ": each postcondition declares exactly one form");
         }
@@ -82,6 +91,11 @@ final class FormParser {
                     + "(there is no collection over the raw text or a scalar)");
         }
         if (form == PostconditionForm.PARSES) {
+            if (optional) {
+                throw fail(where + ": `optional:` on `parses:` is refused — a transform "
+                        + "failure hard-fails the trial regardless of any optional-slack "
+                        + "budget, so the mark would be inert");
+            }
             if (!view.equals(FormDeclaration.RAW_VIEW)) {
                 throw fail(where + ": `parses:` takes no `in:` — it names its view directly");
             }
@@ -90,7 +104,7 @@ final class FormParser {
                         + declared(views) + ")");
             }
         }
-        return new FormDeclaration(form, argument, view, path);
+        return new FormDeclaration(form, argument, view, path, optional);
     }
 
     private static void checkArgument(PostconditionForm form, Object argument, String where) {

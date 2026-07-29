@@ -147,6 +147,12 @@ public final class TransformingDecl<O, T> implements Decl<O> {
                 Optional.of(OptionalSlack.percent(percentage)));
     }
 
+    /** Declare the optional-check failure budget from a constructed value. */
+    public TransformingDecl<O, T> optionalSlack(OptionalSlack slack) {
+        Objects.requireNonNull(slack, "slack");
+        return new TransformingDecl<>(posture, transform, postconditions, name, Optional.of(slack));
+    }
+
     /**
      * Add a named postcondition over the transformed value. The
      * predicate returns {@code true} for pass; the framework

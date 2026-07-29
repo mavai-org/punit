@@ -173,6 +173,12 @@ public final class CriterionDecl<O> implements Decl<O> {
                 Optional.of(OptionalSlack.percent(percentage)));
     }
 
+    /** Declare the optional-check failure budget from a constructed value. */
+    public CriterionDecl<O> optionalSlack(OptionalSlack slack) {
+        Objects.requireNonNull(slack, "slack");
+        return new CriterionDecl<>(posture, postconditions, name, Optional.of(slack));
+    }
+
     /**
      * Add a named postcondition. The predicate returns {@code true}
      * for pass; the framework synthesises the failure message when

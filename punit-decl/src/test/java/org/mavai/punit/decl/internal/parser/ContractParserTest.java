@@ -46,6 +46,126 @@ class ContractParserTest {
     }
 
     @Nested
+    @DisplayName("partial credit")
+    class PartialCredit {
+
+        @Test
+        @DisplayName("optional marks and both slack spellings parse — the corpus's double opt-in")
+        void partialCreditAccepted() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: extraction-with-partial-credit
+                    service: quote-extractor
+                    transforms:
+                      parsed: json
+                    criteria:
+                      - name: non-negotiables-hold-with-counted-slack
+                        threshold: 0.9
+                        optional-slack: 2
+                        postconditions:
+                          - in: parsed
+                            path: "$.offerId"
+                            equals-ci: "T802739355"
+                          - in: parsed
+                            path: "$.premium"
+                            eq: 2637.8
+                            optional: true
+                      - name: percent-slack-spelling
+                        threshold: 0.9
+                        optional-slack: "20%"
+                        postconditions:
+                          - matches: '^\\s*\\{'
+                          - in: parsed
+                            path: "$.currency"
+                            one-of: ["CHF", "EUR"]
+                            optional: true
+                    inputs: ["quote for the standard bundle"]
+                    """);
+            var first = declaration.criteria().get(0);
+            assertThat(first.optionalSlack().display()).isEqualTo("2");
+            assertThat(first.forms().get(0).optional()).isFalse();
+            assertThat(first.forms().get(1).optional()).isTrue();
+            assertThat(declaration.criteria().get(1).optionalSlack().display()).isEqualTo("20%");
+        }
+
+        @Test
+        @DisplayName("a bare-fraction slack is never guessed at")
+        void bareFractionSlack() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    criteria:
+                      - threshold: 0.9
+                        optional-slack: 0.2
+                        postconditions:
+                          - contains: "ok"
+                          - matches: '\\w'
+                            optional: true
+                    inputs: ["Alice"]
+                    """, "a bare fraction is never guessed at");
+        }
+
+        @Test
+        @DisplayName("required is the default, not a spelling — optional: false is refused")
+        void optionalFalseRefused() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - contains: "ok"
+                            optional: false
+                    inputs: ["Alice"]
+                    """, "required is the default, not a spelling");
+        }
+
+        @Test
+        @DisplayName("optional on parses is refused — the mark would be inert")
+        void optionalOnParsesRefused() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - parses: doc
+                            optional: true
+                          - contains: "ok"
+                    inputs: ["Alice"]
+                    """, "would be inert");
+        }
+
+        @Test
+        @DisplayName("a per-input expectation takes the optional mark like a global check")
+        void optionalInExpected() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        optional-slack: 1
+                        parses: doc
+                    inputs:
+                      - input: "Alice"
+                        expected:
+                          - path: "$.name"
+                            equals: "Alice"
+                            optional: true
+                    """);
+            assertThat(declaration.inputs().get(0).expected().get(0).optional()).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("acceptance")
     class Acceptance {
 

@@ -110,32 +110,42 @@ final class CriteriaCompiler {
         for (FormDeclaration form : criterion.forms()) {
             Check check = compileForm(form);
             decl = decl.satisfies(check.name(), response -> check.evaluate((String) response));
+            if (form.optional()) {
+                decl = decl.optional();
+            }
         }
         if (!expectations.isEmpty() && declaration.criteria().size() == 1) {
-            decl = decl.satisfies("input-specific expectations",
-                    response -> evaluateExpectations((String) response));
+            // Each per-input expectation is its own check, dispatching on
+            // the sample's input — so an optional mark counts individually
+            // against the criterion's budget, exactly as a global check.
+            // A check passes neutrally on the inputs it does not apply to.
+            java.util.List<org.mavai.punit.decl.internal.model.InputDeclaration> inputs =
+                    declaration.inputs();
+            for (int index = 0; index < inputs.size(); index++) {
+                Object inputValue = inputs.get(index).value();
+                for (FormDeclaration form : inputs.get(index).expected()) {
+                    Check check = compileExpectedForm(form, inputValue);
+                    String name = "input " + index + ": " + check.name();
+                    // Identity, not equality: inputs with equal values are
+                    // never conflated — the dispatched object IS the list's.
+                    decl = decl.satisfies(name, response ->
+                            inputValue == currentInput.get()
+                                    ? check.evaluate((String) response)
+                                    : Outcome.ok());
+                    if (form.optional()) {
+                        decl = decl.optional();
+                    }
+                }
+            }
+        }
+        if (criterion.optionalSlack() != null) {
+            decl = decl.optionalSlack(criterion.optionalSlack());
         }
         return decl;
     }
 
     private static ThresholdOrigin origin(String key) {
         return ThresholdOrigin.valueOf(key.toUpperCase(Locale.ROOT));
-    }
-
-    private Outcome<?> evaluateExpectations(String response) {
-        Object input = currentInput.get();
-        List<FormDeclaration> forms = expectations.get(input);
-        if (forms == null) {
-            return Outcome.ok();
-        }
-        for (FormDeclaration form : forms) {
-            Check check = compileExpectedForm(form, input);
-            Outcome<?> result = check.evaluate(response);
-            if (result instanceof Outcome.Fail<?>) {
-                return result;
-            }
-        }
-        return Outcome.ok();
     }
 
     // ── Form compilation ──────────────────────────────────────────
