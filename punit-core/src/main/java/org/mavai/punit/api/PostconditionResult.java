@@ -14,11 +14,16 @@ import org.mavai.outcome.Outcome;
  *                postcondition held, {@link Outcome.Fail} otherwise
  *                (the failure carries the reason)
  */
-public record PostconditionResult(String description, Outcome<?> outcome) {
+public record PostconditionResult(String description, Outcome<?> outcome, boolean required) {
 
     public PostconditionResult {
         Objects.requireNonNull(description, "description");
         Objects.requireNonNull(outcome, "outcome");
+    }
+
+    /** A required check's result — the default. */
+    public PostconditionResult(String description, Outcome<?> outcome) {
+        this(description, outcome, true);
     }
 
     public boolean passed() {
@@ -75,6 +80,11 @@ public record PostconditionResult(String description, Outcome<?> outcome) {
         return new PostconditionResult(description, Outcome.ok());
     }
 
+    /** A passing result carrying the check's required/optional standing. */
+    public static PostconditionResult passed(String description, boolean required) {
+        return new PostconditionResult(description, Outcome.ok(), required);
+    }
+
     /**
      * Construct a failed result with a synthetic failure (name is the
      * description). Used for results that don't originate from an
@@ -87,6 +97,12 @@ public record PostconditionResult(String description, Outcome<?> outcome) {
         return new PostconditionResult(description, Outcome.fail(description, reason));
     }
 
+    /** A failed result carrying the check's required/optional standing. */
+    public static PostconditionResult failed(String description, String reason, boolean required) {
+        Objects.requireNonNull(reason, "reason");
+        return new PostconditionResult(description, Outcome.fail(description, reason), required);
+    }
+
     /**
      * Construct a failed result that preserves an author-supplied
      * {@link Outcome.Fail}. Both the failure's name and its message
@@ -96,5 +112,12 @@ public record PostconditionResult(String description, Outcome<?> outcome) {
     public static PostconditionResult failed(String description, Outcome.Fail<?> failure) {
         Objects.requireNonNull(failure, "failure");
         return new PostconditionResult(description, failure);
+    }
+
+    /** A failed result preserving the author's failure and the check's standing. */
+    public static PostconditionResult failed(
+            String description, Outcome.Fail<?> failure, boolean required) {
+        Objects.requireNonNull(failure, "failure");
+        return new PostconditionResult(description, failure, required);
     }
 }

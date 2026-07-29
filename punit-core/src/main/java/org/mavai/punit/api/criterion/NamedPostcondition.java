@@ -19,5 +19,21 @@ import org.mavai.punit.api.PostconditionCheck;
 // mavai-ref: JVI-BD4F1AB — do not remove (resolves in mavai-orchestrator)
 public record NamedPostcondition<O>(
         String name,
-        PostconditionCheck<O> check
-) { }
+        PostconditionCheck<O> check,
+        boolean required
+) {
+
+    /** A required postcondition — the default; every check is non-negotiable until marked. */
+    public NamedPostcondition(String name, PostconditionCheck<O> check) {
+        this(name, check, true);
+    }
+
+    /**
+     * This postcondition marked optional: relaxable within its
+     * criterion's optional-slack budget (partial credit is a double
+     * opt-in — without a budget the mark weakens nothing).
+     */
+    public NamedPostcondition<O> asOptional() {
+        return new NamedPostcondition<>(name, check, false);
+    }
+}

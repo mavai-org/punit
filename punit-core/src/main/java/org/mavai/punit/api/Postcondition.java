@@ -68,6 +68,15 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
     String description();
 
     /**
+     * Whether this postcondition is non-negotiable (the default). An
+     * optional check's failure counts against its criterion's
+     * optional-slack budget instead of failing the trial outright —
+     * partial credit is a double opt-in: an optional mark weakens
+     * nothing until the criterion also declares a budget.
+     */
+    boolean required();
+
+    /**
      * Evaluate this postcondition and return one summary result.
      *
      * <p>This signature is well-defined for the {@link Leaf} variant,
@@ -104,7 +113,7 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
     // ── Variant ─────────────────────────────────────────────────────
 
     /** A direct postcondition: one description, one check. */
-    record Leaf<T>(String description, PostconditionCheck<T> check)
+    record Leaf<T>(String description, PostconditionCheck<T> check, boolean required)
             implements Postcondition<T> {
 
         public Leaf {
@@ -113,6 +122,11 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
             if (description.isBlank()) {
                 throw new IllegalArgumentException("description must not be blank");
             }
+        }
+
+        /** A required leaf — the default. */
+        public Leaf(String description, PostconditionCheck<T> check) {
+            this(description, check, true);
         }
 
         @Override
@@ -124,11 +138,11 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
                 String reason = e.getMessage() != null
                         ? e.getMessage()
                         : e.getClass().getSimpleName();
-                return PostconditionResult.failed(description, reason);
+                return PostconditionResult.failed(description, reason, required);
             }
             return switch (result) {
-                case Outcome.Ok<?> ignored -> PostconditionResult.passed(description);
-                case Outcome.Fail<?> f -> PostconditionResult.failed(description, f);
+                case Outcome.Ok<?> ignored -> PostconditionResult.passed(description, required);
+                case Outcome.Fail<?> f -> PostconditionResult.failed(description, f, required);
             };
         }
 
@@ -154,7 +168,7 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
      * {@link #match(Object, Object)} directly. The interface-method
      * implementation throws to surface engine-side misuse.
      */
-    record Matching<T>(String description, ValueMatcher<T> matcher)
+    record Matching<T>(String description, ValueMatcher<T> matcher, boolean required)
             implements Postcondition<T> {
 
         public Matching {
@@ -163,6 +177,11 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
             if (description.isBlank()) {
                 throw new IllegalArgumentException("description must not be blank");
             }
+        }
+
+        /** A required matching postcondition — the default. */
+        public Matching(String description, ValueMatcher<T> matcher) {
+            this(description, matcher, true);
         }
 
         /**
@@ -185,11 +204,11 @@ public sealed interface Postcondition<T> permits Postcondition.Leaf, Postconditi
                 String reason = e.getMessage() != null
                         ? e.getMessage()
                         : e.getClass().getSimpleName();
-                return PostconditionResult.failed(description, reason);
+                return PostconditionResult.failed(description, reason, required);
             }
             return switch (result) {
-                case Outcome.Ok<?> ignored -> PostconditionResult.passed(description);
-                case Outcome.Fail<?> f -> PostconditionResult.failed(description, f);
+                case Outcome.Ok<?> ignored -> PostconditionResult.passed(description, required);
+                case Outcome.Fail<?> f -> PostconditionResult.failed(description, f, required);
             };
         }
 

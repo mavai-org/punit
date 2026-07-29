@@ -25,20 +25,28 @@ final class DirectCriterion<O> implements Criterion<O> {
     private final String id;
     private final List<Postcondition<O>> postconditions;
     private final CriterionPosture posture;
+    private final Optional<OptionalSlack> optionalSlack;
 
     DirectCriterion(String id, List<Postcondition<O>> postconditions) {
-        this(id, postconditions, CriterionPosture.implicit());
+        this(id, postconditions, Optional.empty(), CriterionPosture.implicit());
     }
 
-    DirectCriterion(String id, List<Postcondition<O>> postconditions, CriterionPosture posture) {
+    DirectCriterion(String id, List<Postcondition<O>> postconditions,
+            Optional<OptionalSlack> optionalSlack) {
+        this(id, postconditions, optionalSlack, CriterionPosture.implicit());
+    }
+
+    DirectCriterion(String id, List<Postcondition<O>> postconditions,
+            Optional<OptionalSlack> optionalSlack, CriterionPosture posture) {
         this.id = Objects.requireNonNull(id, "id");
         this.postconditions = List.copyOf(
                 Objects.requireNonNull(postconditions, "postconditions"));
+        this.optionalSlack = Objects.requireNonNull(optionalSlack, "optionalSlack");
         this.posture = Objects.requireNonNull(posture, "posture");
     }
 
     DirectCriterion<O> withPosture(CriterionPosture replacement) {
-        return new DirectCriterion<>(id, postconditions, replacement);
+        return new DirectCriterion<>(id, postconditions, optionalSlack, replacement);
     }
 
     @Override
@@ -53,12 +61,12 @@ final class DirectCriterion<O> implements Criterion<O> {
 
     @Override
     public CriterionSampleResult evaluate(O value) {
-        return evaluateChain(id, postconditions, value, Optional.empty());
+        return evaluateChain(id, postconditions, value, Optional.empty(), optionalSlack);
     }
 
     @Override
     public CriterionSampleResult evaluate(O value, Optional<O> expected) {
-        return evaluateChain(id, postconditions, value, expected);
+        return evaluateChain(id, postconditions, value, expected, optionalSlack);
     }
 
     @Override
@@ -90,8 +98,25 @@ final class DirectCriterion<O> implements Criterion<O> {
      */
     static <T> CriterionSampleResult evaluateChain(
             String id, List<Postcondition<T>> chain, T value, Optional<T> expected) {
+        return evaluateChain(id, chain, value, expected, Optional.empty());
+    }
+
+    /**
+     * As above, with the criterion's optional-check failure budget.
+     * The trial's acceptance predicate (partial credit, a double
+     * opt-in): every required check must pass, and failed optional
+     * checks must stay within the resolved budget — absent budget,
+     * zero, so an optional mark alone weakens nothing. Recorded
+     * per-check outcomes stay true regardless: the standings see
+     * reality, not the softened verdict.
+     */
+    static <T> CriterionSampleResult evaluateChain(
+            String id, List<Postcondition<T>> chain, T value, Optional<T> expected,
+            Optional<OptionalSlack> optionalSlack) {
         List<PostconditionResult> results = new ArrayList<>();
-        boolean anyFailed = false;
+        boolean requiredFailed = false;
+        int optionalApplicable = 0;
+        int optionalFailed = 0;
         for (Postcondition<T> p : chain) {
             List<PostconditionResult> pResults = switch (p) {
                 case Postcondition.Leaf<T> leaf -> leaf.evaluateAll(value);
@@ -106,12 +131,22 @@ final class DirectCriterion<O> implements Criterion<O> {
             };
             results.addAll(pResults);
             for (PostconditionResult r : pResults) {
-                if (r.failed()) {
-                    anyFailed = true;
+                if (r.required()) {
+                    if (r.failed()) {
+                        requiredFailed = true;
+                    }
+                } else {
+                    optionalApplicable++;
+                    if (r.failed()) {
+                        optionalFailed++;
+                    }
                 }
             }
         }
-        return anyFailed
+        final int applicable = optionalApplicable;
+        int budget = optionalSlack.map(slack -> slack.resolve(applicable)).orElse(0);
+        boolean failed = requiredFailed || optionalFailed > budget;
+        return failed
                 ? CriterionSampleResult.fail(id, results)
                 : CriterionSampleResult.pass(id, results);
     }

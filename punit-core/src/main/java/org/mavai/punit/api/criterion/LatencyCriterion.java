@@ -390,7 +390,7 @@ public final class LatencyCriterion {
         if (contractRef.isPresent()) {
             posture = posture.withContractRef(contractRef.get());
         }
-        return new DirectCriterion<>(ID, List.of(), posture);
+        return new DirectCriterion<>(ID, List.of(), java.util.Optional.empty(), posture);
     }
 
     private static void applyCeiling(LatencySpec.Builder b, Ceiling c) {
