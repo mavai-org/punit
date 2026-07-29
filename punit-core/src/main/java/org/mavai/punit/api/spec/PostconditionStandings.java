@@ -34,6 +34,7 @@ import org.mavai.punit.api.criterion.CriterionSampleResult;
  * history — a pure aggregation of recorded per-check outcomes, which
  * stay true even when the acceptance predicate softened the trial.
  */
+// mavai-ref: JVI-N9ZEY24 — do not remove (resolves in mavai-orchestrator)
 public record PostconditionStandings(List<CriterionStandings> criteria) {
 
     public PostconditionStandings {
