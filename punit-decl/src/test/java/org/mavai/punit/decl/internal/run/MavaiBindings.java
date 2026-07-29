@@ -42,6 +42,30 @@ class MavaiBindings {
         return "this is not json {";
     }
 
+    @Binding("quote-service")
+    String quote(String instruction) {
+        double premium = instruction.contains("premium-only") ? 1049.1 : 2637.8;
+        return """
+                {"premium": %s, "excess": "500.00", "instalment-fee": 12.5,
+                 "items": [{"price": 0}, {"price": 12.5}],
+                 "tax-rate": 0.19, "term-months": 12, "instalments": 12,
+                 "holder": " FRAU   beispiel ", "status": "approved",
+                 "cancellation-date": null}
+                """.formatted(premium);
+    }
+
+    @Binding("buildings-annotator")
+    String annotate(String instruction) {
+        return """
+                {"buildings": [
+                   {"name": "Hauptgebäude", "isIncluded": true, "isInsured": true},
+                   {"name": "Nebengebäude", "isIncluded": false, "isInsured": true},
+                   {"name": "Nebengebäude", "isIncluded": true, "isInsured": true}],
+                 "rents": [{"amount": 1200}, {"amount": 950.5}],
+                 "tenants": [{"name": "Muster AG"}, {"name": "Beispiel GmbH"}]}
+                """;
+    }
+
     @Binding("repeater")
     String repeat(String item, int count) {
         return item + " x" + count;

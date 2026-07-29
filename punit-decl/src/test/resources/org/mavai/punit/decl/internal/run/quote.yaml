@@ -1,0 +1,51 @@
+format: mavai-contract/1
+contract: quote-service-extracts-exact-values
+service: quote-service
+transforms:
+  quote: json
+criteria:
+  - name: extracted-values-match-the-document
+    threshold: 0.9
+    not-equals: "ERROR"
+    postconditions:
+      - in: quote
+        path: "$.excess"
+        eq: "500.00"
+      - in: quote
+        path: "$['instalment-fee']"
+        ne: 0
+      - in: quote
+        path: "$.items[*].price"
+        ge: 0
+      - in: quote
+        path: "$['tax-rate']"
+        lt: "0.2"
+      - in: quote
+        path: "$['term-months']"
+        gt: 0
+      - in: quote
+        path: "$.instalments"
+        le: 12
+      - in: quote
+        path: "$.holder"
+        equals-ci: "Frau  Beispiel"
+      - in: quote
+        path: "$.status"
+        not-equals: "declined"
+      - in: quote
+        path: "$['cancellation-date']"
+        is-null: true
+      - in: quote
+        path: "$['no-such-key']"
+        is-null: true
+inputs:
+  - input: "quote the sample policy"
+    expected:
+      - in: quote
+        path: "$.premium"
+        eq: 2637.80
+  - input: "quote the premium-only policy"
+    expected:
+      - in: quote
+        path: "$.premium"
+        eq: "1049.10"

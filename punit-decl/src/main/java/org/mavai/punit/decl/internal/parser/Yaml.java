@@ -59,6 +59,12 @@ final class Yaml {
         return value instanceof Integer integer && integer >= minimum;
     }
 
+    /** A bounded rendering of an author-supplied value for a refusal message. */
+    static String display(Object value) {
+        String text = value instanceof String ? "\"" + value + "\"" : String.valueOf(value);
+        return text.length() <= 60 ? text : text.substring(0, 57) + "...";
+    }
+
     static ContractConfigurationException fail(String message) {
         return new ContractConfigurationException(message);
     }
