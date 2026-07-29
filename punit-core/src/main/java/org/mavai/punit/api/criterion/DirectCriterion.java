@@ -20,6 +20,7 @@ import org.mavai.punit.api.PostconditionResult;
  * lowered to its runtime criterion. Authors do not reference this
  * type directly.
  */
+// mavai-ref: JVI-2GV36P= — do not remove (resolves in mavai-orchestrator)
 final class DirectCriterion<O> implements Criterion<O> {
 
     private final String id;
