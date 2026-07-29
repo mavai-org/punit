@@ -60,6 +60,11 @@ final class DirectCriterion<O> implements Criterion<O> {
     }
 
     @Override
+    public Optional<OptionalSlack> optionalSlack() {
+        return optionalSlack;
+    }
+
+    @Override
     public CriterionSampleResult evaluate(O value) {
         return evaluateChain(id, postconditions, value, Optional.empty(), optionalSlack);
     }

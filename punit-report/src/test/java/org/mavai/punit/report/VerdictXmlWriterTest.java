@@ -535,6 +535,54 @@ class VerdictXmlWriterTest {
     }
 
     @Nested
+    @DisplayName("postcondition standings")
+    class PostconditionStandingsElement {
+
+        @Test
+        @DisplayName("a verdict with standings steps to version 1.4 and validates against the XSD")
+        void standingsValidateAgainstSchema14() throws Exception {
+            String xml = writeToString(verdictWithStandings());
+            assertThat(xml).contains("version=\"1.4\"");
+            assertThat(xml).contains("<postcondition-standings>");
+            assertThat(xml).contains("optional-slack=\"2\"");
+            assertThat(xml).contains(
+                    "input-index=\"1\" check=\"terms are the agreed set\" optional=\"true\" "
+                            + "passed=\"12\" failed=\"6\" skipped=\"2\"");
+            validateAgainstSchema14(xml);
+        }
+
+        @Test
+        @DisplayName("the standings round-trip through punit's own reader")
+        void standingsRoundTrip() throws Exception {
+            ProbabilisticTestVerdict original = verdictWithStandings();
+            String xml = writeToString(original);
+            ProbabilisticTestVerdict read = new VerdictXmlReader()
+                    .read(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            assertThat(read.postconditionStandings()).isPresent();
+            assertThat(read.postconditionStandings().get())
+                    .isEqualTo(original.postconditionStandings().get());
+        }
+
+        @Test
+        @DisplayName("the standings element is descriptive — no verdict vocabulary, no intervals")
+        void standingsAreDescriptive() throws Exception {
+            String xml = writeToString(verdictWithStandings());
+            String element = xml.substring(
+                    xml.indexOf("<postcondition-standings>"),
+                    xml.indexOf("</postcondition-standings>"));
+            assertThat(element).doesNotContain("threshold", "confidence", "bound", "verdict");
+        }
+
+        @Test
+        @DisplayName("a verdict without standings stays at its prior version")
+        void noStandingsNoVersionStep() throws Exception {
+            String xml = writeToString(minimalVerdict(true, PUnitVerdict.PASS));
+            assertThat(xml).doesNotContain("postcondition-standings");
+            assertThat(xml).contains("version=\"1.0\"");
+        }
+    }
+
+    @Nested
     @DisplayName("schema validation")
     class SchemaValidation {
 
@@ -1004,6 +1052,36 @@ class VerdictXmlWriterTest {
             Validator validator = schema.newValidator();
             validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
         }
+    }
+
+    private void validateAgainstSchema14(String xml) throws Exception {
+        SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.4.xsd")) {
+            assertThat(xsdStream).as("XSD 1.4 resource must be available").isNotNull();
+            Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
+            Validator validator = schema.newValidator();
+            validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
+        }
+    }
+
+    private ProbabilisticTestVerdict verdictWithStandings() {
+        ProbabilisticTestVerdict base = minimalVerdict(true, PUnitVerdict.PASS);
+        var standings = new org.mavai.punit.api.spec.PostconditionStandings(List.of(
+                new org.mavai.punit.api.spec.PostconditionStandings.CriterionStandings(
+                        "extraction-matches",
+                        Optional.of("2"),
+                        List.of(
+                                new org.mavai.punit.api.spec.PostconditionStandings.Row(
+                                        0, "premium is exact", false, 18, 2, 0),
+                                new org.mavai.punit.api.spec.PostconditionStandings.Row(
+                                        1, "terms are the agreed set", true, 12, 6, 2)))));
+        return new ProbabilisticTestVerdict(
+                base.correlationId(), base.timestamp(), base.identity(), base.execution(),
+                base.functional(), base.latency(), base.statistics(), base.covariates(),
+                base.cost(), base.pacing(), base.provenance(), base.termination(),
+                base.environmentMetadata(), base.junitPassed(), base.punitVerdict(),
+                base.verdictReason(), base.postconditionFailures(), base.perCriterion(),
+                Optional.of(standings));
     }
 
     private void validateAgainstSchema12(String xml) throws Exception {

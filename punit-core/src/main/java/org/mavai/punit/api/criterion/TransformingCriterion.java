@@ -76,6 +76,11 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
     }
 
     @Override
+    public Optional<OptionalSlack> optionalSlack() {
+        return optionalSlack;
+    }
+
+    @Override
     public CriterionSampleResult evaluate(O value) {
         Outcome<D> derived;
         try {

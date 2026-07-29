@@ -36,6 +36,7 @@ public final class VerdictXmlWriter {
     static final String NAMESPACE = "http://mavai.org/verdict/1.0";
     static final String VERSION_1_0 = "1.0";
     static final String VERSION_1_2 = "1.2";
+    static final String VERSION_1_4 = "1.4";
 
     private static final XMLOutputFactory OUTPUT_FACTORY = XMLOutputFactory.newFactory();
 
@@ -67,11 +68,15 @@ public final class VerdictXmlWriter {
     private void writeVerdictRecord(XMLStreamWriter w, ProbabilisticTestVerdict v) throws XMLStreamException {
         w.writeStartElement("verdict-record");
         w.writeDefaultNamespace(NAMESPACE);
-        // version="1.2" when <per-criterion> content is populated;
+        // version="1.4" when the postcondition-standings element is
+        // populated (1.3-shaped rows are valid 1.4 rows, so one revision
+        // covers both); "1.2" when only <per-criterion> content is;
         // "1.0" otherwise. Consumers inspecting the attribute remain
         // correctly informed about which optional elements may appear.
-        w.writeAttribute("version",
-                v.perCriterion().isPresent() ? VERSION_1_2 : VERSION_1_0);
+        String version = v.postconditionStandings().isPresent() ? VERSION_1_4
+                : v.perCriterion().isPresent() ? VERSION_1_2
+                : VERSION_1_0;
+        w.writeAttribute("version", version);
         w.writeAttribute("timestamp", v.timestamp().toString());
         w.writeAttribute("generator", resolveGenerator());
         if (v.correlationId() != null && !v.correlationId().isEmpty()) {
@@ -93,9 +98,56 @@ public final class VerdictXmlWriter {
         writeEnvironment(w, v.environmentMetadata());
         writePostconditionFailures(w, v.postconditionFailures());
         writePerCriterion(w, v);
+        writePostconditionStandings(w, v);
         writeVerdictElement(w, v);
 
         w.writeEndElement();
+    }
+
+    /**
+     * The postcondition standings (schema revision 1.3): one
+     * {@code <criterion>} per criterion carrying standings — its
+     * declared optional-slack budget verbatim where declared — and one
+     * {@code <row>} per (input, check) with the passed/failed/skipped
+     * tally and observed fraction. Descriptive by construction; check
+     * identities are bounded per the schema's 256-character cap.
+     */
+    private void writePostconditionStandings(XMLStreamWriter w, ProbabilisticTestVerdict v)
+            throws XMLStreamException {
+        if (v.postconditionStandings().isEmpty()) {
+            return;
+        }
+        org.mavai.punit.api.spec.PostconditionStandings standings =
+                v.postconditionStandings().get();
+        w.writeStartElement("postcondition-standings");
+        for (var criterion : standings.criteria()) {
+            if (criterion.rows().isEmpty()) {
+                continue;
+            }
+            w.writeStartElement("criterion");
+            w.writeAttribute("name", bounded(criterion.criterionId()));
+            if (criterion.optionalSlack().isPresent()) {
+                w.writeAttribute("optional-slack", criterion.optionalSlack().get());
+            }
+            for (var row : criterion.rows()) {
+                w.writeStartElement("row");
+                w.writeAttribute("input-index", Integer.toString(row.inputIndex()));
+                w.writeAttribute("check", bounded(row.check()));
+                w.writeAttribute("optional", Boolean.toString(row.optional()));
+                w.writeAttribute("passed", Integer.toString(row.passed()));
+                w.writeAttribute("failed", Integer.toString(row.failed()));
+                w.writeAttribute("skipped", Integer.toString(row.skipped()));
+                w.writeAttribute("observed-fraction",
+                        String.format(java.util.Locale.ROOT, "%.6f", row.observedFraction()));
+                w.writeEndElement();
+            }
+            w.writeEndElement();
+        }
+        w.writeEndElement();
+    }
+
+    private static String bounded(String identity) {
+        return identity.length() <= 256 ? identity : identity.substring(0, 256);
     }
 
     private void writePerCriterion(XMLStreamWriter w, ProbabilisticTestVerdict v)
