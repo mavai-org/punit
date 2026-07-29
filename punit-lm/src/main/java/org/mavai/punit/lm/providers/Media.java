@@ -1,4 +1,4 @@
-package org.mavai.punit.lm;
+package org.mavai.punit.lm.providers;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -24,7 +24,7 @@ import org.mavai.punit.decl.spi.MessageParts;
  * {@link #contentBlocks}; this class deliberately knows no vendor's
  * wire format.
  */
-final class Media {
+public final class Media {
 
     /**
      * Which capability token gates which media kind — single-sourced.
@@ -32,7 +32,7 @@ final class Media {
      * model wire form, maps to no token, and is refused at the
      * language-model boundary.
      */
-    static final Map<MediaKind, String> CAPABILITY_FOR = Map.of(
+    public static final Map<MediaKind, String> CAPABILITY_FOR = Map.of(
             MediaKind.IMAGE, "image-input",
             MediaKind.DOCUMENT, "document-input",
             MediaKind.AUDIO, "audio-input");
@@ -46,7 +46,7 @@ final class Media {
     private Media() {}
 
     /** The ordered parts of an LLM input; a lone string or file is one part. */
-    static List<Object> messageParts(Object input) {
+    public static List<Object> messageParts(Object input) {
         if (input instanceof MessageParts message) {
             return message.parts();
         }
@@ -54,7 +54,7 @@ final class Media {
     }
 
     /** The distinct media kinds an input carries (empty for text-only). */
-    static Set<MediaKind> mediaKindsPresent(Object input) {
+    public static Set<MediaKind> mediaKindsPresent(Object input) {
         Set<MediaKind> kinds = new LinkedHashSet<>();
         for (Object part : messageParts(input)) {
             if (part instanceof FileInput file) {
@@ -64,12 +64,12 @@ final class Media {
         return kinds;
     }
 
-    static boolean hasMedia(Object input) {
+    public static boolean hasMedia(Object input) {
         return messageParts(input).stream().anyMatch(part -> part instanceof FileInput);
     }
 
     /** The media type from the file extension, with a per-kind fallback. */
-    static String mimeType(FileInput part) {
+    public static String mimeType(FileInput part) {
         String guess = URLConnection.guessContentTypeFromName(part.path().getFileName().toString());
         if (guess != null) {
             return guess;
@@ -78,17 +78,17 @@ final class Media {
     }
 
     /** The part's bytes as base64 ASCII — the raw form vendors embed. */
-    static String b64(FileInput part) {
+    public static String b64(FileInput part) {
         return Base64.getEncoder().encodeToString(part.data());
     }
 
     /** A {@code data:<mime>;base64,<…>} URI — the form OpenAI-style APIs embed. */
-    static String dataUri(FileInput part) {
+    public static String dataUri(FileInput part) {
         return "data:" + mimeType(part) + ";base64," + b64(part);
     }
 
     /** The file extension without its dot, for format-declaring wire fields. */
-    static String extension(FileInput part) {
+    public static String extension(FileInput part) {
         String name = part.path().getFileName().toString();
         int dot = name.lastIndexOf('.');
         return dot < 0 ? "" : name.substring(dot + 1);
@@ -99,7 +99,7 @@ final class Media {
      * a kind its protocol does not carry — the media capability gate
      * should have refused it.
      */
-    static IllegalStateException unexpectedKind(FileInput part, String protocol) {
+    public static IllegalStateException unexpectedKind(FileInput part, String protocol) {
         return new IllegalStateException(protocol + " block assembly reached an unsupported "
                 + "media kind '" + part.kind().key() + "' — the media capability gate failed "
                 + "to refuse it");
@@ -112,7 +112,7 @@ final class Media {
      * otherwise an ordered array of typed blocks, text and media
      * interleaved in the authored order.
      */
-    static JsonNode contentBlocks(Object input, Function<FileInput, ObjectNode> mediaBlock) {
+    public static JsonNode contentBlocks(Object input, Function<FileInput, ObjectNode> mediaBlock) {
         if (!hasMedia(input)) {
             return JsonNodeFactory.instance.textNode(String.valueOf(input));
         }

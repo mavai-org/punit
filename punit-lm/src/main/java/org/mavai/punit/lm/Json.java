@@ -12,7 +12,7 @@ import java.util.HexFormat;
  * The module's one JSON seam: tree conversion, request serialisation,
  * response parsing, and the response-schema identity fingerprint.
  */
-final class Json {
+public final class Json {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final ObjectMapper CANONICAL = new ObjectMapper()
@@ -21,7 +21,7 @@ final class Json {
     private Json() {}
 
     /** The value as a Jackson tree (a YAML-parsed mapping, typically). */
-    static JsonNode node(Object value) {
+    public static JsonNode node(Object value) {
         return MAPPER.valueToTree(value);
     }
 

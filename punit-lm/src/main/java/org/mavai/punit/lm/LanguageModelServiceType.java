@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import org.mavai.punit.decl.spi.ConfiguredService;
 import org.mavai.punit.decl.spi.ServiceType;
+import org.mavai.punit.lm.providers.LmProvider;
+import org.mavai.punit.lm.providers.Providers;
 
 /**
  * The built-in {@code language-model} service type — registered

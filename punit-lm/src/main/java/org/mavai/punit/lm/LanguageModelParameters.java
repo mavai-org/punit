@@ -11,7 +11,7 @@ import java.util.Set;
  * when unstated) because a silent, provider-chosen ceiling would make
  * the same file mean different populations.
  */
-record LanguageModelParameters(
+public record LanguageModelParameters(
         String systemPrompt,
         String provider,
         Set<String> capabilities,
@@ -24,15 +24,15 @@ record LanguageModelParameters(
         int maxTokens) {
 
     /** The output-token ceiling when {@code max-tokens:} is unstated — format-normative. */
-    static final int DEFAULT_MAX_TOKENS = 4096;
+    public static final int DEFAULT_MAX_TOKENS = 4096;
 
     /** The largest ceiling the non-streaming adapters carry without risking a timeout. */
-    static final int MAX_TOKENS_CEILING = 16000;
+    public static final int MAX_TOKENS_CEILING = 16000;
 
     /** Below this, adaptive thinking consumes the whole budget and the answer truncates. */
-    static final int THINKING_MIN_MAX_TOKENS = 1024;
+    public static final int THINKING_MIN_MAX_TOKENS = 1024;
 
-    boolean adaptiveThinking() {
+    public boolean adaptiveThinking() {
         return "adaptive".equals(thinking);
     }
 

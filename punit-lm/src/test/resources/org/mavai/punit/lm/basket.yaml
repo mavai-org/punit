@@ -1,0 +1,6 @@
+format: mavai-contract/1
+contract: stub-basket-service-answers
+service: basket-builder
+criteria:
+  - { threshold: 0.5, contains: "basket" }
+inputs: ["a dozen eggs, please"]

@@ -12,9 +12,9 @@ package org.mavai.punit.lm;
  * <p>Internal signalling only: the invocation boundary converts this
  * to an {@code Outcome} failure before it leaves the module.
  */
-class ServiceDeliveryException extends RuntimeException {
+public class ServiceDeliveryException extends RuntimeException {
 
-    ServiceDeliveryException(String message) {
+    public ServiceDeliveryException(String message) {
         super(message);
     }
 }

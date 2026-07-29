@@ -1,4 +1,4 @@
-package org.mavai.punit.lm;
+package org.mavai.punit.lm.providers;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import org.mavai.punit.decl.spi.MediaKind;
+import org.mavai.punit.lm.LanguageModelParameters;
 
 /**
  * One vendor adapter: protocol shape, defaults, and capability
@@ -45,7 +46,7 @@ import org.mavai.punit.decl.spi.MediaKind;
  * @param extract pulls the response text out of the vendor's reply
  *        shape; a delivered-but-odd shape throws {@link ServiceDeliveryException}
  */
-record LmProvider(
+public record LmProvider(
         String name,
         String defaultEndpoint,
         String credentialFallbackVariable,
@@ -60,7 +61,19 @@ record LmProvider(
         Function<String, Map<String, String>> headers,
         Function<JsonNode, String> extract) {
 
-    interface BodyBuilder {
+    /**
+     * The provider-neutral capability vocabulary an author may name in
+     * a service's {@code capabilities:} allowance. The first three each
+     * gate one configuration key; the media tokens gate an input
+     * modality. Lives on the provider model (not the registry) so a
+     * gateway adapter can declare the whole vocabulary without a
+     * class-initialisation cycle.
+     */
+    public static final java.util.List<String> CAPABILITY_NAMES = java.util.List.of(
+            "response-schema", "prompt-caching", "thinking",
+            "image-input", "document-input", "audio-input");
+
+    public interface BodyBuilder {
         ObjectNode build(LanguageModelParameters parameters, String model, Object input);
     }
 }

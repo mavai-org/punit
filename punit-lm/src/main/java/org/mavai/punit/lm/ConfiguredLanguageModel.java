@@ -12,6 +12,9 @@ import org.mavai.outcome.Outcome;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.spi.ConfiguredService;
 import org.mavai.punit.decl.spi.MediaKind;
+import org.mavai.punit.lm.providers.LmProvider;
+import org.mavai.punit.lm.providers.Media;
+import org.mavai.punit.lm.providers.Providers;
 
 /**
  * One resolved language-model service: the per-sample invocation —

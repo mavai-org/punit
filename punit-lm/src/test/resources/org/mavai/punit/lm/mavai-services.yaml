@@ -1,0 +1,8 @@
+format: mavai-services/1
+services:
+  basket-builder:
+    type: language-model
+    configuration:
+      system-prompt: "You translate shopping instructions into a JSON basket."
+      model: stub-model
+      temperature: 0.2

@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.mavai.punit.decl.ContractConfigurationException;
+import org.mavai.punit.lm.providers.LmProvider;
+import org.mavai.punit.lm.providers.Providers;
 
 /**
  * Validation of one resolved {@code language-model} configuration
@@ -84,14 +86,14 @@ final class ParameterValidation {
         if (!(raw instanceof List<?> list)
                 || list.stream().anyMatch(item -> !(item instanceof String))) {
             throw fail(serviceName, "`capabilities:` must be a list of capability names (any "
-                    + "of: " + String.join(", ", Providers.CAPABILITY_NAMES) + ")");
+                    + "of: " + String.join(", ", LmProvider.CAPABILITY_NAMES) + ")");
         }
         Set<String> declared = new LinkedHashSet<>();
         for (Object item : list) {
             String capability = (String) item;
-            if (!Providers.CAPABILITY_NAMES.contains(capability)) {
+            if (!LmProvider.CAPABILITY_NAMES.contains(capability)) {
                 throw fail(serviceName, "unknown capability '" + capability + "' — supported "
-                        + "names: " + String.join(", ", Providers.CAPABILITY_NAMES));
+                        + "names: " + String.join(", ", LmProvider.CAPABILITY_NAMES));
             }
             declared.add(capability);
         }
