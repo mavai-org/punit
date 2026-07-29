@@ -1,0 +1,11 @@
+format: mavai-contract/1
+contract: partial-credit-double-opt-in-binds
+service: greeting-service
+criteria:
+  - name: greeting-quality
+    threshold: 0.8
+    postconditions:
+      - contains: "hello"
+      - contains: "goodbye"
+        optional: true
+inputs: ["Alice", "Bob"]

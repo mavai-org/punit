@@ -29,7 +29,14 @@ public record CriterionDeclaration(
         String thresholdOrigin,
         String contractRef,
         Double tolerate,
-        Double confidence) {
+        Double confidence,
+        org.mavai.punit.api.criterion.OptionalSlack optionalSlack) {
+
+    /** A criterion with no optional-check failure budget declared. */
+    public CriterionDeclaration(String name, List<FormDeclaration> forms, Double threshold,
+            String thresholdOrigin, String contractRef, Double tolerate, Double confidence) {
+        this(name, forms, threshold, thresholdOrigin, contractRef, tolerate, confidence, null);
+    }
 
     public CriterionDeclaration {
         forms = List.copyOf(forms);

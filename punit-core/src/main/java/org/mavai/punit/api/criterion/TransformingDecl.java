@@ -40,12 +40,13 @@ public final class TransformingDecl<O, T> implements Decl<O> {
     private final Function<O, Outcome<T>> transform;
     private final List<NamedPostcondition<T>> postconditions;
     private final Optional<String> name;
+    private final Optional<OptionalSlack> optionalSlack;
 
     TransformingDecl(
             CriterionPosture posture,
             Function<O, Outcome<T>> transform,
             List<NamedPostcondition<T>> postconditions) {
-        this(posture, transform, postconditions, Optional.empty());
+        this(posture, transform, postconditions, Optional.empty(), Optional.empty());
     }
 
     TransformingDecl(
@@ -53,10 +54,20 @@ public final class TransformingDecl<O, T> implements Decl<O> {
             Function<O, Outcome<T>> transform,
             List<NamedPostcondition<T>> postconditions,
             Optional<String> name) {
+        this(posture, transform, postconditions, name, Optional.empty());
+    }
+
+    TransformingDecl(
+            CriterionPosture posture,
+            Function<O, Outcome<T>> transform,
+            List<NamedPostcondition<T>> postconditions,
+            Optional<String> name,
+            Optional<OptionalSlack> optionalSlack) {
         this.posture = Objects.requireNonNull(posture, "posture");
         this.transform = Objects.requireNonNull(transform, "transform");
         this.postconditions = List.copyOf(postconditions);
         this.name = Objects.requireNonNull(name, "name");
+        this.optionalSlack = Objects.requireNonNull(optionalSlack, "optionalSlack");
     }
 
     @Override
@@ -84,7 +95,7 @@ public final class TransformingDecl<O, T> implements Decl<O> {
                     ".name(...) already supplied as '" + this.name.get()
                             + "'; cannot reassign to '" + name + "'");
         }
-        return new TransformingDecl<>(posture, transform, postconditions, Optional.of(name));
+        return new TransformingDecl<>(posture, transform, postconditions, Optional.of(name), optionalSlack);
     }
 
     /** The posture inherited from the parent {@link CriterionDecl}. */
@@ -95,6 +106,51 @@ public final class TransformingDecl<O, T> implements Decl<O> {
     /** Named post-transform postconditions in declaration order. May be empty. */
     public List<NamedPostcondition<T>> postconditions() {
         return postconditions;
+    }
+
+    /** The declared optional-check failure budget, when one is declared. */
+    public Optional<OptionalSlack> optionalSlack() {
+        return optionalSlack;
+    }
+
+    /**
+     * Mark the most recently declared postcondition optional —
+     * relaxable within this criterion's optional-slack budget; see
+     * {@link CriterionDecl#optional()} for the double-opt-in rule.
+     *
+     * @throws IllegalStateException when no postcondition has been
+     *     declared yet — the mark follows the check it relaxes
+     */
+    public TransformingDecl<O, T> optional() {
+        if (postconditions.isEmpty()) {
+            throw new IllegalStateException(
+                    ".optional() marks the postcondition declared before it — declare a "
+                            + ".where(...) / .satisfies(...) check first");
+        }
+        List<NamedPostcondition<T>> next = new ArrayList<>(postconditions);
+        next.set(next.size() - 1, next.get(next.size() - 1).asOptional());
+        return new TransformingDecl<>(posture, transform, next, name, optionalSlack);
+    }
+
+    /** Declare the optional-check failure budget as an absolute count. */
+    public TransformingDecl<O, T> optionalSlack(int count) {
+        return new TransformingDecl<>(posture, transform, postconditions, name,
+                Optional.of(OptionalSlack.count(count)));
+    }
+
+    /**
+     * Declare the optional-check failure budget as an explicit
+     * percentage ({@code "20%"}), resolved by floor.
+     */
+    public TransformingDecl<O, T> optionalSlack(String percentage) {
+        return new TransformingDecl<>(posture, transform, postconditions, name,
+                Optional.of(OptionalSlack.percent(percentage)));
+    }
+
+    /** Declare the optional-check failure budget from a constructed value. */
+    public TransformingDecl<O, T> optionalSlack(OptionalSlack slack) {
+        Objects.requireNonNull(slack, "slack");
+        return new TransformingDecl<>(posture, transform, postconditions, name, Optional.of(slack));
     }
 
     /**
@@ -152,15 +208,16 @@ public final class TransformingDecl<O, T> implements Decl<O> {
         }
         List<Postcondition<T>> clauses = new ArrayList<>(postconditions.size());
         for (NamedPostcondition<T> p : postconditions) {
-            clauses.add(new Postcondition.Leaf<>(p.name(), p.check()));
+            clauses.add(new Postcondition.Leaf<>(p.name(), p.check(), p.required()));
         }
-        return new TransformingCriterion<>(id, transform, clauses).withPosture(posture);
+        return new TransformingCriterion<>(id, transform, clauses, optionalSlack)
+                .withPosture(posture);
     }
 
     private TransformingDecl<O, T> appendPostcondition(String postconditionName, PostconditionCheck<T> check) {
         List<NamedPostcondition<T>> next = new ArrayList<>(postconditions.size() + 1);
         next.addAll(postconditions);
         next.add(new NamedPostcondition<>(postconditionName, check));
-        return new TransformingDecl<>(posture, transform, next, name);
+        return new TransformingDecl<>(posture, transform, next, name, optionalSlack);
     }
 }

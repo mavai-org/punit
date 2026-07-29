@@ -19,13 +19,19 @@ package org.mavai.punit.decl.internal.model;
  * @param path the selection expression, or {@code null} when the form
  *     judges its subject whole
  */
-public record FormDeclaration(PostconditionForm form, Object argument, String view, String path) {
+public record FormDeclaration(
+        PostconditionForm form, Object argument, String view, String path, boolean optional) {
+
+    /** A required form — the default; every check is non-negotiable until marked. */
+    public FormDeclaration(PostconditionForm form, Object argument, String view, String path) {
+        this(form, argument, view, path, false);
+    }
 
     /** The reserved name of the untransformed response. */
     public static final String RAW_VIEW = "raw";
 
     /** This form with its defaulted subject resolved to the given view. */
     public FormDeclaration withView(String resolved) {
-        return new FormDeclaration(form, argument, resolved, path);
+        return new FormDeclaration(form, argument, resolved, path, optional);
     }
 }

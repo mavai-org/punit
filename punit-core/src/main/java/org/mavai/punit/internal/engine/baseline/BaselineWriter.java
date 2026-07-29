@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -156,7 +157,49 @@ public final class BaselineWriter {
                     latency.totalSamples())
                 .ifPresent(block -> root.put("latency", block));
         }
+        // The postcondition standings — the descriptive per-(input,
+        // check) tally the measure run states, carried on the baseline
+        // so drift in per-check health is inspectable beside the rates.
+        // Descriptive only: counts and the observed fraction, the
+        // per-check optional flag, and the criterion's declared
+        // optional-slack budget verbatim. Positioned before the
+        // appended contentFingerprint, so it falls under the integrity
+        // hash.
+        record.postconditionStandings()
+                .filter(standings -> !standings.isEmpty())
+                .ifPresent(standings -> root.put("postconditionStandings",
+                        standingsBlock(standings)));
         return root;
+    }
+
+    private List<Map<String, Object>> standingsBlock(
+            org.mavai.punit.api.spec.PostconditionStandings standings) {
+        List<Map<String, Object>> criteria = new java.util.ArrayList<>();
+        for (var criterion : standings.criteria()) {
+            if (criterion.rows().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> block = new LinkedHashMap<>();
+            block.put("criterion", criterion.criterionId());
+            criterion.optionalSlack().ifPresent(slack -> block.put("optionalSlack", slack));
+            List<Map<String, Object>> rows = new java.util.ArrayList<>();
+            for (var row : criterion.rows()) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("inputIndex", row.inputIndex());
+                entry.put("check", row.check());
+                entry.put("optional", row.optional());
+                entry.put("passed", row.passed());
+                entry.put("failed", row.failed());
+                entry.put("skipped", row.skipped());
+                entry.put("observedFraction",
+                        Double.parseDouble(String.format(
+                                java.util.Locale.ROOT, "%.6f", row.observedFraction())));
+                rows.add(entry);
+            }
+            block.put("rows", rows);
+            criteria.add(block);
+        }
+        return criteria;
     }
 
     private Map<String, Object> serialiseStatisticsEntry(

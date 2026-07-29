@@ -29,29 +29,40 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
     private final String id;
     private final Function<O, Outcome<D>> transform;
     private final List<Postcondition<D>> postconditions;
+    private final Optional<OptionalSlack> optionalSlack;
     private final CriterionPosture posture;
 
     TransformingCriterion(
             String id,
             Function<O, Outcome<D>> transform,
             List<Postcondition<D>> postconditions) {
-        this(id, transform, postconditions, CriterionPosture.implicit());
+        this(id, transform, postconditions, Optional.empty(), CriterionPosture.implicit());
     }
 
     TransformingCriterion(
             String id,
             Function<O, Outcome<D>> transform,
             List<Postcondition<D>> postconditions,
+            Optional<OptionalSlack> optionalSlack) {
+        this(id, transform, postconditions, optionalSlack, CriterionPosture.implicit());
+    }
+
+    TransformingCriterion(
+            String id,
+            Function<O, Outcome<D>> transform,
+            List<Postcondition<D>> postconditions,
+            Optional<OptionalSlack> optionalSlack,
             CriterionPosture posture) {
         this.id = Objects.requireNonNull(id, "id");
         this.transform = Objects.requireNonNull(transform, "transform");
         this.postconditions = List.copyOf(
                 Objects.requireNonNull(postconditions, "postconditions"));
+        this.optionalSlack = Objects.requireNonNull(optionalSlack, "optionalSlack");
         this.posture = Objects.requireNonNull(posture, "posture");
     }
 
     TransformingCriterion<O, D> withPosture(CriterionPosture replacement) {
-        return new TransformingCriterion<>(id, transform, postconditions, replacement);
+        return new TransformingCriterion<>(id, transform, postconditions, optionalSlack, replacement);
     }
 
     @Override
@@ -62,6 +73,11 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
     @Override
     public CriterionPosture posture() {
         return posture;
+    }
+
+    @Override
+    public Optional<OptionalSlack> optionalSlack() {
+        return optionalSlack;
     }
 
     @Override
@@ -79,7 +95,8 @@ final class TransformingCriterion<O, D> implements Criterion<O> {
         }
         return switch (derived) {
             case Outcome.Ok<D> ok ->
-                    DirectCriterion.evaluateChain(id, postconditions, ok.value(), Optional.empty());
+                    DirectCriterion.evaluateChain(
+                            id, postconditions, ok.value(), Optional.empty(), optionalSlack);
             case Outcome.Fail<D> f ->
                     CriterionSampleResult.failedTransform(id, f);
         };

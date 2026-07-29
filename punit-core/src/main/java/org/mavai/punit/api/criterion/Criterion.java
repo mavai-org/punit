@@ -73,6 +73,15 @@ public interface Criterion<O> {
     CriterionSampleResult evaluate(O value);
 
     /**
+     * The criterion's declared optional-check failure budget, when one
+     * is declared — stated (never resolved) into the standings every
+     * run surfaces, verbatim as the author spelled it.
+     */
+    default java.util.Optional<OptionalSlack> optionalSlack() {
+        return java.util.Optional.empty();
+    }
+
+    /**
      * Evaluate this criterion against one sample's produced value
      * with an optional known-expected value of the same type
      * supplied alongside.

@@ -44,7 +44,8 @@ public record ProbabilisticTestVerdict(
         PUnitVerdict punitVerdict,
         String verdictReason,
         Map<String, FailureCount> postconditionFailures,
-        Optional<PerCriterionStructure> perCriterion
+        Optional<PerCriterionStructure> perCriterion,
+        Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings
 ) {
 
     public ProbabilisticTestVerdict {
@@ -55,6 +56,38 @@ public record ProbabilisticTestVerdict(
                 ? Collections.unmodifiableMap(new LinkedHashMap<>(postconditionFailures))
                 : Map.of();
         perCriterion = perCriterion != null ? perCriterion : Optional.empty();
+        postconditionStandings = postconditionStandings != null
+                ? postconditionStandings
+                : Optional.empty();
+    }
+
+    /**
+     * Backward-compatible constructor for the 18-component shape that
+     * predates the postcondition standings; defaults them absent.
+     */
+    public ProbabilisticTestVerdict(
+            String correlationId,
+            Instant timestamp,
+            TestIdentity identity,
+            ExecutionSummary execution,
+            Optional<FunctionalDimension> functional,
+            Optional<LatencyDimension> latency,
+            StatisticalAnalysis statistics,
+            CovariateStatus covariates,
+            CostSummary cost,
+            Optional<PacingSummary> pacing,
+            Optional<SpecProvenance> provenance,
+            Termination termination,
+            Map<String, String> environmentMetadata,
+            boolean junitPassed,
+            PUnitVerdict punitVerdict,
+            String verdictReason,
+            Map<String, FailureCount> postconditionFailures,
+            Optional<PerCriterionStructure> perCriterion) {
+        this(correlationId, timestamp, identity, execution, functional, latency,
+                statistics, covariates, cost, pacing, provenance, termination,
+                environmentMetadata, junitPassed, punitVerdict, verdictReason,
+                postconditionFailures, perCriterion, Optional.empty());
     }
 
     /**
@@ -84,7 +117,7 @@ public record ProbabilisticTestVerdict(
         this(correlationId, timestamp, identity, execution, functional, latency,
                 statistics, covariates, cost, pacing, provenance, termination,
                 environmentMetadata, junitPassed, punitVerdict, verdictReason,
-                postconditionFailures, Optional.empty());
+                postconditionFailures, Optional.empty(), Optional.empty());
     }
 
     /**
@@ -112,7 +145,7 @@ public record ProbabilisticTestVerdict(
         this(correlationId, timestamp, identity, execution, functional, latency,
                 statistics, covariates, cost, pacing, provenance, termination,
                 environmentMetadata, junitPassed, punitVerdict, verdictReason,
-                Map.of(), Optional.empty());
+                Map.of(), Optional.empty(), Optional.empty());
     }
 
     // ── TestIdentity ──────────────────────────────────────────────────────

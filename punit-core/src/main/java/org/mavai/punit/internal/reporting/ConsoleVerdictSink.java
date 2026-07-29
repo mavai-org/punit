@@ -79,6 +79,14 @@ public final class ConsoleVerdictSink implements VerdictSink {
             sb.append(PUnitReporter.labelValueLn("Termination:", term.reason().getDescription()));
         }
 
+        // The postcondition standings — descriptive per-(input, check)
+        // tallies, stated by the run; rendered verbatim, never derived.
+        verdict.postconditionStandings().ifPresent(standings -> {
+            for (String line : StandingsTextRenderer.render(standings)) {
+                sb.append(line).append('\n');
+            }
+        });
+
         sb.append(PUnitReporter.labelValue("Elapsed:", exec.elapsedMs() + "ms"));
 
         out.println(reporter.headerDivider(title));

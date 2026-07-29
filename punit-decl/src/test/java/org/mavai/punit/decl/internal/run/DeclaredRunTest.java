@@ -51,6 +51,22 @@ class DeclaredRunTest {
         }
 
         @Test
+        @DisplayName("a failing optional check within the slack budget passes the trial")
+        void partialCreditForgivesWithinBudget() {
+            assertThatCode(() ->
+                    PUnit.declared("partial-credit-forgives-within-budget").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("an optional mark alone weakens nothing — the double opt-in binds")
+        void partialCreditDoubleOptInBinds() {
+            Declared run = PUnit.declared("partial-credit-double-opt-in-binds").samples(20);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(AssertionFailedError.class);
+        }
+
+        @Test
         @DisplayName("a contract spelt with the default subject view runs identically")
         void defaultedViewRunsEndToEnd() {
             // The basket contract with every path check's `in: basket`

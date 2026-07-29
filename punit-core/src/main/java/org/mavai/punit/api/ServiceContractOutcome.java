@@ -108,6 +108,30 @@ public record ServiceContractOutcome<I, O>(
         if (result instanceof Outcome.Fail<O> f) {
             return f;
         }
+        // When per-criterion sample detail is present, the criteria's own
+        // acceptance predicates decide the trial — a criterion may accept
+        // a sample whose optional checks failed within its declared
+        // optional-slack budget (partial credit), so a flat any-failed
+        // walk would overrule the criterion's judgement. The flat walk
+        // remains the fallback for outcomes constructed without
+        // per-criterion detail (the back-compat constructor).
+        if (!criterionSampleResults.isEmpty()) {
+            for (org.mavai.punit.api.criterion.CriterionSampleResult c : criterionSampleResults) {
+                if (c.outcome() == org.mavai.punit.api.criterion.CriterionSampleOutcome.FAIL) {
+                    if (c.reason().isPresent()) {
+                        return Outcome.fail(c.reason().get().failure());
+                    }
+                    for (PostconditionResult r : c.postconditionResults()) {
+                        if (r.failed()) {
+                            return Outcome.fail(r.description(),
+                                    r.failureReason().orElse("postcondition failed"));
+                        }
+                    }
+                    return Outcome.fail(c.criterionId(), "criterion failed the sample");
+                }
+            }
+            return result;
+        }
         for (PostconditionResult r : postconditionResults) {
             if (r.failed()) {
                 return Outcome.fail(r.description(),

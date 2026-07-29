@@ -200,6 +200,11 @@ public final class VerdictAdapter {
         // evaluations leave the field absent.
         b.perCriterion(translatePerCriterion(result.perCriterionEvaluation()));
 
+        // The postcondition standings — descriptive per-(input, check)
+        // tallies, stated first-class in the record (and the verdict
+        // XML's standings element from schema revision 1.3).
+        result.postconditionStandings().ifPresent(b::postconditionStandings);
+
         return b.build();
     }
 

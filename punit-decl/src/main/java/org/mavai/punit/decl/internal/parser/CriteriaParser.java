@@ -35,6 +35,7 @@ final class CriteriaParser {
                 "contract-ref",
                 "tolerate",
                 "confidence",
+                "optional-slack",
                 "postconditions"));
         // Every form has a single-form spelling directly on the entry.
         for (PostconditionForm form : PostconditionForm.values()) {
@@ -111,6 +112,32 @@ final class CriteriaParser {
             origin = name;
         }
 
+        org.mavai.punit.api.criterion.OptionalSlack optionalSlack = null;
+        Object slackValue = data.get("optional-slack");
+        if (slackValue != null) {
+            // The %-suffix is the count/fraction disambiguator (partial
+            // credit, 2026-07-27): 2 is always a count, "2%" always a
+            // fraction of the applicable optional checks (resolved by
+            // floor at evaluation); a bare fraction, a negative value,
+            // or a non-integer count is refused, never guessed at.
+            if (slackValue instanceof Integer count && !(slackValue instanceof Boolean)
+                    && count >= 0) {
+                optionalSlack = org.mavai.punit.api.criterion.OptionalSlack.count(count);
+            } else if (slackValue instanceof String spelling) {
+                try {
+                    optionalSlack = org.mavai.punit.api.criterion.OptionalSlack.percent(spelling);
+                } catch (IllegalArgumentException malformed) {
+                    optionalSlack = null;
+                }
+            }
+            if (optionalSlack == null) {
+                throw fail(where + ": `optional-slack:` takes a non-negative whole count of "
+                        + "optional checks that may fail, or an explicit percentage like `20%` "
+                        + "— got " + Yaml.display(slackValue) + " (a bare fraction is never "
+                        + "guessed at)");
+            }
+        }
+
         String contractRef = null;
         Object contractRefValue = data.get("contract-ref");
         if (contractRefValue != null) {
@@ -150,6 +177,7 @@ final class CriteriaParser {
             name = declared;
         }
 
-        return new CriterionDeclaration(name, forms, threshold, origin, contractRef, tolerate, confidence);
+        return new CriterionDeclaration(
+                name, forms, threshold, origin, contractRef, tolerate, confidence, optionalSlack);
     }
 }

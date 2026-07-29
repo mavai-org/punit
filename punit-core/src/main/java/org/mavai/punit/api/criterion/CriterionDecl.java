@@ -64,6 +64,7 @@ public final class CriterionDecl<O> implements Decl<O> {
     private final CriterionPosture posture;
     private final List<NamedPostcondition<O>> postconditions;
     private final Optional<String> name;
+    private final Optional<OptionalSlack> optionalSlack;
 
     CriterionDecl(CriterionPosture posture, List<NamedPostcondition<O>> postconditions) {
         this(posture, postconditions, Optional.empty());
@@ -71,9 +72,15 @@ public final class CriterionDecl<O> implements Decl<O> {
 
     CriterionDecl(CriterionPosture posture, List<NamedPostcondition<O>> postconditions,
             Optional<String> name) {
+        this(posture, postconditions, name, Optional.empty());
+    }
+
+    CriterionDecl(CriterionPosture posture, List<NamedPostcondition<O>> postconditions,
+            Optional<String> name, Optional<OptionalSlack> optionalSlack) {
         this.posture = Objects.requireNonNull(posture, "posture");
         this.postconditions = List.copyOf(postconditions);
         this.name = Objects.requireNonNull(name, "name");
+        this.optionalSlack = Objects.requireNonNull(optionalSlack, "optionalSlack");
     }
 
     @Override
@@ -102,7 +109,7 @@ public final class CriterionDecl<O> implements Decl<O> {
                     ".name(...) already supplied as '" + this.name.get()
                             + "'; cannot reassign to '" + name + "'");
         }
-        return new CriterionDecl<>(posture, postconditions, Optional.of(name));
+        return new CriterionDecl<>(posture, postconditions, Optional.of(name), optionalSlack);
     }
 
     /** The criterion's posture — the verdict-producing commitment. */
@@ -113,6 +120,63 @@ public final class CriterionDecl<O> implements Decl<O> {
     /** Named postconditions in declaration order. May be empty. */
     public List<NamedPostcondition<O>> postconditions() {
         return postconditions;
+    }
+
+    /** The declared optional-check failure budget, when one is declared. */
+    public Optional<OptionalSlack> optionalSlack() {
+        return optionalSlack;
+    }
+
+    /**
+     * Mark the most recently declared postcondition optional:
+     * relaxable within this criterion's {@link #optionalSlack(int)
+     * optional-slack} budget. Partial credit is a double opt-in — the
+     * mark weakens nothing until the criterion also declares a budget
+     * (absent budget = zero, the check must still pass). The recorded
+     * per-check outcome stays true either way: standings see reality,
+     * not the softened verdict.
+     *
+     * @throws IllegalStateException when no postcondition has been
+     *     declared yet — the mark follows the check it relaxes
+     */
+    public CriterionDecl<O> optional() {
+        if (postconditions.isEmpty()) {
+            throw new IllegalStateException(
+                    ".optional() marks the postcondition declared before it — declare a "
+                            + ".where(...) / .satisfies(...) check first");
+        }
+        List<NamedPostcondition<O>> next = new ArrayList<>(postconditions);
+        next.set(next.size() - 1, next.get(next.size() - 1).asOptional());
+        return new CriterionDecl<>(posture, next, name, optionalSlack);
+    }
+
+    /**
+     * Declare the optional-check failure budget: at most {@code count}
+     * of this criterion's optional checks may fail per trial. A budget
+     * exceeding the applicable optional count is legal and means "all
+     * may fail"; a budget with no optional checks is legal and inert.
+     */
+    public CriterionDecl<O> optionalSlack(int count) {
+        return new CriterionDecl<>(posture, postconditions, name,
+                Optional.of(OptionalSlack.count(count)));
+    }
+
+    /**
+     * Declare the optional-check failure budget as an explicit
+     * percentage of the trial's applicable optional checks
+     * ({@code "20%"}), resolved by floor — the conservative reading.
+     * The {@code %} suffix is the disambiguator; a bare fraction is
+     * refused, never guessed at.
+     */
+    public CriterionDecl<O> optionalSlack(String percentage) {
+        return new CriterionDecl<>(posture, postconditions, name,
+                Optional.of(OptionalSlack.percent(percentage)));
+    }
+
+    /** Declare the optional-check failure budget from a constructed value. */
+    public CriterionDecl<O> optionalSlack(OptionalSlack slack) {
+        Objects.requireNonNull(slack, "slack");
+        return new CriterionDecl<>(posture, postconditions, name, Optional.of(slack));
     }
 
     /**
@@ -167,7 +231,7 @@ public final class CriterionDecl<O> implements Decl<O> {
      * alongside the verdict.
      */
     public CriterionDecl<O> contractRef(String ref) {
-        return new CriterionDecl<>(posture.withContractRef(ref), postconditions, name);
+        return new CriterionDecl<>(posture.withContractRef(ref), postconditions, name, optionalSlack);
     }
 
     /**
@@ -189,7 +253,7 @@ public final class CriterionDecl<O> implements Decl<O> {
     public CriterionDecl<O> contractRef(
             org.mavai.punit.api.ThresholdOrigin origin, String ref) {
         return new CriterionDecl<>(
-                posture.withContractRef(origin, ref), postconditions, name);
+                posture.withContractRef(origin, ref), postconditions, name, optionalSlack);
     }
 
     /**
@@ -199,7 +263,8 @@ public final class CriterionDecl<O> implements Decl<O> {
      * zero-failures commitment.
      */
     public CriterionDecl<O> atConfidence(double confidence) {
-        return new CriterionDecl<>(posture.withConfidenceFloor(confidence), postconditions, name);
+        return new CriterionDecl<>(
+                posture.withConfidenceFloor(confidence), postconditions, name, optionalSlack);
     }
 
     /**
@@ -209,7 +274,7 @@ public final class CriterionDecl<O> implements Decl<O> {
      * must be paired with {@link #atPower(double)}.
      */
     public CriterionDecl<O> detectingMde(double mde) {
-        return new CriterionDecl<>(posture.withMde(mde), postconditions, name);
+        return new CriterionDecl<>(posture.withMde(mde), postconditions, name, optionalSlack);
     }
 
     /**
@@ -219,7 +284,7 @@ public final class CriterionDecl<O> implements Decl<O> {
      * {@link #tolerating(double)}.
      */
     public CriterionDecl<O> atPower(double power) {
-        return new CriterionDecl<>(posture.withPower(power), postconditions, name);
+        return new CriterionDecl<>(posture.withPower(power), postconditions, name, optionalSlack);
     }
 
     /**
@@ -235,7 +300,7 @@ public final class CriterionDecl<O> implements Decl<O> {
      * override the framework defaults (0.80 and 0.95).
      */
     public CriterionDecl<O> tolerating(double rate) {
-        return new CriterionDecl<>(posture.withToleratedRate(rate), postconditions, name);
+        return new CriterionDecl<>(posture.withToleratedRate(rate), postconditions, name, optionalSlack);
     }
 
     /**
@@ -352,15 +417,15 @@ public final class CriterionDecl<O> implements Decl<O> {
         }
         List<Postcondition<O>> clauses = new ArrayList<>(postconditions.size());
         for (NamedPostcondition<O> p : postconditions) {
-            clauses.add(new Postcondition.Leaf<>(p.name(), p.check()));
+            clauses.add(new Postcondition.Leaf<>(p.name(), p.check(), p.required()));
         }
-        return new DirectCriterion<>(id, clauses).withPosture(posture);
+        return new DirectCriterion<>(id, clauses, optionalSlack).withPosture(posture);
     }
 
     private CriterionDecl<O> appendPostcondition(String postconditionName, PostconditionCheck<O> check) {
         List<NamedPostcondition<O>> next = new ArrayList<>(postconditions.size() + 1);
         next.addAll(postconditions);
         next.add(new NamedPostcondition<>(postconditionName, check));
-        return new CriterionDecl<>(posture, next, name);
+        return new CriterionDecl<>(posture, next, name, optionalSlack);
     }
 }

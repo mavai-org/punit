@@ -1,0 +1,12 @@
+format: mavai-contract/1
+contract: partial-credit-forgives-within-budget
+service: greeting-service
+criteria:
+  - name: greeting-quality
+    threshold: 0.8
+    optional-slack: 1
+    postconditions:
+      - contains: "hello"
+      - contains: "goodbye"
+        optional: true
+inputs: ["Alice", "Bob"]

@@ -152,7 +152,8 @@ public final class ContractParser {
             }
             resolved.add(new CriterionDeclaration(
                     criterion.name(), forms, criterion.threshold(), criterion.thresholdOrigin(),
-                    criterion.contractRef(), criterion.tolerate(), criterion.confidence()));
+                    criterion.contractRef(), criterion.tolerate(), criterion.confidence(),
+                    criterion.optionalSlack()));
         }
         return resolved;
     }

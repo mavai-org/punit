@@ -89,6 +89,10 @@ public final class VerdictXmlReader {
                 optionalElement(root, "per-criterion")
                         .flatMap(this::readPerCriterionStructure);
 
+        Optional<org.mavai.punit.api.spec.PostconditionStandings> standings =
+                optionalElement(root, "postcondition-standings")
+                        .map(this::readPostconditionStandings);
+
         return new ProbabilisticTestVerdict(
                 correlationId, timestamp, identity, execution,
                 functional, latency, statistics, covariates,
@@ -99,8 +103,45 @@ public final class VerdictXmlReader {
                 environment,
                 junitPassed, punitVerdict, verdictReason,
                 Map.of(),
-                perCriterion
+                perCriterion,
+                standings
         );
+    }
+
+    /**
+     * The postcondition standings element (schema revision 1.3; 1.4's
+     * structured-row attributes are read permissively and ignored —
+     * the counts and identities are the binding content this reader
+     * consumes).
+     */
+    private org.mavai.punit.api.spec.PostconditionStandings readPostconditionStandings(
+            Element standingsEl) {
+        java.util.List<org.mavai.punit.api.spec.PostconditionStandings.CriterionStandings>
+                criteria = new java.util.ArrayList<>();
+        NodeList criterionNodes = standingsEl.getElementsByTagNameNS(
+                VerdictXmlWriter.NAMESPACE, "criterion");
+        for (int i = 0; i < criterionNodes.getLength(); i++) {
+            Element criterionEl = (Element) criterionNodes.item(i);
+            java.util.List<org.mavai.punit.api.spec.PostconditionStandings.Row> rows =
+                    new java.util.ArrayList<>();
+            NodeList rowNodes = criterionEl.getElementsByTagNameNS(
+                    VerdictXmlWriter.NAMESPACE, "row");
+            for (int j = 0; j < rowNodes.getLength(); j++) {
+                Element rowEl = (Element) rowNodes.item(j);
+                rows.add(new org.mavai.punit.api.spec.PostconditionStandings.Row(
+                        Integer.parseInt(rowEl.getAttribute("input-index")),
+                        rowEl.getAttribute("check"),
+                        Boolean.parseBoolean(rowEl.getAttribute("optional")),
+                        Integer.parseInt(rowEl.getAttribute("passed")),
+                        Integer.parseInt(rowEl.getAttribute("failed")),
+                        Integer.parseInt(rowEl.getAttribute("skipped"))));
+            }
+            criteria.add(new org.mavai.punit.api.spec.PostconditionStandings.CriterionStandings(
+                    criterionEl.getAttribute("name"),
+                    optionalAttribute(criterionEl, "optional-slack"),
+                    rows));
+        }
+        return new org.mavai.punit.api.spec.PostconditionStandings(criteria);
     }
 
     private Optional<org.mavai.punit.verdict.PerCriterionStructure> readPerCriterionStructure(

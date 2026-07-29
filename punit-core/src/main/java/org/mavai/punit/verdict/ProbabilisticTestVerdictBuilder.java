@@ -125,6 +125,8 @@ public class ProbabilisticTestVerdictBuilder {
     // ProbabilisticTestResult.perCriterionEvaluation() on every normal
     // run; empty for apply-level-failure paths.
     private Optional<PerCriterionStructure> perCriterion = Optional.empty();
+    private Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings =
+            Optional.empty();
 
     // ── Builder methods ───────────────────────────────────────────────────
 
@@ -352,6 +354,18 @@ public class ProbabilisticTestVerdictBuilder {
      * {@code ProbabilisticTestResult.perCriterionEvaluation()}.
      * {@code null} leaves the field empty.
      */
+    /**
+     * The postcondition standings the run surfaces — descriptive per
+     * {@code (input, check)} tallies, stated first-class in the
+     * verdict record.
+     */
+    public ProbabilisticTestVerdictBuilder postconditionStandings(
+            org.mavai.punit.api.spec.PostconditionStandings standings) {
+        this.postconditionStandings = Optional.ofNullable(standings)
+                .filter(s -> !s.isEmpty());
+        return this;
+    }
+
     public ProbabilisticTestVerdictBuilder perCriterion(PerCriterionStructure perCriterion) {
         this.perCriterion = Optional.ofNullable(perCriterion);
         return this;
@@ -381,7 +395,8 @@ public class ProbabilisticTestVerdictBuilder {
                 covariates, cost, pacing, provenance, termination,
                 environment, junitPassed, punitVerdict, verdictReason,
                 postconditionFailures,
-                perCriterion
+                perCriterion,
+                postconditionStandings
         );
     }
 

@@ -63,7 +63,28 @@ public record ProbabilisticTestResult(
         Optional<String> contractRef,
         Map<String, FailureCount> failuresByPostcondition,
         EngineRunSummary engineSummary,
-        PerCriterionEvaluation perCriterionEvaluation) implements EngineResult {
+        PerCriterionEvaluation perCriterionEvaluation,
+        Optional<PostconditionStandings> postconditionStandings) implements EngineResult {
+
+    /**
+     * Backward-compatible constructor without the postcondition
+     * standings; defaults them absent.
+     */
+    public ProbabilisticTestResult(
+            Verdict verdict,
+            FactorBundle factors,
+            List<EvaluatedCriterion> criterionResults,
+            TestIntent intent,
+            List<String> warnings,
+            CovariateAlignment covariates,
+            Optional<String> contractRef,
+            Map<String, FailureCount> failuresByPostcondition,
+            EngineRunSummary engineSummary,
+            PerCriterionEvaluation perCriterionEvaluation) {
+        this(verdict, factors, criterionResults, intent, warnings, covariates, contractRef,
+                failuresByPostcondition, engineSummary, perCriterionEvaluation,
+                Optional.empty());
+    }
 
     public ProbabilisticTestResult {
         Objects.requireNonNull(verdict, "verdict");
@@ -76,6 +97,7 @@ public record ProbabilisticTestResult(
         Objects.requireNonNull(failuresByPostcondition, "failuresByPostcondition");
         Objects.requireNonNull(engineSummary, "engineSummary");
         Objects.requireNonNull(perCriterionEvaluation, "perCriterionEvaluation");
+        Objects.requireNonNull(postconditionStandings, "postconditionStandings");
         criterionResults = List.copyOf(criterionResults);
         warnings = List.copyOf(warnings);
         failuresByPostcondition = Map.copyOf(failuresByPostcondition);

@@ -290,7 +290,8 @@ public final class ProbabilisticTest implements Spec {
                     contractRefFromContract,
                     s.failuresByPostcondition(),
                     engineSummary,
-                    perCriterionEvaluation);
+                    perCriterionEvaluation,
+                    Optional.of(PostconditionStandings.from(s, contract.effectiveCriteria())));
         }
 
         /**
