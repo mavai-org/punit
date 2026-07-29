@@ -66,6 +66,12 @@ final class FormParser {
         }
         Object argument = entry.get(formKey);
         checkArgument(form, argument, where);
+        if (form == PostconditionForm.SET_OF) {
+            // The composite operand parses to its normalised declaration:
+            // member lists deduplicated (membership semantics), the
+            // min-present floor resolved, refuse-extras defaulted.
+            argument = SetOfParser.parse(argument, where);
+        }
         boolean explicitIn = entry.containsKey("in");
         if (path != null) {
             if (!form.pathCapable()) {
@@ -174,6 +180,10 @@ final class FormParser {
                     throw fail(where + ": `" + form.key() + ":` takes a non-empty list of "
                             + "scalar values (an empty-selection assertion is `count-equals: 0`)");
                 }
+            }
+            case SET_OF -> {
+                // Validated and normalised by SetOfParser in parse() —
+                // the composite operand owns its own refusal battery.
             }
             case COUNT_EQUALS -> {
                 boolean nonNegativeInteger = !(argument instanceof Boolean)

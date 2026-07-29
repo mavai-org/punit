@@ -21,6 +21,7 @@ import org.mavai.punit.decl.internal.model.InputDeclaration;
 import org.mavai.punit.decl.spi.MediaKind;
 import org.mavai.punit.decl.spi.MessageParts;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
+import org.mavai.punit.decl.internal.model.SetOfDeclaration;
 
 @DisplayName("Contract-file parser")
 class ContractParserTest {
@@ -983,6 +984,155 @@ class ContractParserTest {
                             %s
                     inputs: ["Alice"]
                     """.formatted(form);
+        }
+    }
+
+    @Nested
+    @DisplayName("graded set claim")
+    class GradedSetClaim {
+
+        @Test
+        @DisplayName("the composite form parses to its normalised declaration")
+        void parsesAndNormalises() {
+            java.io.PrintStream stderr = System.err;
+            var captured = new java.io.ByteArrayOutputStream();
+            SetOfDeclaration claim;
+            try {
+                System.setErr(new java.io.PrintStream(captured));
+                ContractDeclaration declaration = ContractParser.parse(withDocForm("""
+                        set-of:
+                              required: ["Hauptgebäude"]
+                              optional: ["Nebengebäude", "Anbau", "Nebengebäude"]
+                              min-present: "50%"
+                        """));
+                claim = (SetOfDeclaration) declaration.criteria().get(0)
+                        .forms().get(0).argument();
+            } finally {
+                System.setErr(stderr);
+            }
+            assertThat(claim.required()).containsExactly("Hauptgebäude");
+            // Membership semantics: the duplicate collapses to one entry —
+            // with a console warning, never a refusal.
+            assertThat(claim.optional()).containsExactly("Nebengebäude", "Anbau");
+            assertThat(captured.toString())
+                    .contains("warning:")
+                    .contains("more than once");
+            // "50%" of 2 distinct optional members, by floor.
+            assertThat(claim.minPresent()).isEqualTo(1);
+            // Omission keeps the strictest reading.
+            assertThat(claim.refuseExtras()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a shared member is a contradiction, refused by name")
+        void listsOverlap() {
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Hauptgebäude", "Anbau"]
+                    """), "appears in both `required:` and `optional:`");
+        }
+
+        @Test
+        @DisplayName("an unsatisfiable or saturated min-present floor is refused")
+        void minPresentBounds() {
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Nebengebäude", "Anbau"]
+                          min-present: 3
+                    """), "exceeds the `optional:` list's distinct size");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Nebengebäude", "Anbau"]
+                          min-present: 2
+                    """), "every optional member is required; move them to `required:`");
+        }
+
+        @Test
+        @DisplayName("a malformed min-present is refused — a bare fraction is never guessed at")
+        void minPresentMalformed() {
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Nebengebäude", "Anbau"]
+                          min-present: 0.8
+                    """), "a bare fraction is never guessed at");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Nebengebäude", "Anbau"]
+                          min-present: -1
+                    """), "non-negative whole count");
+        }
+
+        @Test
+        @DisplayName("a spelling a sharper form owns is refused naming that form")
+        void sharperFormRefusals() {
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                    """), "states `equals-set:` — say that");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          refuse-extras: false
+                    """), "states `contains-set:` — say that");
+        }
+
+        @Test
+        @DisplayName("a vacuous or malformed composite is refused")
+        void structuralRefusals() {
+            assertRefused(withDocForm("set-of: []"), "`set-of:` takes a mapping");
+            assertRefused(withDocForm("""
+                    set-of:
+                          min-present: 1
+                    """), "`set-of:` states nothing");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Anbau"]
+                          members: ["x"]
+                    """), "unknown key `members:`");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: []
+                          optional: ["Anbau"]
+                    """), "`required:` takes a non-empty list of scalar values");
+            assertRefused(withDocForm("""
+                    set-of:
+                          required: ["Hauptgebäude"]
+                          optional: ["Anbau"]
+                          refuse-extras: "yes"
+                    """), "`refuse-extras:` takes a boolean");
+        }
+
+        /**
+         * The minimal contract around one postcondition form. A composite
+         * form spans lines; continuation lines are re-indented as direct
+         * sub-keys of the form key, whatever their spelling here.
+         */
+        private static String withDocForm(String form) {
+            String[] lines = form.strip().split("\n");
+            StringBuilder block = new StringBuilder(lines[0].strip());
+            for (int i = 1; i < lines.length; i++) {
+                block.append("\n          ").append(lines[i].strip());
+            }
+            return """
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - in: doc
+                            path: "$.buildings[*].name"
+                            %s
+                    inputs: ["Alice"]
+                    """.formatted(block.toString());
         }
     }
 

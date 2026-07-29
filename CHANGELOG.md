@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The graded set claim (declarative contracts).** A new composite
+  postcondition form, `set-of:`, states a graded membership claim over
+  a path's selection as one check: `required:` members must all
+  appear, `optional:` members may, `min-present:` sets a floor over
+  the distinct optional members (a count, or `"N%"` resolved by
+  floor), and `refuse-extras:` (default true) forbids unlisted
+  members. Membership semantics throughout — a set is a set:
+  duplicates collapse on both sides, an operand duplicate draws a
+  load-time console warning (never a refusal), and a duplicated
+  subject element is one member present, never an extra. Degenerate
+  spellings a sharper form owns are refused naming that form
+  (`equals-set:`, `contains-set:`), and the failure reason states the
+  arithmetic — missing required members, present-versus-floor count,
+  extras — each list bounded. Per the family's graded-set-claims
+  amendment (2026-07-29; conformance corpus mavai-R ≥ v0.10.4).
+
 - **Partial credit for optional postconditions.** A criterion check may
   be declared `optional` (programmatic `.optional()`, declarative
   `optional: true`), and the criterion may grant an `optional-slack`

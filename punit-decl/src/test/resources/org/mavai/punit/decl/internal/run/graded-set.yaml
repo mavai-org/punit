@@ -1,0 +1,23 @@
+format: mavai-contract/1
+contract: annotator-states-the-graded-set
+service: buildings-annotator
+transforms:
+  doc: json
+criteria:
+  - name: annotated-sets-hold-as-graded-claims
+    threshold: 0.9
+    postconditions:
+      - in: doc
+        path: "$.buildings[*].name"
+        set-of:
+          required: ["Hauptgebäude"]
+          optional: ["Nebengebäude", "Anbau"]
+          min-present: 1
+      - in: doc
+        path: "$.tenants[*].name"
+        set-of:
+          required: ["Muster AG"]
+          optional: ["Beispiel GmbH", "Dritte AG"]
+          min-present: "50%"
+inputs:
+  - "annotate the sample lease"
