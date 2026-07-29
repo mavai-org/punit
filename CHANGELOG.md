@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The default subject view (declarative contracts).** A `path:`-bearing
+  check may now omit `in:`: its subject resolves to the view named by the
+  owning criterion's single `parses:` form, else the contract's sole
+  declared transform, else a load refusal naming the check and both fixes
+  — retiring the near-universal `in: <view>` boilerplate line. A path-less
+  bare check still judges the raw response, an explicit `in:` always wins,
+  and a `path:` can never target `raw`. Resolution happens at parse time,
+  so the compiled criterion is indistinguishable from one with `in:`
+  spelled. Per the family's 2026-07-27 subject-rule amendment
+  (conformance corpus mavai-R ≥ v0.10.0).
+
 - **Named scorers, stated in the optimize artefact.** `Scorer` gains an
   optional identity (`Scorer.name()`, default empty) and a built-in
   named implementation, `Scorer.observedPassRate()`, which scores each

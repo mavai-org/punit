@@ -430,8 +430,11 @@ class ContractParserTest {
         }
 
         @Test
-        @DisplayName("path without a subject view is refused")
-        void pathWithoutIn() {
+        @DisplayName("a bare path check with no views to resolve against is refused naming both fixes")
+        void defaultViewNoViews() {
+            // The default-view amendment (2026-07-27): the shape is
+            // structurally admitted; with no transforms declared there is
+            // no default to resolve to, and the refusal names both fixes.
             assertRefused("""
                     format: mavai-contract/1
                     contract: c
@@ -442,7 +445,153 @@ class ContractParserTest {
                           - path: "$.items[*].name"
                             matches: '\\w'
                     inputs: ["Alice"]
-                    """, "`path:` requires `in:`");
+                    """, "no resolvable default view");
+        }
+
+        @Test
+        @DisplayName("a bare path check under several transforms with no parses anchor is refused")
+        void defaultViewUnresolvable() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                      markup: xml
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - path: "$.items[*].name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """, "declare a single `parses: <view>`");
+        }
+
+        @Test
+        @DisplayName("a bare path check resolves to the criterion's single parses view")
+        void defaultViewParsesAnchor() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                      markup: xml
+                    criteria:
+                      - threshold: 0.9
+                        parses: doc
+                        postconditions:
+                          - path: "$.items[*].name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """);
+            assertThat(declaration.criteria().get(0).forms())
+                    .filteredOn(form -> form.path() != null)
+                    .allSatisfy(form -> assertThat(form.view()).isEqualTo("doc"));
+        }
+
+        @Test
+        @DisplayName("a bare path check resolves to the sole declared transform")
+        void defaultViewSoleTransform() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - path: "$.items[*].name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """);
+            assertThat(declaration.criteria().get(0).forms().get(0).view()).isEqualTo("doc");
+        }
+
+        @Test
+        @DisplayName("several parses forms resolve no anchor and fall through to the sole transform")
+        void defaultViewMultiParsesFallsThrough() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - parses: doc
+                          - parses: doc
+                          - path: "$.items[*].name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """);
+            assertThat(declaration.criteria().get(0).forms().get(2).view()).isEqualTo("doc");
+        }
+
+        @Test
+        @DisplayName("an explicit in: always wins over the resolvable default")
+        void defaultViewExplicitInWins() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                      markup: xml
+                    criteria:
+                      - threshold: 0.9
+                        parses: doc
+                        postconditions:
+                          - in: markup
+                            path: "//name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """);
+            assertThat(declaration.criteria().get(0).forms())
+                    .filteredOn(form -> form.path() != null)
+                    .allSatisfy(form -> assertThat(form.view()).isEqualTo("markup"));
+        }
+
+        @Test
+        @DisplayName("a path can never target raw — explicitly or by default")
+        void pathCannotTargetRaw() {
+            assertRefused("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        postconditions:
+                          - in: raw
+                            path: "$.items[*].name"
+                            matches: '\\w'
+                    inputs: ["Alice"]
+                    """, "`path:` cannot target `raw`");
+        }
+
+        @Test
+        @DisplayName("per-input expected entries resolve through the same default")
+        void defaultViewInExpected() {
+            ContractDeclaration declaration = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    transforms:
+                      doc: json
+                    criteria:
+                      - threshold: 0.9
+                        parses: doc
+                    inputs:
+                      - input: "Alice"
+                        expected:
+                          - path: "$.name"
+                            equals: "Alice"
+                    """);
+            assertThat(declaration.inputs().get(0).expected().get(0).view()).isEqualTo("doc");
         }
 
         @Test
@@ -671,7 +820,7 @@ class ContractParserTest {
                           - in: doc
                             equals-set: ["a", "b"]
                     inputs: ["Alice"]
-                    """, "requires `in:` naming a declared view and a `path:`");
+                    """, "requires a `path:` under a declared view");
         }
 
         @Test

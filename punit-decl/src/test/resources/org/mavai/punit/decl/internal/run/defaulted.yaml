@@ -1,0 +1,22 @@
+format: mavai-contract/1
+contract: defaulted-view-runs-end-to-end
+service: basket-builder
+transforms:
+  basket: json
+criteria:
+  - name: response-is-a-valid-basket
+    threshold: 0.8
+    postconditions:
+      - parses: basket
+      - path: "$.items[*].name"
+        matches: '\w'
+      - path: "$.items[*].quantity"
+        matches: '^[1-9][0-9]*$'
+inputs:
+  - input: "a dozen eggs, please"
+    expected:
+      - path: "$.items[*].name"
+        equals: "egg"
+      - path: "$.items[?@.name == 'egg'].quantity"
+        equals: "12"
+  - "two bottles of milk"
