@@ -13,11 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.mavai.punit.decl.internal.model.FileInput;
+import org.mavai.punit.decl.spi.FileInput;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
-import org.mavai.punit.decl.internal.model.MediaKind;
-import org.mavai.punit.decl.internal.model.MessageParts;
+import org.mavai.punit.decl.spi.MediaKind;
+import org.mavai.punit.decl.spi.MessageParts;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 /**

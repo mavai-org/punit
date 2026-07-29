@@ -16,10 +16,10 @@ import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.internal.model.ContractDeclaration;
 import org.mavai.punit.decl.internal.model.CriterionDeclaration;
 import org.mavai.punit.decl.internal.model.DeclaredIntent;
-import org.mavai.punit.decl.internal.model.FileInput;
+import org.mavai.punit.decl.spi.FileInput;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
-import org.mavai.punit.decl.internal.model.MediaKind;
-import org.mavai.punit.decl.internal.model.MessageParts;
+import org.mavai.punit.decl.spi.MediaKind;
+import org.mavai.punit.decl.spi.MessageParts;
 import org.mavai.punit.decl.internal.model.PostconditionForm;
 
 @DisplayName("Contract-file parser")

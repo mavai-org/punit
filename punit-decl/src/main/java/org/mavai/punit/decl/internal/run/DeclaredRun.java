@@ -140,7 +140,8 @@ public final class DeclaredRun implements Declared {
                             + "descriptive and consults no claims");
         }
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
-        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        ServicesResolver services = ServicesResolver.resolve(
+                caller, servicesFile, registry, ServicesResolver.Posture.EXPLORE);
         if (!services.isDefined(declaration.service())) {
             if (registry.hasBinding(declaration.service())) {
                 throw new ContractConfigurationException(
@@ -172,7 +173,7 @@ public final class DeclaredRun implements Declared {
                 Sampling.<Map<String, Object>, Object, String>builder()
                         .serviceContractFactory(configuration -> exploreContract(
                                 declaration, criteria, currentInput,
-                                services, covariateFeed, configuration))
+                                services, covariateFeed, configuration, inputs, true))
                         .inputs(inputs)
                         .samples(perConfig)
                         .build();
@@ -203,7 +204,8 @@ public final class DeclaredRun implements Declared {
                             + "descriptive and consults no claims");
         }
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
-        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        ServicesResolver services = ServicesResolver.resolve(
+                caller, servicesFile, registry, ServicesResolver.Posture.STRICT);
         if (!services.isDefined(declaration.service())) {
             throw new ContractConfigurationException(
                     "service '" + declaration.service() + "' has no mavai-services.yaml "
@@ -237,20 +239,8 @@ public final class DeclaredRun implements Declared {
                                             .reduce((a, b) -> a + ", " + b).orElse("none")));
         }
 
-        java.lang.reflect.Method stepperFactory = registry.stepperFactory(entry.stepper());
-        Object[] stepperArguments = ConfigBinding.bind(
-                "optimization '" + entry.id() + "'", entry.stepper(), stepperFactory,
-                entry.stepperConfig());
-        Object stepper = registry.invoke(stepperFactory, stepperArguments);
-        if (!(stepper instanceof org.mavai.punit.api.spec.FactorsStepper)) {
-            throw new ContractConfigurationException(
-                    "@Stepper(\"" + entry.stepper() + "\") must return an "
-                            + "org.mavai.punit.api.spec.FactorsStepper, got "
-                            + (stepper == null ? "null" : stepper.getClass().getSimpleName()));
-        }
-        @SuppressWarnings("unchecked")
         org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>> typedStepper =
-                (org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>>) stepper;
+                resolveStepper(entry, registry);
         org.mavai.punit.api.spec.Scorer scorer = registry.resolveScorer(entry.scorer());
 
         Map<String, String> covariateFeed = registry.covariateFeed(declaration.service());
@@ -275,7 +265,7 @@ public final class DeclaredRun implements Declared {
                 Sampling.<Map<String, Object>, Object, String>builder()
                         .serviceContractFactory(configuration -> exploreContract(
                                 declaration, criteria, currentInput,
-                                services, covariateFeed, configuration))
+                                services, covariateFeed, configuration, inputs, false))
                         .inputs(inputs)
                         .samples(perIteration)
                         .build();
@@ -297,6 +287,54 @@ public final class DeclaredRun implements Declared {
                 ? builder.noImprovementWindow(entry.noImprovementWindow())
                 : builder.disableEarlyTermination();
         builder.run();
+    }
+
+    /**
+     * Resolves an entry's {@code stepper:} name against the two stepper
+     * populations: built-ins via the {@link org.mavai.punit.decl.spi.StepperProvider}
+     * ServiceLoader seam, user factories from the bindings class. A
+     * built-in validates its own {@code stepper-config:}; a user
+     * factory's parameter list is the schema. Built-in names are
+     * unshadowable, mirroring the service-type registry.
+     */
+    private org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>> resolveStepper(
+            org.mavai.punit.decl.internal.model.OptimizationDeclaration entry,
+            BindingsRegistry registry) {
+        Map<String, org.mavai.punit.decl.spi.StepperProvider> builtIns =
+                new java.util.LinkedHashMap<>();
+        for (org.mavai.punit.decl.spi.StepperProvider provider
+                : java.util.ServiceLoader.load(org.mavai.punit.decl.spi.StepperProvider.class)) {
+            builtIns.put(provider.name(), provider);
+        }
+        for (String name : builtIns.keySet()) {
+            if (registry.hasStepper(name)) {
+                throw new ContractConfigurationException(
+                        "@Stepper(\"" + name + "\") in "
+                                + registry.bindingsClass().getSimpleName()
+                                + " shadows the built-in stepper of that name — built-in "
+                                + "stepper names cannot be re-registered");
+            }
+        }
+        org.mavai.punit.decl.spi.StepperProvider builtIn = builtIns.get(entry.stepper());
+        if (builtIn != null) {
+            return builtIn.create(entry.stepperConfig());
+        }
+        java.lang.reflect.Method stepperFactory =
+                registry.stepperFactory(entry.stepper(), builtIns.keySet());
+        Object[] stepperArguments = ConfigBinding.bind(
+                "optimization '" + entry.id() + "'", entry.stepper(), stepperFactory,
+                entry.stepperConfig());
+        Object stepper = registry.invoke(stepperFactory, stepperArguments);
+        if (!(stepper instanceof org.mavai.punit.api.spec.FactorsStepper)) {
+            throw new ContractConfigurationException(
+                    "@Stepper(\"" + entry.stepper() + "\") must return an "
+                            + "org.mavai.punit.api.spec.FactorsStepper, got "
+                            + (stepper == null ? "null" : stepper.getClass().getSimpleName()));
+        }
+        @SuppressWarnings("unchecked")
+        org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>> typed =
+                (org.mavai.punit.api.spec.FactorsStepper<Map<String, Object>>) stepper;
+        return typed;
     }
 
     /** Optimize is sized per iteration: property, builder, then the default 5. */
@@ -322,9 +360,22 @@ public final class DeclaredRun implements Declared {
             AtomicReference<Object> currentInput,
             ServicesResolver services,
             Map<String, String> covariateFeed,
-            Map<String, Object> configuration) {
-        org.mavai.punit.decl.spi.ConfiguredService point =
-                services.configurePoint(declaration.service(), configuration);
+            Map<String, Object> configuration,
+            List<Object> inputs,
+            boolean lenient) {
+        final org.mavai.punit.decl.spi.ConfiguredService point;
+        if (lenient) {
+            org.mavai.punit.decl.spi.ServiceType.ExplorePoint explorePoint =
+                    services.explorePoint(declaration.service(), configuration);
+            if (explorePoint.note() != null) {
+                System.out.println("[PUNIT] note: service '" + declaration.service() + "': "
+                        + explorePoint.note());
+            }
+            point = explorePoint.service();
+        } else {
+            point = services.configurePoint(declaration.service(), configuration);
+        }
+        inputs.forEach(point::admit);
         Map<String, String> covariates =
                 new java.util.LinkedHashMap<>(point.configurationCovariates());
         covariates.putAll(covariateFeed);
@@ -436,7 +487,8 @@ public final class DeclaredRun implements Declared {
                 ? RiskClaims.resolve(declaration, samples, power, tolerateBare, tolerateNamed)
                 : RiskClaims.none();
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
-        ServicesResolver services = ServicesResolver.resolve(caller, servicesFile, registry);
+        ServicesResolver services = ServicesResolver.resolve(
+                caller, servicesFile, registry, ServicesResolver.Posture.STRICT);
         org.mavai.punit.decl.spi.ConfiguredService defined = services.lookup(declaration.service());
         final BindingsRegistry.Invoker invoker;
         Map<String, String> configurationCovariates;
@@ -533,6 +585,9 @@ public final class DeclaredRun implements Declared {
         List<Object> inputs = declaration.inputs().stream()
                 .map(InputDeclaration::value)
                 .toList();
+        if (defined != null) {
+            inputs.forEach(defined::admit);
+        }
         return new Instantiated(declaration, contract, inputs);
     }
 

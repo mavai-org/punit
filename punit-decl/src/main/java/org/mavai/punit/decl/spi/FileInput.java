@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.internal.model;
+package org.mavai.punit.decl.spi;
 
 import java.nio.file.Path;
 import java.util.Arrays;

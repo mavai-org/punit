@@ -628,6 +628,169 @@ class DeclaredRunTest {
         }
     }
 
+    @Nested
+    @DisplayName("two-tier capability rule")
+    class TwoTierCapabilityRule {
+
+        private java.nio.file.Path degradingServices(java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      degrading-service:
+                        type: degrading-model
+                        configuration:
+                          tone: plain
+                          boost: true
+                        explorations:
+                          - tone: warm
+                    """);
+            return services;
+        }
+
+        @Test
+        @DisplayName("the strict tier refuses an unhonourable configuration under test")
+        void strictTierRefuses(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            Declared run = PUnit.declared("degrading-service-answers")
+                    .bindings(EmptyBindings.class)
+                    .services(degradingServices(directory))
+                    .samples(5);
+            assertThatThrownBy(run::assertPasses)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("cannot honour `boost: true`");
+        }
+
+        @Test
+        @DisplayName("the lenient tier degrades per explore point with an announced note")
+        void lenientTierDegradesWithNote(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.explorations.outputDir",
+                    directory.resolve("out").toString());
+            java.io.PrintStream stdout = System.out;
+            java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+            System.setOut(new java.io.PrintStream(captured, true));
+            try {
+                PUnit.declared("degrading-service-answers")
+                        .bindings(EmptyBindings.class)
+                        .services(degradingServices(directory))
+                        .samplesPerConfig(2)
+                        .explore();
+            } finally {
+                System.setOut(stdout);
+                System.clearProperty("punit.explorations.outputDir");
+            }
+            assertThat(captured.toString())
+                    .contains("[PUNIT] note: service 'degrading-service'")
+                    .contains("`boost:` is not honoured");
+        }
+    }
+
+    @Nested
+    @DisplayName("built-in steppers")
+    class BuiltInSteppers {
+
+        private java.nio.file.Path echoOptimizeServices(java.nio.file.Path directory,
+                String stepperConfig) throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      echo-service:
+                        type: echo-model
+                        configuration:
+                          prefix: "echo:"
+                        optimizations:
+                          - stepper: fixed-step
+                    %s        max-iterations: 2
+                    """.formatted(stepperConfig));
+            return services;
+        }
+
+        @Test
+        @DisplayName("a built-in stepper resolves via the ServiceLoader seam")
+        void builtInStepperResolves(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.optimizations.outputDir",
+                    directory.resolve("out").toString());
+            try {
+                assertThatCode(() -> PUnit.declared("built-in-type-resolves-via-service-loader")
+                        .bindings(EmptyBindings.class)
+                        .services(echoOptimizeServices(directory, ""))
+                        .samplesPerIteration(2)
+                        .optimize())
+                        .doesNotThrowAnyException();
+            } finally {
+                System.clearProperty("punit.optimizations.outputDir");
+            }
+        }
+
+        @Test
+        @DisplayName("a built-in stepper validates its own optional-keyed stepper-config")
+        void builtInStepperConfigMisfit(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            Declared run = PUnit.declared("built-in-type-resolves-via-service-loader")
+                    .bindings(EmptyBindings.class)
+                    .services(echoOptimizeServices(directory,
+                            "        stepper-config: { pace: 3 }\n"));
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("stepper 'fixed-step'")
+                    .hasMessageContaining("`pace:`");
+        }
+
+        @Test
+        @DisplayName("a bindings stepper shadowing a built-in name is refused")
+        void shadowingBuiltInStepperRefused(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            Declared run = PUnit.declared("built-in-type-resolves-via-service-loader")
+                    .bindings(ShadowingStepperBindings.class)
+                    .services(echoOptimizeServices(directory, ""));
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("shadows the built-in stepper");
+        }
+
+        @Test
+        @DisplayName("an unknown stepper refusal names the built-ins alongside the registered")
+        void unknownStepperNamesBuiltIns(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            java.nio.file.Path services = directory.resolve("mavai-services.yaml");
+            java.nio.file.Files.writeString(services, """
+                    format: mavai-services/1
+                    services:
+                      echo-service:
+                        type: echo-model
+                        configuration:
+                          prefix: "echo:"
+                        optimizations:
+                          - stepper: no-such-stepper
+                            max-iterations: 2
+                    """);
+            Declared run = PUnit.declared("built-in-type-resolves-via-service-loader")
+                    .bindings(EmptyBindings.class)
+                    .services(services);
+            assertThatThrownBy(run::optimize)
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("names no registered stepper")
+                    .hasMessageContaining("fixed-step (built in)");
+        }
+    }
+
+    static class ShadowingStepperBindings {
+
+        @org.mavai.punit.decl.Stepper("fixed-step")
+        Object shadow() {
+            return null;
+        }
+    }
+
     static class EmptyBindings {
     }
 

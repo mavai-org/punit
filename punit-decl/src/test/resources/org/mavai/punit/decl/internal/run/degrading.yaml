@@ -1,0 +1,6 @@
+format: mavai-contract/1
+contract: degrading-service-answers
+service: degrading-service
+criteria:
+  - { threshold: 0.5, contains: "routed:" }
+inputs: ["route this request"]

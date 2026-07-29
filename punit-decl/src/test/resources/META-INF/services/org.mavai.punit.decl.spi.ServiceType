@@ -1,1 +1,2 @@
 org.mavai.punit.decl.internal.run.EchoServiceType
+org.mavai.punit.decl.internal.run.DegradingServiceType
