@@ -1,6 +1,8 @@
 package org.mavai.punit.decl.internal.model;
 
 import java.util.List;
+import org.mavai.punit.decl.spi.FileInput;
+import org.mavai.punit.decl.spi.MessageParts;
 
 /**
  * One entry of the input list: the input's value together with its own

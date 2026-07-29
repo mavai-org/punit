@@ -31,6 +31,7 @@ module org.mavai.punit.decl {
 
     // ── Services ──────────────────────────────────────────────
     uses org.mavai.punit.decl.spi.ServiceType;
+    uses org.mavai.punit.decl.spi.StepperProvider;
     provides org.mavai.punit.runtime.PUnit.DeclarativeFrontEnd
             with org.mavai.punit.decl.internal.DeclFrontEnd;
 }

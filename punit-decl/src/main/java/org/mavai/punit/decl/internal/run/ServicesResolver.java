@@ -29,14 +29,27 @@ import org.mavai.punit.decl.spi.ServiceType;
  */
 final class ServicesResolver {
 
+    /**
+     * The two tiers of the family's capability rule: a test, measure,
+     * or optimize run refuses a configuration its resolved adapter
+     * cannot honour ({@code STRICT}); an explore run degrades it per
+     * point with an announced note ({@code EXPLORE}), so mixed-provider
+     * grids run.
+     */
+    enum Posture { STRICT, EXPLORE }
+
     private final Map<String, ServiceType> types = new LinkedHashMap<>();
     private final Map<String, ConfiguredService> configured = new LinkedHashMap<>();
     private final Map<String, ServiceEntry> entries = new LinkedHashMap<>();
+    private final Posture posture;
 
-    private ServicesResolver() {}
+    private ServicesResolver(Posture posture) {
+        this.posture = posture;
+    }
 
-    static ServicesResolver resolve(Class<?> caller, Path explicitFile, BindingsRegistry registry) {
-        ServicesResolver resolver = new ServicesResolver();
+    static ServicesResolver resolve(
+            Class<?> caller, Path explicitFile, BindingsRegistry registry, Posture posture) {
+        ServicesResolver resolver = new ServicesResolver(posture);
         for (ServiceType builtIn : ServiceLoader.load(ServiceType.class)) {
             resolver.types.put(builtIn.name(), builtIn);
         }
@@ -98,10 +111,19 @@ final class ServicesResolver {
         return entries.get(serviceName).optimizations();
     }
 
-    /** Configures the named service at one resolved grid point. */
+    /** Configures the named service at one resolved grid point, strictly. */
     ConfiguredService configurePoint(String serviceName, Map<String, Object> configuration) {
         ServiceEntry entry = entries.get(serviceName);
         return types.get(entry.type()).configure(serviceName, configuration);
+    }
+
+    /**
+     * Configures one exploration grid point on the lenient tier: the
+     * service that actually runs plus the type's degradation note.
+     */
+    ServiceType.ExplorePoint explorePoint(String serviceName, Map<String, Object> configuration) {
+        ServiceEntry entry = entries.get(serviceName);
+        return types.get(entry.type()).explorePoint(serviceName, configuration);
     }
 
     String registeredTypeNames() {
@@ -117,7 +139,9 @@ final class ServicesResolver {
                             + "ship via their module; user types are registered in the bindings "
                             + "class with @BindingFactory(\"" + entry.type() + "\"))");
         }
-        configured.put(entry.name(), type.configure(entry.name(), entry.configuration()));
+        configured.put(entry.name(), posture == Posture.STRICT
+                ? type.configure(entry.name(), entry.configuration())
+                : type.explorePoint(entry.name(), entry.configuration()).service());
         entries.put(entry.name(), entry);
         validateExplorations(entry, type);
     }
@@ -132,8 +156,15 @@ final class ServicesResolver {
         if (entry.explorations().isEmpty()) {
             return;
         }
+        // Grid points project their covariates through the lenient tier
+        // regardless of posture: the grid belongs to explore, where the
+        // configuration that actually runs — degraded to what each
+        // point's provider honours — is what is fingerprinted, and a
+        // capability misfit in a grid entry must not block a test or
+        // measurement that never consults the grid.
         Map<Map<String, String>, String> seen = new LinkedHashMap<>();
-        seen.put(type.configure(entry.name(), entry.configuration()).configurationCovariates(),
+        seen.put(type.explorePoint(entry.name(), entry.configuration())
+                        .service().configurationCovariates(),
                 "the baseline `configuration:`");
         int index = 0;
         for (Map<String, Object> deltas : entry.explorations()) {
@@ -141,7 +172,7 @@ final class ServicesResolver {
             Map<String, Object> merged = new LinkedHashMap<>(entry.configuration());
             merged.putAll(deltas);
             Map<String, String> point =
-                    type.configure(entry.name(), merged).configurationCovariates();
+                    type.explorePoint(entry.name(), merged).service().configurationCovariates();
             String previous = seen.putIfAbsent(point, "exploration entry " + index);
             if (previous != null) {
                 throw new ContractConfigurationException(

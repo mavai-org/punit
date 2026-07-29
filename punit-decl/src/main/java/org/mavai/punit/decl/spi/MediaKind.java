@@ -1,4 +1,4 @@
-package org.mavai.punit.decl.internal.model;
+package org.mavai.punit.decl.spi;
 
 /**
  * The declared content class of a file-sourced media input part — a

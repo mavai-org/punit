@@ -190,14 +190,26 @@ final class BindingsRegistry {
         return covariates;
     }
 
-    /** The named stepper's factory method, or a refusal naming the registered ones. */
-    Method stepperFactory(String name) {
+    /** Whether the bindings class registers a stepper of the name. */
+    boolean hasStepper(String name) {
+        return steppers.containsKey(name);
+    }
+
+    /**
+     * The named stepper's factory method, or a refusal naming the
+     * registered ones alongside the given built-in names.
+     */
+    Method stepperFactory(String name, java.util.Set<String> builtInNames) {
         Method method = steppers.get(name);
         if (method == null) {
-            String known = steppers.isEmpty() ? "none registered" : String.join(", ", steppers.keySet());
+            java.util.List<String> known = new java.util.ArrayList<>();
+            builtInNames.stream().sorted()
+                    .forEach(builtIn -> known.add(builtIn + " (built in)"));
+            known.addAll(steppers.keySet());
             throw new ContractConfigurationException(
                     "`stepper: " + name + "` names no registered stepper; known steppers in "
-                            + bindingsClass.getSimpleName() + ": " + known
+                            + bindingsClass.getSimpleName() + ": "
+                            + (known.isEmpty() ? "none registered" : String.join(", ", known))
                             + " (register with @Stepper(\"" + name + "\"))");
         }
         return method;

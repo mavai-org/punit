@@ -26,4 +26,14 @@ public interface ConfiguredService {
     default Map<String, String> configurationCovariates() {
         return Map.of();
     }
+
+    /**
+     * Admits one declared input before any sample runs: the load-time
+     * gate for inputs this configured service cannot carry (punit-lm's
+     * media capability gate is the first implementation — an undeclared
+     * capability is never sent silently). An inadmissible input throws
+     * (an {@link IllegalStateException} subtype), so the refusal never
+     * costs a sample. The default admits everything.
+     */
+    default void admit(Object input) {}
 }
