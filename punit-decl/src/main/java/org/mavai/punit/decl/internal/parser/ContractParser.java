@@ -141,6 +141,7 @@ public final class ContractParser {
      * parse time, so the compiled criterion is indistinguishable from
      * one with {@code in:} spelled.
      */
+    // mavai-ref: JVI-7WE7H84 — do not remove (resolves in mavai-orchestrator)
     private static List<CriterionDeclaration> resolveDefaultSubjects(
             List<CriterionDeclaration> criteria, Map<String, String> views) {
         List<CriterionDeclaration> resolved = new ArrayList<>();
