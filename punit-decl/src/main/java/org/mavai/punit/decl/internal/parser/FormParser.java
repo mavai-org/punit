@@ -57,18 +57,28 @@ final class FormParser {
         }
         Object argument = entry.get(formKey);
         checkArgument(form, argument, where);
+        boolean explicitIn = entry.containsKey("in");
         if (path != null) {
             if (!form.pathCapable()) {
                 throw fail(where + ": `path:` qualifies the string and value-comparison forms only");
             }
-            if (view.equals(FormDeclaration.RAW_VIEW)) {
-                throw fail(where + ": `path:` requires `in:` naming a declared view — "
-                        + "the raw response is unstructured text");
+            if (explicitIn && view.equals(FormDeclaration.RAW_VIEW)) {
+                throw fail(where + ": `path:` cannot target `raw` — the raw response is "
+                        + "unstructured text; name a declared view with `in:`");
+            }
+            if (!explicitIn) {
+                // The path-conditional default (subject rule, 2026-07-27):
+                // a path-bearing check omitting `in:` cannot mean the raw
+                // text — a path needs structure — so its subject resolves
+                // against the owning criterion (its single `parses:` view,
+                // else the contract's sole transform) once all the
+                // criterion's forms are known. Unresolved here, by design.
+                view = null;
             }
         }
-        if (form.collective() && (path == null || view.equals(FormDeclaration.RAW_VIEW))) {
+        if (form.collective() && path == null) {
             throw fail(where + ": `" + form.key() + ":` judges the values a path selects, "
-                    + "collectively — it requires `in:` naming a declared view and a `path:` "
+                    + "collectively — it requires a `path:` under a declared view "
                     + "(there is no collection over the raw text or a scalar)");
         }
         if (form == PostconditionForm.PARSES) {

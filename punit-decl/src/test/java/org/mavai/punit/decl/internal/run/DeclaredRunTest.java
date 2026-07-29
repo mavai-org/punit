@@ -51,6 +51,17 @@ class DeclaredRunTest {
         }
 
         @Test
+        @DisplayName("a contract spelt with the default subject view runs identically")
+        void defaultedViewRunsEndToEnd() {
+            // The basket contract with every path check's `in: basket`
+            // omitted — the criterion's `parses: basket` anchors the
+            // default, per-input expectations included.
+            assertThatCode(() ->
+                    PUnit.declared("defaulted-view-runs-end-to-end").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
         @DisplayName("a wrong per-input expectation fails only its own input's samples — and the bar")
         void wrongExpectation() {
             Declared run = PUnit.declared("basket-builder-disappoints-one-input").samples(30);

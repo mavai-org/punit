@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.internal.model.ContractDeclaration;
 import org.mavai.punit.decl.internal.model.CriterionDeclaration;
@@ -22,6 +23,7 @@ import org.mavai.punit.decl.internal.model.DeclaredIntent;
 import org.mavai.punit.decl.internal.model.FormDeclaration;
 import org.mavai.punit.decl.internal.model.InputDeclaration;
 import org.mavai.punit.decl.internal.model.LatencyDeclaration;
+import org.mavai.punit.decl.internal.model.PostconditionForm;
 import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
@@ -100,6 +102,8 @@ public final class ContractParser {
                         + "`expected:` entries supplement a criterion's forms, never replace them");
             }
         }
+        criteria = resolveDefaultSubjects(criteria, views);
+        inputs = resolveExpectedSubjects(inputs, criteria, views);
 
         boolean confidenceDeclared = data.containsKey("confidence");
         double confidence = StatisticalDefaults.DEFAULT_CONFIDENCE;
@@ -124,6 +128,84 @@ public final class ContractParser {
                 confidenceDeclared,
                 latency,
                 sourcePath);
+    }
+
+    /**
+     * The path-conditional default subject (subject rule, 2026-07-27):
+     * a {@code path:}-bearing check that omitted {@code in:} resolves to
+     * its criterion's anchor — the view named by the criterion's
+     * <em>single</em> {@code parses:} form (an explicit statement of
+     * the canonical view; several resolve no anchor and fall through),
+     * else the contract's <em>sole</em> declared transform — or refuses
+     * naming the check and both fixes. Resolution happens here, at
+     * parse time, so the compiled criterion is indistinguishable from
+     * one with {@code in:} spelled.
+     */
+    private static List<CriterionDeclaration> resolveDefaultSubjects(
+            List<CriterionDeclaration> criteria, Map<String, String> views) {
+        List<CriterionDeclaration> resolved = new ArrayList<>();
+        for (CriterionDeclaration criterion : criteria) {
+            List<FormDeclaration> forms = new ArrayList<>();
+            for (FormDeclaration form : criterion.forms()) {
+                forms.add(resolveSubject(form, criterion, views));
+            }
+            resolved.add(new CriterionDeclaration(
+                    criterion.name(), forms, criterion.threshold(), criterion.thresholdOrigin(),
+                    criterion.contractRef(), criterion.tolerate(), criterion.confidence()));
+        }
+        return resolved;
+    }
+
+    /**
+     * Per-input {@code expected:} entries resolve identically — the
+     * single-criterion ownership rule (validated above) guarantees the
+     * anchor is that lone criterion's.
+     */
+    private static List<InputDeclaration> resolveExpectedSubjects(
+            List<InputDeclaration> inputs, List<CriterionDeclaration> criteria,
+            Map<String, String> views) {
+        CriterionDeclaration owner = criteria.get(0);
+        List<InputDeclaration> resolved = new ArrayList<>();
+        for (InputDeclaration input : inputs) {
+            List<FormDeclaration> expected = new ArrayList<>();
+            for (FormDeclaration form : input.expected()) {
+                expected.add(resolveSubject(form, owner, views));
+            }
+            resolved.add(new InputDeclaration(input.value(), expected));
+        }
+        return resolved;
+    }
+
+    private static FormDeclaration resolveSubject(
+            FormDeclaration form, CriterionDeclaration criterion, Map<String, String> views) {
+        if (form.view() != null) {
+            return form;
+        }
+        String anchor = subjectAnchor(criterion, views);
+        if (anchor == null) {
+            throw fail("criterion '" + criterion.name() + "': a `path:` check omitting `in:` "
+                    + "has no resolvable default view — declare a single `parses: <view>` on "
+                    + "the criterion, or add `in:` naming the view ("
+                    + (views.isEmpty() ? "no transforms declared"
+                            : "declared transforms: " + views.keySet().stream().sorted()
+                                    .collect(Collectors.joining(", ")))
+                    + ")");
+        }
+        return form.withView(anchor);
+    }
+
+    private static String subjectAnchor(CriterionDeclaration criterion, Map<String, String> views) {
+        List<String> parsed = criterion.forms().stream()
+                .filter(form -> form.form() == PostconditionForm.PARSES)
+                .map(form -> String.valueOf(form.argument()))
+                .toList();
+        if (parsed.size() == 1) {
+            return parsed.get(0);
+        }
+        if (views.size() == 1) {
+            return views.keySet().iterator().next();
+        }
+        return null;
     }
 
     /** Reads and parses a contract file from disk. */
