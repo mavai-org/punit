@@ -1,0 +1,17 @@
+name: Publication hygiene
+
+# No machine-local content in tracked files — the deterministic
+# complement to the advisory documentation-QA review. The single source
+# of what counts as machine-local is scripts/check-publication-hygiene.sh.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No machine-local content in tracked files
+        run: sh scripts/check-publication-hygiene.sh
