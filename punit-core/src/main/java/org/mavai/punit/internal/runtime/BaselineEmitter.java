@@ -92,6 +92,10 @@ public final class BaselineEmitter {
                 Files.createDirectories(baselineDir);
                 Path target = baselineDir.resolve(relativePath);
                 Files.writeString(target, content, StandardCharsets.UTF_8);
+                // Honest output: a recording always names its persisted
+                // artefact — the run's product is the baseline, not a
+                // verdict, and the operator should not have to hunt for it.
+                System.out.println("[PUNIT] baseline recorded: " + target);
             } catch (IOException e) {
                 throw new UncheckedIOException(
                         "Failed to write baseline " + relativePath + " under " + baselineDir, e);
