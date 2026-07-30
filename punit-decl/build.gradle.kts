@@ -109,6 +109,7 @@ tasks.test {
     // exactly as it provisions the registrations; nothing connects.
     environment("MAVAI_LLM_ENDPOINT", "https://conformance.invalid/v1")
     environment("MAVAI_LLM_MODEL", "conformance-model")
+    environment("MAVAI_LLM_API_KEY", "conformance-placeholder")
     systemProperty(
         "punit.formats.dir",
         publishedFormatsDir.get().asFile.resolve("formats").absolutePath
