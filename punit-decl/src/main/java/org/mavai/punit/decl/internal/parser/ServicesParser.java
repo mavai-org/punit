@@ -57,11 +57,17 @@ public final class ServicesParser {
                     + data.get("format") + "'");
         }
         for (String key : data.keySet()) {
-            if (!key.equals("format") && !key.equals("services")) {
+            if (!key.equals("format") && !key.equals("roots") && !key.equals("services")) {
                 throw fail("the services file has unknown key `" + key + ":` — it holds "
-                        + "`format:` and the `services:` block, nothing else");
+                        + "`format:`, an optional `roots:` block, and the `services:` "
+                        + "block, nothing else");
             }
         }
+        // Named path anchors — the services file's own namespace, never a
+        // contract's. References resolve in the resolver (where the type's
+        // file-capable keys are known); dead declarations refuse there too.
+        Roots roots = Roots.parse(data.get("roots"),
+                sourcePath != null ? sourcePath.getParent() : null, "the services file");
         Object servicesValue = data.get("services");
         if (!(servicesValue instanceof Map<?, ?> raw) || raw.isEmpty()) {
             throw fail("`services:` must be a non-empty mapping");
@@ -74,7 +80,7 @@ public final class ServicesParser {
             }
             services.put(name, definition(name, requireMapping(entry.getValue(), "service '" + name + "'")));
         }
-        return new ServicesDeclaration(services, sourcePath);
+        return new ServicesDeclaration(services, sourcePath, roots);
     }
 
     /** Reads and parses a services file from disk. */

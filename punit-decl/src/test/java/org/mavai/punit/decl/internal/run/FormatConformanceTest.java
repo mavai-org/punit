@@ -88,10 +88,6 @@ class FormatConformanceTest {
         }
     }
 
-    private static final String ROOTS_PENDING =
-            "named path anchors (`roots:`) — family amendment 2026-07-29 "
-                    + "(DIR-FAM-ROOTS-named-path-anchors), punit twin not yet executed";
-
     /**
      * category → a fragment of THIS reader's refusal message.
      * Informational by the manifest's contract (categories bind, wording
@@ -145,6 +141,12 @@ class FormatConformanceTest {
             Map.entry("is-null-operand", "takes the literal `true`"),
             Map.entry("set-operand-empty", "non-empty list of scalar values"),
             Map.entry("is-operand-not-boolean", "`is:` takes a boolean"),
+            Map.entry("roots-block-malformed", "`roots:` must be a non-empty mapping"),
+            Map.entry("roots-name-shape", "must match [a-z][a-z0-9-]*"),
+            Map.entry("roots-value-malformed", "root `corpus:`"),
+            Map.entry("roots-reference-undeclared", "references an undeclared root"),
+            Map.entry("roots-dead-declaration", "referenced by nothing in the file"),
+            Map.entry("roots-directory-missing", "not an existing directory"),
             Map.entry("set-of-without-optional", "— say that"),
             Map.entry("set-of-min-present-malformed", "a bare fraction is never guessed at"),
             Map.entry("set-of-lists-overlap", "in both `required:` and `optional:`"),
@@ -182,7 +184,9 @@ class FormatConformanceTest {
             Map.entry("exploration-duplicate-point", "distinct covariate point"),
             Map.entry("optimization-duplicate-id", "is already used"),
             Map.entry("optimization-id-required-when-multiple", "`id:` is required when"),
-            Map.entry("optimization-initial-restates-baseline", "merely restates"));
+            Map.entry("optimization-initial-restates-baseline", "merely restates"),
+            Map.entry("lm-system-prompt-file-malformed", "file form is `{file: <path>}`"),
+            Map.entry("services-roots-reference-undeclared", "references an undeclared root"));
 
     /**
      * The known-unmet ledger — corpus obligations this reader does not
@@ -190,20 +194,10 @@ class FormatConformanceTest {
      * ledger case is asserted <em>inverted</em>: the day the reader
      * starts meeting the obligation, its test fails and the entry must
      * be removed — the ledger only shrinks, truthfully. Never add an
-     * entry without a directive reference.
+     * entry without a directive reference. Empty since the named-path-
+     * anchors twin landed.
      */
-    private static final Map<String, String> KNOWN_UNMET = Map.ofEntries(
-            Map.entry("contract-roots.yaml", ROOTS_PENDING),
-            Map.entry("services-roots-prompt-file.yaml", ROOTS_PENDING),
-            Map.entry("roots-block-empty.yaml", ROOTS_PENDING),
-            Map.entry("roots-name-shape.yaml", ROOTS_PENDING),
-            Map.entry("roots-value-empty.yaml", ROOTS_PENDING),
-            Map.entry("roots-value-absolute.yaml", ROOTS_PENDING),
-            Map.entry("roots-reference-undeclared.yaml", ROOTS_PENDING),
-            Map.entry("roots-dead-declaration.yaml", ROOTS_PENDING),
-            Map.entry("roots-directory-missing.yaml", ROOTS_PENDING),
-            Map.entry("lm-system-prompt-file-malformed.yaml", ROOTS_PENDING),
-            Map.entry("services-roots-reference-undeclared.yaml", ROOTS_PENDING));
+    private static final Map<String, String> KNOWN_UNMET = Map.of();
 
     // ── The drive ─────────────────────────────────────────────────
 

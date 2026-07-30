@@ -66,9 +66,15 @@ final class ServicesResolver {
         }
         ServicesDeclaration declaration = discover(caller, explicitFile);
         if (declaration != null) {
+            Path baseDir = declaration.sourcePath() != null
+                    ? declaration.sourcePath().getParent()
+                    : null;
             for (ServiceEntry entry : declaration.services().values()) {
-                resolver.configure(entry);
+                resolver.configure(entry, declaration.roots(), baseDir);
             }
+            // Usage coherence is a whole-file property: a declared root
+            // referenced by nothing is a dead declaration.
+            declaration.roots().refuseDead();
         }
         return resolver;
     }
@@ -130,7 +136,8 @@ final class ServicesResolver {
         return types.isEmpty() ? "none registered" : String.join(", ", new TreeMap<>(types).keySet());
     }
 
-    private void configure(ServiceEntry entry) {
+    private void configure(ServiceEntry entry,
+            org.mavai.punit.decl.internal.parser.Roots roots, Path baseDir) {
         ServiceType type = types.get(entry.type());
         if (type == null) {
             throw new ContractConfigurationException(
@@ -139,12 +146,85 @@ final class ServicesResolver {
                             + "ship via their module; user types are registered in the bindings "
                             + "class with @BindingFactory(\"" + entry.type() + "\"))");
         }
+        entry = withResolvedFileValues(entry, type, roots, baseDir);
         configured.put(entry.name(), posture == Posture.STRICT
                 ? type.configure(entry.name(), entry.configuration())
                 : type.explorePoint(entry.name(), entry.configuration()).service());
         entries.put(entry.name(), entry);
         validateExplorations(entry, type);
         validateOptimizations(entry, type);
+    }
+
+    /**
+     * The {@code {file: <path>}} values a type admits, resolved to plain
+     * strings — root references included, the file read once at load,
+     * decoded UTF-8 — before the type parses the configuration, so
+     * covariates, fingerprints, and steppers see the string exactly as
+     * if written inline (resolved-as-used). Baseline configuration and
+     * exploration deltas alike.
+     */
+    private static ServiceEntry withResolvedFileValues(ServiceEntry entry, ServiceType type,
+            org.mavai.punit.decl.internal.parser.Roots roots, Path baseDir) {
+        java.util.List<String> keys = type.fileValueKeys();
+        if (keys.isEmpty()) {
+            return entry;
+        }
+        Map<String, Object> configuration = resolvedFileValues(
+                entry.name(), entry.configuration(), keys, "configuration", roots, baseDir);
+        java.util.List<Map<String, Object>> explorations = new java.util.ArrayList<>();
+        int index = 0;
+        for (Map<String, Object> deltas : entry.explorations()) {
+            index++;
+            explorations.add(resolvedFileValues(
+                    entry.name(), deltas, keys, "exploration entry " + index, roots, baseDir));
+        }
+        return new ServiceEntry(
+                entry.name(), entry.type(), configuration, explorations, entry.optimizations());
+    }
+
+    private static Map<String, Object> resolvedFileValues(String name,
+            Map<String, Object> mapping, java.util.List<String> keys, String where,
+            org.mavai.punit.decl.internal.parser.Roots roots, Path baseDir) {
+        Map<String, Object> resolved = new LinkedHashMap<>(mapping);
+        for (String key : keys) {
+            Object value = resolved.get(key);
+            if (!(value instanceof Map<?, ?> reference)) {
+                continue;
+            }
+            String location = "service '" + name + "': " + where + ": `" + key + ":`";
+            if (reference.size() != 1
+                    || !(reference.get("file") instanceof String rawPath)
+                    || rawPath.isEmpty()) {
+                throw new ContractConfigurationException(location + " file form is "
+                        + "`{file: <path>}` with a non-empty path and no other key");
+            }
+            Path rooted = roots.resolve(rawPath, location);
+            Path file;
+            if (rooted != null) {
+                file = rooted;
+            } else if (baseDir == null) {
+                throw new ContractConfigurationException(location + ": a `{file:}` value "
+                        + "needs a services file loaded from disk to resolve '" + rawPath
+                        + "' relative to it");
+            } else {
+                file = baseDir.resolve(rawPath).normalize();
+            }
+            byte[] data;
+            try {
+                data = java.nio.file.Files.readAllBytes(file);
+            } catch (java.io.IOException error) {
+                throw new ContractConfigurationException(location + ": cannot read file "
+                        + file + ": " + error.getMessage(), error);
+            }
+            try {
+                resolved.put(key, java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                        .decode(java.nio.ByteBuffer.wrap(data)).toString());
+            } catch (java.nio.charset.CharacterCodingException error) {
+                throw new ContractConfigurationException(location + ": file " + file
+                        + " is not valid UTF-8 text: " + error, error);
+            }
+        }
+        return resolved;
     }
 
     /**

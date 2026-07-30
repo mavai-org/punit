@@ -31,6 +31,14 @@ public final class LanguageModelServiceType implements ServiceType {
     }
 
     @Override
+    public List<String> fileValueKeys() {
+        // The services format's first file-referencing position: the
+        // system prompt (a long tuned prompt lives in a file, not a
+        // YAML block scalar).
+        return List.of("system-prompt");
+    }
+
+    @Override
     public ConfiguredService configure(String serviceName, Map<String, Object> configuration) {
         LanguageModelParameters parameters =
                 ParameterValidation.validated(serviceName, configuration);

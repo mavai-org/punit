@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Named path anchors (declarative contracts and services).** The
+  optional top-level `roots:` block declares directory anchors once
+  per file — names to relative directories, resolved against the
+  declaring file — and every file-referencing position may reach
+  through one with `@<name>/…` instead of a `../../..` hop-chain (a
+  literal `@`-initial filename is spelled `./@…`; a reference that
+  climbs out of its anchor is refused). The `mavai.root.<name>` system
+  property, then the `MAVAI_ROOT_<NAME>` environment variable,
+  replaces a declared value entirely — the machine-local channel.
+  Roots are per-file namespaces. The services format gains its first
+  file-referencing position, `system-prompt: {file: <path>}`, resolved
+  to the plain string before the type sees the configuration —
+  baseline and exploration deltas alike — so identity, provenance,
+  and the steppers see the prompt exactly as if written inline.
+  Identity is untouched by construction: file inputs fingerprint by
+  content, never by path. Per the family amendment (2026-07-29;
+  conformance corpus mavai-R v0.10.5 — the gate's known-unmet ledger
+  is empty again).
+
 ### Changed
 
 - **Exploration output is laid out by swept keys.** Each EXPLORE run

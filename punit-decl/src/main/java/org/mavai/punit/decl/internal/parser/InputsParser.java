@@ -33,7 +33,8 @@ final class InputsParser {
 
     private InputsParser() {}
 
-    static List<InputDeclaration> parse(Object value, Map<String, String> views, Path baseDir) {
+    static List<InputDeclaration> parse(Object value, Map<String, String> views, Path baseDir,
+            Roots roots) {
         if (!(value instanceof List<?> entries) || entries.isEmpty()) {
             throw fail("`inputs:` must be a non-empty list");
         }
@@ -46,7 +47,7 @@ final class InputsParser {
                     && mapping.keySet().stream().map(String::valueOf).collect(Collectors.toSet())
                             .equals(Set.of("input", "expected"))) {
                 Map<String, Object> pair = requireMapping(entry, where);
-                Object inputValue = normalised(pair.get("input"), where, baseDir);
+                Object inputValue = normalised(pair.get("input"), where, baseDir, roots);
                 String expectedWhere = "expected for input '" + display(inputValue) + "'";
                 Object expected = pair.get("expected");
                 List<?> expectedEntries = expected instanceof Map<?, ?> single
@@ -66,7 +67,7 @@ final class InputsParser {
                 }
                 inputs.add(new InputDeclaration(inputValue, forms));
             } else {
-                inputs.add(InputDeclaration.bare(normalised(entry, where, baseDir)));
+                inputs.add(InputDeclaration.bare(normalised(entry, where, baseDir, roots)));
             }
         }
         return inputs;
@@ -77,12 +78,12 @@ final class InputsParser {
      * tuple), a file-sourced part, or a list of parts (an ordered
      * multimodal message; a single-part list is the bare part).
      */
-    private static Object normalised(Object entry, String where, Path baseDir) {
+    private static Object normalised(Object entry, String where, Path baseDir, Roots roots) {
         if (isScalar(entry)) {
             return entry;
         }
         if (entry instanceof Map<?, ?>) {
-            return part(requireMapping(entry, where), where, baseDir);
+            return part(requireMapping(entry, where), where, baseDir, roots);
         }
         if (entry instanceof List<?> list) {
             if (list.isEmpty()) {
@@ -94,7 +95,7 @@ final class InputsParser {
             if (list.stream().allMatch(item -> item instanceof Map<?, ?>)) {
                 List<Object> parts = new ArrayList<>();
                 for (Object item : list) {
-                    parts.add(part(requireMapping(item, where), where, baseDir));
+                    parts.add(part(requireMapping(item, where), where, baseDir, roots));
                 }
                 return parts.size() == 1 ? parts.get(0) : new MessageParts(parts);
             }
@@ -106,7 +107,8 @@ final class InputsParser {
     }
 
     /** A single-key input part mapping — text or a media reference. */
-    private static Object part(Map<String, Object> mapping, String where, Path baseDir) {
+    private static Object part(Map<String, Object> mapping, String where, Path baseDir,
+            Roots roots) {
         if (mapping.size() != 1) {
             String keys = mapping.keySet().stream().sorted().collect(Collectors.joining(", "));
             throw fail(where + ": an input part is a single-key mapping (" + PART_KEYS + "), got "
@@ -117,14 +119,14 @@ final class InputsParser {
         String key = single.getKey();
         Object value = single.getValue();
         if (key.equals("text")) {
-            return textPart(value, where, baseDir);
+            return textPart(value, where, baseDir, roots);
         }
         MediaKind kind = MediaKind.forKey(key);
         if (kind != null) {
             if (!(value instanceof String rawPath) || rawPath.isEmpty()) {
                 throw fail(where + ": `" + key + ":` is a file path string");
             }
-            Resolved resolved = resolveAndRead(rawPath, where, baseDir);
+            Resolved resolved = resolveAndRead(rawPath, where, baseDir, roots);
             return new FileInput(resolved.path(), kind, resolved.data());
         }
         throw fail(where + ": unknown input part `" + key + ":` — a part is one of " + PART_KEYS
@@ -132,7 +134,7 @@ final class InputsParser {
     }
 
     /** A {@code text:} part — an inline string, or {@code {file: <path>}} decoded as UTF-8 text. */
-    private static String textPart(Object value, String where, Path baseDir) {
+    private static String textPart(Object value, String where, Path baseDir, Roots roots) {
         if (value instanceof String text) {
             return text;
         }
@@ -140,7 +142,7 @@ final class InputsParser {
                 && reference.size() == 1
                 && reference.containsKey("file")
                 && reference.get("file") instanceof String rawPath) {
-            Resolved resolved = resolveAndRead(rawPath, where, baseDir);
+            Resolved resolved = resolveAndRead(rawPath, where, baseDir, roots);
             try {
                 return StandardCharsets.UTF_8.newDecoder()
                         .decode(java.nio.ByteBuffer.wrap(resolved.data()))
@@ -159,12 +161,19 @@ final class InputsParser {
      * and reads it — resolution is never against the working directory,
      * and a file that cannot be read is a load-time authoring error.
      */
-    private static Resolved resolveAndRead(String rawPath, String where, Path baseDir) {
-        if (baseDir == null) {
-            throw fail(where + ": a file-sourced input needs a contract loaded from disk to "
-                    + "resolve '" + rawPath + "' relative to it");
+    private static Resolved resolveAndRead(String rawPath, String where, Path baseDir,
+            Roots roots) {
+        Path rooted = roots.resolve(rawPath, where);
+        Path resolved;
+        if (rooted != null) {
+            resolved = rooted;
+        } else {
+            if (baseDir == null) {
+                throw fail(where + ": a file-sourced input needs a contract loaded from disk to "
+                        + "resolve '" + rawPath + "' relative to it");
+            }
+            resolved = baseDir.resolve(rawPath).normalize();
         }
-        Path resolved = baseDir.resolve(rawPath).normalize();
         try {
             return new Resolved(resolved, Files.readAllBytes(resolved));
         } catch (IOException error) {

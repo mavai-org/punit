@@ -40,7 +40,7 @@ public final class ContractParser {
 
     private static final Set<String> TOP_LEVEL_KEYS = Set.of(
             "format", "contract", "service", "transforms", "inputs", "criteria",
-            "intent", "confidence", "latency");
+            "intent", "confidence", "latency", "roots");
     private static final Set<String> RESERVED_TOP_LEVEL = Set.of("facets", "covariates", "budget");
 
     private ContractParser() {}
@@ -73,7 +73,12 @@ public final class ContractParser {
 
         Map<String, String> views = parseTransforms(data);
         Path baseDir = sourcePath != null ? sourcePath.getParent() : null;
-        List<InputDeclaration> inputs = InputsParser.parse(data.get("inputs"), views, baseDir);
+        // Named path anchors: resolve the block before inputs parse (the
+        // file-referencing positions consume it), refuse dead
+        // declarations after (usage coherence is a whole-file property).
+        Roots roots = Roots.parse(data.get("roots"), baseDir, "the contract file");
+        List<InputDeclaration> inputs = InputsParser.parse(data.get("inputs"), views, baseDir, roots);
+        roots.refuseDead();
 
         Object criteriaValue = data.get("criteria");
         if (!(criteriaValue instanceof List<?> entries) || entries.isEmpty()) {

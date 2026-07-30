@@ -14,7 +14,10 @@ import java.util.Map;
  * @param sourcePath the file the definitions were loaded from, or
  *     {@code null} when parsed from text
  */
-public record ServicesDeclaration(Map<String, ServiceEntry> services, Path sourcePath) {
+public record ServicesDeclaration(
+        Map<String, ServiceEntry> services,
+        Path sourcePath,
+        org.mavai.punit.decl.internal.parser.Roots roots) {
 
     /** The format identifier this declaration parses from. */
     public static final String FORMAT_IDENTIFIER = "mavai-services/1";
