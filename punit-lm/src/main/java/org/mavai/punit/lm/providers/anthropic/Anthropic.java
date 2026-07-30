@@ -117,10 +117,17 @@ public final class Anthropic {
      * block — thinking blocks precede it. The assistant text is the
      * first block of type {@code text}, wherever it sits.
      */
-    private static String extract(JsonNode payload) {
+    private static org.mavai.punit.lm.api.LmReply extract(JsonNode payload) {
         for (JsonNode block : payload.path("content")) {
             if ("text".equals(block.path("type").asText())) {
-                return block.path("text").asText();
+                JsonNode usage = payload.path("usage");
+                if (usage.path("input_tokens").isNumber()
+                        && usage.path("output_tokens").isNumber()) {
+                    return org.mavai.punit.lm.api.LmReply.of(block.path("text").asText(),
+                            usage.path("input_tokens").asLong(),
+                            usage.path("output_tokens").asLong());
+                }
+                return org.mavai.punit.lm.api.LmReply.of(block.path("text").asText());
             }
         }
         StringBuilder kinds = new StringBuilder();

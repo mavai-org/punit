@@ -27,7 +27,7 @@ import org.mavai.punit.lm.providers.Providers;
  * body not matching the vendor shape) is a failed sample on the
  * {@code Outcome} channel with its cause as the reason.
  */
-final class ConfiguredLanguageModel implements ConfiguredService {
+public final class ConfiguredLanguageModel implements ConfiguredService {
 
     private final LmProvider provider;
     private final LanguageModelParameters parameters;
@@ -62,6 +62,15 @@ final class ConfiguredLanguageModel implements ConfiguredService {
 
     @Override
     public Outcome<String> invoke(Object input) {
+        return exchange(input).map(org.mavai.punit.lm.api.LmReply::text);
+    }
+
+    /**
+     * The full exchange — the reply with its reported token usage.
+     * The declarative seam collapses this to text ({@link #invoke});
+     * the programmatic api surfaces it whole.
+     */
+    public Outcome<org.mavai.punit.lm.api.LmReply> exchange(Object input) {
         String body = Json.write(provider.body().build(parameters, model, input));
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(endpoint))
                 .POST(HttpRequest.BodyPublishers.ofString(body));
