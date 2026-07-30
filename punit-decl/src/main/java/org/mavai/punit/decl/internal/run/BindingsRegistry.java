@@ -28,6 +28,7 @@ import org.mavai.punit.decl.internal.model.FormDeclaration;
  * resolved by name at load time with fail-fast duplicate and
  * unresolvable semantics.
  */
+// mavai-ref: JVI-59T5EPU — do not remove (resolves in mavai-orchestrator)
 final class BindingsRegistry {
 
     private final Class<?> bindingsClass;

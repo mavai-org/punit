@@ -78,7 +78,7 @@ class RequirementCodeIsolationTest {
      * wire-format constants.
      */
     private static final Pattern REQUIREMENT_CODE = Pattern.compile(
-            "\\b(CR|CT|EX|LT|PT|RC|RP|SC|SN|TH|UC|XM|DG)\\d{2}\\b");
+            "\\b(CR|CT|EX|LT|PT|RC|RP|SC|SN|TH|UC|XM|DG|DA|LM)\\d{2}\\b");
 
     /**
      * Filenames that legitimately mention the prefixes - this test

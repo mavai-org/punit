@@ -19,6 +19,7 @@ import org.mavai.punit.decl.internal.model.SetOfDeclaration;
  * own selection library (the JSONPath/XPath engines are private to the
  * reader).
  */
+// mavai-ref: JVI-CP4XG45 — do not remove (resolves in mavai-orchestrator)
 public final class Materialiser {
 
     private Materialiser() {}

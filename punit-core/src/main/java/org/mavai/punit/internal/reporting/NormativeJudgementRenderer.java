@@ -32,6 +32,7 @@ import org.mavai.punit.statistics.NormativeJudgementEvaluator;
  * is computed upstream (statistics package) before the record
  * reaches this renderer.
  */
+// mavai-ref: JVI-51ASAR0 — do not remove (resolves in mavai-orchestrator)
 public final class NormativeJudgementRenderer {
 
     private NormativeJudgementRenderer() { }
