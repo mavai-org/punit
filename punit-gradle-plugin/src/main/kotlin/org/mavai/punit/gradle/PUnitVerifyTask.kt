@@ -1,6 +1,7 @@
 package org.mavai.punit.gradle
 
 import org.gradle.api.DefaultTask
+import org.gradle.work.DisableCachingByDefault
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
@@ -18,6 +19,7 @@ import java.net.URLClassLoader
  * Wired into the `check` lifecycle so `./gradlew check` catches
  * verdict failures even when individual sample failures are suppressed.
  */
+@DisableCachingByDefault(because = "Cheap validation over local files; the value is the console output")
 abstract class PUnitVerifyTask : DefaultTask() {
 
     @get:Internal

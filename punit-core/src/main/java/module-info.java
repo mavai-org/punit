@@ -36,6 +36,8 @@ module org.mavai.punit.core {
     //    consumers.
     exports org.mavai.punit.internal.engine.emit
         to org.mavai.punit.report;
+    exports org.mavai.punit.internal.engine.explore
+        to org.mavai.punit.decl;
     exports org.mavai.punit.internal.reporting
         to org.mavai.punit.report,
            org.mavai.punit.sentinel;
