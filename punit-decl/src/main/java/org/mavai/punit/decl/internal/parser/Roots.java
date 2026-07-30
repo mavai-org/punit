@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
  * by content, never by path — a root changes only the path resolution
  * ahead of the read.
  */
+// mavai-ref: JVI-W9D0VWD — do not remove (resolves in mavai-orchestrator)
 public final class Roots {
 
     private static final Pattern NAME = Pattern.compile("^[a-z][a-z0-9-]*$");
