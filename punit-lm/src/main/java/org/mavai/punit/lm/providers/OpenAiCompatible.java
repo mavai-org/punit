@@ -99,14 +99,24 @@ public final class OpenAiCompatible {
         return body;
     }
 
-    /** {@code choices[0].message.content}. */
-    public static String extract(JsonNode payload) {
+    /**
+     * {@code choices[0].message.content}, with the protocol's
+     * {@code usage.prompt_tokens}/{@code completion_tokens} beside it
+     * when the endpoint reports them (a gateway may not).
+     */
+    public static org.mavai.punit.lm.api.LmReply extract(JsonNode payload) {
         JsonNode content = payload.path("choices").path(0).path("message").path("content");
         if (!content.isTextual()) {
             throw new ServiceDeliveryException("service delivered a response with no text "
                     + "content (choices[0].message.content held "
                     + content.getNodeType().name().toLowerCase(Locale.ROOT) + ")");
         }
-        return content.asText();
+        JsonNode usage = payload.path("usage");
+        if (usage.path("prompt_tokens").isNumber() && usage.path("completion_tokens").isNumber()) {
+            return org.mavai.punit.lm.api.LmReply.of(content.asText(),
+                    usage.path("prompt_tokens").asLong(),
+                    usage.path("completion_tokens").asLong());
+        }
+        return org.mavai.punit.lm.api.LmReply.of(content.asText());
     }
 }

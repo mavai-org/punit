@@ -9,11 +9,15 @@
  * enables {@code type: language-model} — punit-core and punit-decl
  * carry no LLM assumptions.
  *
- * <p>Deliberately exports nothing: the module is declarative-only, its
- * adapters serve the declarative surface and expose no supported
- * programmatic API. Builder-style authors bring their own clients.
+ * <p>Exports exactly one package — {@code org.mavai.punit.lm.api},
+ * the thin programmatic surface (a configured {@code LanguageModel},
+ * its usage-bearing {@code LmReply}, and the config-map factory) over
+ * the same machinery the declarative route uses. Providers, wire
+ * shapes, and validation stay internal.
  */
 module org.mavai.punit.lm {
+
+    exports org.mavai.punit.lm.api;
 
     // ── Required modules ──────────────────────────────────────
     requires transitive org.mavai.punit.decl;

@@ -72,13 +72,19 @@ public final class Ollama {
         return body;
     }
 
-    private static String extract(JsonNode payload) {
+    private static org.mavai.punit.lm.api.LmReply extract(JsonNode payload) {
         JsonNode content = payload.path("message").path("content");
         if (!content.isTextual()) {
             throw new ServiceDeliveryException("service delivered a response with no text "
                     + "content (the ollama message.content field held "
                     + content.getNodeType().name().toLowerCase(Locale.ROOT) + ")");
         }
-        return content.asText();
+        if (payload.path("prompt_eval_count").isNumber()
+                && payload.path("eval_count").isNumber()) {
+            return org.mavai.punit.lm.api.LmReply.of(content.asText(),
+                    payload.path("prompt_eval_count").asLong(),
+                    payload.path("eval_count").asLong());
+        }
+        return org.mavai.punit.lm.api.LmReply.of(content.asText());
     }
 }

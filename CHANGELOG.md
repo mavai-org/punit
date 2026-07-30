@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The programmatic language-model client (`org.mavai.punit.lm.api`).**
+  punit-lm opens one exported package: `LanguageModels.configure(Map)`
+  takes the services file's `configuration:` block verbatim — the same
+  keys, the same validation catalogue and refusal messages, the same
+  strict capability gate and provider vetoes, the same
+  `mavai.llm.*`/`MAVAI_LLM_*` environment tier — and returns a
+  configured `LanguageModel`: one request per invocation, no retries,
+  4xx rejection = defect (throws), failed delivery = `Outcome`
+  failure. The reply is **usage-bearing**: `LmReply` carries the text
+  plus the vendor-reported token usage (input/output/total;
+  absent-tolerant), newly extracted from every adapter's wire shape —
+  a language model responds with more than a string, and token counts
+  feed cost reporting. Providers, wire shapes, and validation stay
+  internal; the module's exports pin moves from exports-nothing to
+  exports-exactly-`api`.
+
 ### Fixed
 
 - **Measure output names its persisted artefact.** A recording's

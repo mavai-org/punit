@@ -16,8 +16,10 @@ import org.junit.jupiter.api.Test;
  *
  * <p>punit-lm is a plug-in behind punit-decl's SPI: it depends on
  * punit-decl (and through it punit-core) only, is JUnit-free, adds no
- * statistics, and — declarative-only in v1 — exports nothing: its two
- * ServiceLoader registrations are the whole of its surface.
+ * statistics, and exports exactly one package — {@code lm.api}, the
+ * thin programmatic surface — beside its two ServiceLoader
+ * registrations. Providers, wire shapes, and validation stay
+ * unexported.
  */
 @DisplayName("punit-lm Architecture Rules")
 class LmArchitectureTest {
@@ -32,8 +34,8 @@ class LmArchitectureTest {
     }
 
     @Test
-    @DisplayName("the module exports nothing — the ServiceLoader registrations are the surface")
-    void moduleExportsNothing() throws Exception {
+    @DisplayName("the module exports exactly the api package — internals stay sealed")
+    void moduleExportsExactlyTheApiPackage() throws Exception {
         java.nio.file.Path classes = java.nio.file.Paths.get("build", "classes", "java", "main");
         var descriptor = java.lang.module.ModuleFinder.of(classes).findAll().stream()
                 .map(reference -> reference.descriptor())
@@ -41,9 +43,10 @@ class LmArchitectureTest {
                 .findFirst()
                 .orElseThrow();
         org.assertj.core.api.Assertions.assertThat(descriptor.exports())
-                .as("packages exported by org.mavai.punit.lm — declarative-only, no "
-                        + "programmatic adapter API")
-                .isEmpty();
+                .as("packages exported by org.mavai.punit.lm — the thin programmatic "
+                        + "surface and nothing else")
+                .extracting(java.lang.module.ModuleDescriptor.Exports::source)
+                .containsExactly("org.mavai.punit.lm.api");
         org.assertj.core.api.Assertions.assertThat(descriptor.provides())
                 .as("the two ServiceLoader registrations")
                 .hasSize(2);

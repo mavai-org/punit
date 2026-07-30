@@ -43,8 +43,9 @@ import org.mavai.punit.lm.LanguageModelParameters;
  *        {@code null} when the combination is fine; checked at load
  * @param body composes one request body from (parameters, model, input)
  * @param headers composes the request headers from the resolved credential
- * @param extract pulls the response text out of the vendor's reply
- *        shape; a delivered-but-odd shape throws {@link ServiceDeliveryException}
+ * @param extract pulls the reply — response text plus any reported
+ *        token usage — out of the vendor's reply shape; a
+ *        delivered-but-odd shape throws {@link ServiceDeliveryException}
  */
 public record LmProvider(
         String name,
@@ -59,7 +60,7 @@ public record LmProvider(
         Function<LanguageModelParameters, String> constraint,
         BodyBuilder body,
         Function<String, Map<String, String>> headers,
-        Function<JsonNode, String> extract) {
+        Function<JsonNode, org.mavai.punit.lm.api.LmReply> extract) {
 
     /**
      * The provider-neutral capability vocabulary an author may name in
