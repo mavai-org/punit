@@ -47,6 +47,7 @@ import org.w3c.dom.NodeList;
  * {@code json}/{@code yaml} views, XPath 1.0 for {@code xml} views), so
  * a malformed expression refuses at load, never mid-run.
  */
+// mavai-ref: JVI-RKBJ882 — do not remove (resolves in mavai-orchestrator)
 final class CriteriaCompiler {
 
     private final ContractDeclaration declaration;

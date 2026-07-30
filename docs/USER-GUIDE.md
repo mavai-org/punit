@@ -10,6 +10,7 @@
   - [Why probabilistic testing](#why-probabilistic-testing)
   - [What PUnit is](#what-punit-is)
   - [Quick start](#quick-start)
+- [The declarative surface — contracts as files](#the-declarative-surface--contracts-as-files)
 - [Part 1: The Service Contract — the shared correctness target](#part-1-the-service-contract--the-shared-correctness-target)
 - [Part 2: The lifecycle](#part-2-the-lifecycle)
 - [Part 3: Testing](#part-3-testing)
@@ -234,6 +235,117 @@ factors; when factors are in play, pass the factor instance explicitly
 via `testing(sampling, factors)`.
 
 That is the whole pattern. The rest of this guide unpacks it.
+
+---
+
+## The declarative surface — contracts as files
+
+The fastest way in. A probabilistic test can be a YAML file plus a
+one-line test method — no builder vocabulary, no statistics on the
+first contact. The file carries the *claim*; the invocation carries the
+*budget*; punit derives everything else.
+
+**The contract file** (`src/test/resources/<your test package>/greeting.yaml`):
+
+```yaml
+format: mavai-contract/1
+contract: greeting-service-is-polite
+service: greeting-service
+
+criteria:
+  - threshold: 0.95
+    contains: "hello"
+
+inputs:
+  - "Alice"
+  - "Bob"
+```
+
+**The test** — the method name kebab-cases and resolves against the
+file's `contract:` key (`PUnit.declared("explicit-name")` overrides):
+
+```java
+class GreetingTest {
+
+    @ProbabilisticTest
+    void greetingServiceIsPolite() {
+        PUnit.declared().assertPasses();
+    }
+}
+```
+
+**The binding** — the contract's `service:` resolves against a class
+named `MavaiBindings` in the same package (override with
+`.bindings(YourBindings.class)`):
+
+```java
+class MavaiBindings {
+
+    @Binding("greeting-service")
+    String greet(String name) {
+        return myClient.complete(name);   // your service call
+    }
+}
+```
+
+That is the whole newcomer path: the run sizes itself to the smallest
+sample count the declared threshold can support, samples the binding
+over the inputs, and judges the criterion with the same Wilson
+machinery as every other punit test.
+
+**Richer contracts.** The same file grows with the claim: named
+transforms (`transforms: {basket: json}`) and per-check subjects
+(`in:`/`path:` with RFC 9535 JSONPath), the full postcondition
+vocabulary (string, numeric, boolean, set forms, the graded
+`set-of:` claim), per-input `expected:` blocks, `optional:` checks
+under a criterion's `optional-slack:` budget, explicit `latency:`
+ceilings, and `roots:` named path anchors for file-sourced inputs.
+The format is shared with the whole mavai family — a contract file is
+portable between punit, baseltest, and feotest hosts.
+
+**Language-model services.** Declare configured services in a
+`mavai-services.yaml` beside the contracts — the built-in
+`language-model` type covers openai/anthropic/mistral/ollama/apertus,
+LiteLLM, and any OpenAI-compatible endpoint, with the system prompt
+inline or from a file (`system-prompt: {file: prompts/agent.md}`).
+Credentials live in the environment only.
+
+**The verbs.** The terminal carries the posture, mirroring the
+family's CLI verbs:
+
+```java
+PUnit.declared().assertPasses();               // test: judge the declared bars
+PUnit.declared().samples(1000).measure();      // measure: record + persist the baseline
+PUnit.declared().samplesPerConfig(5).explore(); // explore: one recording per grid point
+PUnit.declared().samplesPerIteration(5).optimize("tune"); // optimize: iterate a stepper
+```
+
+Two Gradle tasks close the authoring loop: `./gradlew mavaiCheck`
+validates every contract's load-time joins with zero samples (and
+names stale exploration artefacts, deleting nothing), and the
+per-contract system property `-Dpunit.samples.<contract-name>=N`
+sizes any run without touching code.
+
+### Graduation — when the file runs out
+
+The declarative surface is an on-ramp, not a silo. The gentlest steps
+stay in the file: `satisfies: <name>` names one registered `@Check`
+predicate in code, a registered `@Transform` does the same for views.
+When the claim outgrows the format — a computed expected value, a
+bespoke comparison, control flow — take authorship of the object you
+were already running:
+
+```
+./gradlew mavaiMaterialise
+```
+
+emits, under `build/punit/materialised/`, the equivalent
+`ServiceContract` class for each contract file — the same criteria,
+thresholds, and declaration order the file instantiated, as Java
+source that is now yours. Copy it into the test tree, fill the
+invocation stub and the TODOs, delete the YAML. Nothing round-trips:
+from that moment the class is the contract, and the rest of this
+guide is its manual.
 
 ---
 

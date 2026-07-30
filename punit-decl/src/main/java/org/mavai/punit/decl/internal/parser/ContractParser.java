@@ -33,6 +33,7 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  * time — before any invocation, so a configuration defect never costs
  * a sample.
  */
+// mavai-ref: JVI-E2WH9DE — do not remove (resolves in mavai-orchestrator)
 public final class ContractParser {
 
     static final String SEAM_POINTER = "reserved by the mavai contract format for a future "

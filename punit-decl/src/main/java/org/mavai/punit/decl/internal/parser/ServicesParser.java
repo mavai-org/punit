@@ -27,6 +27,7 @@ import org.mavai.punit.decl.internal.model.ServicesDeclaration;
  * registries exist; everything checkable from the document alone is
  * checked here.
  */
+// mavai-ref: JVI-GGCWP5H — do not remove (resolves in mavai-orchestrator)
 public final class ServicesParser {
 
     private static final Set<String> DEFINITION_KEYS =
