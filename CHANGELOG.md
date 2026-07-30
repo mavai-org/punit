@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Graduation: the `mavaiMaterialise` task.** For each declared
+  contract, emits the equivalent contract as Java source the developer
+  owns — the same criteria, thresholds, and declaration order,
+  expressed against punit's authoring surface, with a stub invocation
+  (graduation transfers invocation ownership) and TODOs where the
+  reader's private machinery — selection engines, registered
+  predicates, views — becomes the developer's own code. One-shot
+  scaffolding under `build/punit/materialised/`: nothing round-trips.
+  The emitted source compiles cleanly against punit-core (asserted by
+  test). Entry point `ContractMaterialise.run`.
+
 - **The `mavaiCheck` task — zero-sample contract validation.** The
   authoring loop's compile step: `./gradlew mavaiCheck` scans the test
   resource roots for `mavai-contract/1` files and validates every
