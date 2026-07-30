@@ -53,6 +53,9 @@ class DeclArchitectureTest {
                 .orShould().haveSimpleName("Stepper")
                 .orShould().haveSimpleName("Scorer")
                 .orShould().haveSimpleName("ContractConfigurationException")
+                // The check verb's entry point — deliberately public:
+                // the mavaiCheck Gradle task invokes it reflectively.
+                .orShould().haveSimpleName("ContractCheck")
                 .because("everything beyond the author surface is internal enablement — "
                         + "new public types belong under internal.* unless they are "
                         + "deliberately part of the authoring API");

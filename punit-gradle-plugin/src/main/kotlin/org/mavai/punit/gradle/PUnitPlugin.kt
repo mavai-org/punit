@@ -90,6 +90,7 @@ class PUnitPlugin : Plugin<Project> {
             registerExplorationReportTask(project, extension, reportConfig)
             registerOptimizationReportTask(project, extension, reportConfig)
             registerPUnitVerifyTask(project, reportConfig)
+            registerMavaiCheckTask(project, extension)
         }
     }
 
@@ -508,6 +509,26 @@ class PUnitPlugin : Plugin<Project> {
             optimizationFiles.from(rootPath.map { project.fileTree(it) { include("**/*.yaml") } })
             htmlDir.set(project.layout.buildDirectory.dir("reports/punit-optimizations/html"))
             reportClasspath.from(reportConfig)
+        }
+    }
+
+    private fun registerMavaiCheckTask(
+        project: Project,
+        extension: PUnitExperimentExtension
+    ) {
+        project.tasks.register("mavaiCheck", PUnitCheckTask::class.java).configure {
+            description = "Validates every declared contract's load-time joins with zero samples"
+            group = "verification"
+            val test = project.extensions
+                .getByType(JavaPluginExtension::class.java)
+                .sourceSets.getByName("test")
+            contractFiles.from(test.resources.srcDirs.map { dir ->
+                project.fileTree(dir) { include("**/*.yaml") }
+            })
+            resourceRoots.set(test.resources.srcDirs.map { it.absolutePath })
+            explorationsRootPath.set(extension.explorationsDir)
+            checkClasspath.from(test.runtimeClasspath)
+            dependsOn(project.tasks.named("testClasses"))
         }
     }
 

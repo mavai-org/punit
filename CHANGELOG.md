@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The `mavaiCheck` task — zero-sample contract validation.** The
+  authoring loop's compile step: `./gradlew mavaiCheck` scans the test
+  resource roots for `mavai-contract/1` files and validates every
+  load-time join — parse, views, selection expressions, criteria, the
+  service definition's strict configuration, the per-input admission
+  gate, the exploration grid, the declared optimizations — without
+  invoking anything, resolving each contract's conventional
+  `MavaiBindings` class when present. One line per validated fact; the
+  first failing join fails the task with the same refusal a run would
+  give. Includes the **stale-artefact advisory**: exploration artefacts
+  no current grid point writes are named (with a multi-vintage note),
+  never deleted. The entry point is `ContractCheck.run`, public for
+  programmatic use.
+
 - **Named path anchors (declarative contracts and services).** The
   optional top-level `roots:` block declares directory anchors once
   per file — names to relative directories, resolved against the

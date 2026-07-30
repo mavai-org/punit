@@ -66,6 +66,17 @@ class PUnitPluginFunctionalTest {
         }
 
         @Test
+        @DisplayName("mavaiCheck is registered and reports an empty contract scan")
+        fun mavaiCheckRegistered() {
+            buildFile.writeText(buildFileWithPlugin())
+
+            val result = runner("mavaiCheck").build()
+
+            assertTrue(result.output.contains(
+                "no mavai-contract/1 files under the test resource roots"))
+        }
+
+        @Test
         @DisplayName("experiment and exp tasks are registered")
         fun experimentTasksRegistered() {
             buildFile.writeText(buildFileWithPlugin())

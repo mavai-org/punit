@@ -1,6 +1,7 @@
 package org.mavai.punit.gradle
 
 import org.gradle.api.DefaultTask
+import org.gradle.work.DisableCachingByDefault
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.*
@@ -12,6 +13,7 @@ import java.net.URLClassLoader
  * Uses classpath isolation via [URLClassLoader] to invoke [ReportGenerator]
  * from the punit-report module without a compile-time dependency.
  */
+@DisableCachingByDefault(because = "Cheap validation over local files; the value is the console output")
 abstract class PUnitReportTask : DefaultTask() {
 
     @get:InputDirectory
