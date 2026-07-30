@@ -207,6 +207,28 @@ class DeclaredRunTest {
         }
 
         @Test
+        @DisplayName("measure output names the artefact and renders no composite verdict")
+        void measureOutputIsHonest(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            java.io.PrintStream stdout = System.out;
+            var captured = new java.io.ByteArrayOutputStream();
+            try {
+                System.setOut(new java.io.PrintStream(captured));
+                PUnit.declared("greeting-service-is-polite").samples(40).measure();
+            } finally {
+                System.setOut(stdout);
+                System.clearProperty("punit.baseline.dir");
+            }
+            String output = captured.toString();
+            // §-honest-output shape: a recording names its persisted
+            // artefact, and no composite verdict is rendered — declared
+            // bars are noted against the evidence, never judged.
+            org.assertj.core.api.Assertions.assertThat(output)
+                    .contains("[PUNIT] baseline recorded: ")
+                    .doesNotContain("VERDICT:");
+        }
+
+        @Test
         @DisplayName("a measure run records and always persists the baseline artefact")
         void measurePersists(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
                 throws java.io.IOException {

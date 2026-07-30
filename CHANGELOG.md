@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Measure output names its persisted artefact.** A recording's
+  product is the baseline, not a verdict — every MEASURE run now
+  prints `baseline recorded: <path>` as the artefact lands, closing an
+  honest-output gap (the shape rule: a recording is labelled, renders
+  no composite verdict, and names what it persisted — the first two
+  already held, pinned by a new regression test alongside the fix).
+
 ### Added
 
 - **Graduation: the `mavaiMaterialise` task.** For each declared
