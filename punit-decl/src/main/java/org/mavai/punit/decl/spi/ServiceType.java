@@ -20,6 +20,18 @@ public interface ServiceType {
     String name();
 
     /**
+     * Configuration keys whose value may be the {@code {file: <path>}}
+     * form — resolved by the services loader (root references included,
+     * the file read once at load, decoded UTF-8) before this type sees
+     * the configuration, so identity, provenance, and the steppers see
+     * the plain resolved string (resolved-as-used). Empty by default:
+     * a type opts its keys in.
+     */
+    default java.util.List<String> fileValueKeys() {
+        return java.util.List.of();
+    }
+
+    /**
      * Validates a definition's complete {@code configuration:} record
      * against this type's schema and returns the configured, invocable
      * service. Runs at contract-load time — a misfit throws (an

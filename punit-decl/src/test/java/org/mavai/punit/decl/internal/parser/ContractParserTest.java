@@ -1137,6 +1137,124 @@ class ContractParserTest {
     }
 
     @Nested
+    @DisplayName("named path anchors")
+    class NamedPathAnchors {
+
+        private Path writeTree(Path directory) throws IOException {
+            Files.createDirectories(directory.resolve("shared"));
+            Files.writeString(directory.resolve("shared/note.txt"), "the note");
+            Path contract = directory.resolve("contract.yaml");
+            Files.writeString(contract, """
+                    format: mavai-contract/1
+                    contract: reads-the-corpus
+                    service: reader
+                    roots:
+                      corpus: ./shared
+                    criteria:
+                      - threshold: 0.9
+                        matches: '\\w'
+                    inputs:
+                      - - text: { file: "@corpus/note.txt" }
+                    """);
+            return contract;
+        }
+
+        @Test
+        @DisplayName("a root reference reads through the anchor")
+        void rootReferenceReads(@TempDir Path directory) throws IOException {
+            ContractDeclaration declaration = ContractParser.parse(
+                    Files.readString(writeTree(directory)), directory.resolve("contract.yaml"));
+            assertThat(declaration.inputs().get(0).value()).isEqualTo("the note");
+        }
+
+        @Test
+        @DisplayName("a literal @-filename is spelled ./@")
+        void literalAtFilename(@TempDir Path directory) throws IOException {
+            Files.writeString(directory.resolve("@note.txt"), "at-note");
+            Path contract = directory.resolve("contract.yaml");
+            Files.writeString(contract, """
+                    format: mavai-contract/1
+                    contract: c
+                    service: s
+                    criteria:
+                      - threshold: 0.9
+                        matches: '\\w'
+                    inputs:
+                      - - text: { file: "./@note.txt" }
+                    """);
+            ContractDeclaration declaration =
+                    ContractParser.parse(Files.readString(contract), contract);
+            assertThat(declaration.inputs().get(0).value()).isEqualTo("at-note");
+        }
+
+        @Test
+        @DisplayName("a reference climbing out of its root is refused")
+        void escapeRefused(@TempDir Path directory) throws IOException {
+            Path contract = writeTree(directory);
+            Files.writeString(directory.resolve("secret.txt"), "outside");
+            String text = Files.readString(contract)
+                    .replace("@corpus/note.txt", "@corpus/../secret.txt");
+            assertThatThrownBy(() -> ContractParser.parse(text, contract))
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("escapes its root");
+        }
+
+        @Test
+        @DisplayName("the property override wins and must resolve to a directory")
+        void overridePrecedence(@TempDir Path directory) throws IOException {
+            Path contract = writeTree(directory);
+            Path copy = directory.resolve("detached");
+            Files.createDirectories(copy);
+            Files.writeString(copy.resolve("note.txt"), "the note");
+            System.setProperty("mavai.root.corpus", copy.toString());
+            try {
+                ContractDeclaration declaration =
+                        ContractParser.parse(Files.readString(contract), contract);
+                // Identity is content-borne: the override points at a copy,
+                // and the input value is byte-identical.
+                assertThat(declaration.inputs().get(0).value()).isEqualTo("the note");
+
+                System.setProperty("mavai.root.corpus",
+                        directory.resolve("missing").toString());
+                assertThatThrownBy(() -> ContractParser.parse(Files.readString(contract), contract))
+                        .isInstanceOf(ContractConfigurationException.class)
+                        .hasMessageContaining("not an existing directory")
+                        .hasMessageContaining("MAVAI_ROOT_CORPUS");
+            } finally {
+                System.clearProperty("mavai.root.corpus");
+            }
+        }
+
+        @Test
+        @DisplayName("an ambient override naming no declared root is ignored")
+        void ambientOverrideIgnored(@TempDir Path directory) throws IOException {
+            System.setProperty("mavai.root.elsewhere", "/nowhere/at/all");
+            try {
+                ContractDeclaration declaration = ContractParser.parse(
+                        Files.readString(writeTree(directory)),
+                        directory.resolve("contract.yaml"));
+                assertThat(declaration.inputs().get(0).value()).isEqualTo("the note");
+            } finally {
+                System.clearProperty("mavai.root.elsewhere");
+            }
+        }
+
+        @Test
+        @DisplayName("a relocated contract and corpus read identical content")
+        void relocationPreservesContent(@TempDir Path first, @TempDir Path second)
+                throws IOException {
+            ContractDeclaration a = ContractParser.parse(
+                    Files.readString(writeTree(first)), first.resolve("contract.yaml"));
+            ContractDeclaration b = ContractParser.parse(
+                    Files.readString(writeTree(second)), second.resolve("contract.yaml"));
+            // A file-sourced input contributes its content, never its path
+            // — the two locations produce byte-identical input values, so
+            // every content-derived identity downstream agrees.
+            assertThat(a.inputs().get(0).value()).isEqualTo(b.inputs().get(0).value());
+        }
+    }
+
+    @Nested
     @DisplayName("transform refusals")
     class TransformRefusals {
 
