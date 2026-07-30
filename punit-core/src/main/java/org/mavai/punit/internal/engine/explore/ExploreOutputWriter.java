@@ -228,6 +228,14 @@ public final class ExploreOutputWriter {
         block.put("totalTimeMs", totalMs);
         int total = summary.total();
         block.put("avgTimePerSampleMs", total == 0 ? 0L : totalMs / total);
+        // Token totals when the run tracked any (the schema's
+        // informational cost fields; absent when untracked, so
+        // token-less runs stay shape-stable).
+        long tokens = summary.tokensConsumed();
+        if (tokens > 0) {
+            block.put("totalTokens", tokens);
+            block.put("avgTokensPerSample", total == 0 ? 0L : tokens / total);
+        }
         return block;
     }
 

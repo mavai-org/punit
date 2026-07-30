@@ -28,6 +28,19 @@ public interface ConfiguredService {
     }
 
     /**
+     * Invokes the service once, reporting any known per-invocation
+     * token cost to the sink before returning — the seam punit's cost
+     * accounting listens on. The default ignores the sink: most
+     * services have no token notion, and the plain {@link #invoke}
+     * stays their whole obligation. A token-aware service (the
+     * language-model type) overrides this and reports its exchange's
+     * total.
+     */
+    default Outcome<String> invoke(Object input, java.util.function.LongConsumer tokenSink) {
+        return invoke(input);
+    }
+
+    /**
      * Admits one declared input before any sample runs: the load-time
      * gate for inputs this configured service cannot carry (punit-lm's
      * media capability gate is the first implementation — an undeclared

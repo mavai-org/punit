@@ -92,6 +92,30 @@ class LanguageModelsApiTest {
     }
 
     @Test
+    @DisplayName("the declarative seam reports tokens through the sink")
+    void declarativeSeamReportsTokens() throws Exception {
+        try (StubLlm stub = StubLlm.start()) {
+            System.setProperty("mavai.llm.endpoint", stub.endpoint());
+            stub.respond(200, """
+                    {"choices": [{"message": {"content": "forty-two"}}],
+                     "usage": {"prompt_tokens": 12, "completion_tokens": 3}}
+                    """);
+            var configured = new LanguageModelServiceType().configure("language-model", Map.of(
+                    "system-prompt", "You answer briefly.",
+                    "model", "conformance-model"));
+            java.util.concurrent.atomic.AtomicLong sunk = new java.util.concurrent.atomic.AtomicLong();
+            try {
+                Outcome<String> outcome = configured.invoke("six times seven?", sunk::addAndGet);
+                assertThat(outcome).isInstanceOf(Outcome.Ok.class);
+            } finally {
+                System.clearProperty("mavai.llm.endpoint");
+            }
+            // The exchange's total — what punit's cost accounting sums.
+            assertThat(sunk.get()).isEqualTo(15);
+        }
+    }
+
+    @Test
     @DisplayName("a failed delivery is an Outcome failure, never a throw")
     void failedDeliveryIsAnOutcome() throws Exception {
         try (StubLlm stub = StubLlm.start()) {

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Token usage reaches the artefact cost blocks.** The declarative
+  path now listens for token cost: `ConfiguredService` gains an
+  additive token-sink invocation default, the language-model type
+  reports each exchange's total through it, and the declarative
+  contract adapters feed punit's existing token tracking — so the
+  explore and optimize artefacts state `totalTokens`/
+  `avgTokensPerSample` in their cost blocks whenever a run tracked
+  tokens (absent when untracked; token-less artefacts stay
+  shape-stable). The shared `mavai` renderer's cost cells show
+  "ms · tok" with no renderer change — the interchange fields
+  existed all along, waiting to be fed.
+
 - **The programmatic language-model client (`org.mavai.punit.lm.api`).**
   punit-lm opens one exported package: `LanguageModels.configure(Map)`
   takes the services file's `configuration:` block verbatim — the same

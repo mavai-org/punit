@@ -65,6 +65,15 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         return exchange(input).map(org.mavai.punit.lm.api.LmReply::text);
     }
 
+    @Override
+    public Outcome<String> invoke(Object input, java.util.function.LongConsumer tokenSink) {
+        Outcome<org.mavai.punit.lm.api.LmReply> reply = exchange(input);
+        if (reply instanceof Outcome.Ok<org.mavai.punit.lm.api.LmReply> ok) {
+            ok.value().usage().ifPresent(usage -> tokenSink.accept(usage.totalTokens()));
+        }
+        return reply.map(org.mavai.punit.lm.api.LmReply::text);
+    }
+
     /**
      * The full exchange — the reply with its reported token usage.
      * The declarative seam collapses this to text ({@link #invoke});

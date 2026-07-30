@@ -388,7 +388,7 @@ public final class DeclaredRun implements Declared {
             @Override
             public Outcome<String> invoke(Object input, TokenTracker tracker) {
                 currentInput.set(input);
-                return point.invoke(input);
+                return point.invoke(input, tracker::recordTokens);
             }
 
             @Override
@@ -489,7 +489,8 @@ public final class DeclaredRun implements Declared {
         BindingsRegistry registry = BindingsRegistry.of(resolveBindingsClass());
         ServicesResolver services = ServicesResolver.resolve(
                 caller, servicesFile, registry, ServicesResolver.Posture.STRICT);
-        org.mavai.punit.decl.spi.ConfiguredService defined = services.lookup(declaration.service());
+        final org.mavai.punit.decl.spi.ConfiguredService defined =
+                services.lookup(declaration.service());
         final BindingsRegistry.Invoker invoker;
         Map<String, String> configurationCovariates;
         if (defined != null) {
@@ -539,6 +540,12 @@ public final class DeclaredRun implements Declared {
             @Override
             public Outcome<String> invoke(Object input, TokenTracker tracker) {
                 currentInput.set(input);
+                // A configured service keeps its token channel — the
+                // cost accounting listens through the sink; a bare code
+                // binding has no token notion.
+                if (defined != null) {
+                    return defined.invoke(input, tracker::recordTokens);
+                }
                 return invoker.invoke(input);
             }
 
