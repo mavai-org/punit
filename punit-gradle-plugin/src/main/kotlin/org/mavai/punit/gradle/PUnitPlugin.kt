@@ -91,6 +91,7 @@ class PUnitPlugin : Plugin<Project> {
             registerOptimizationReportTask(project, extension, reportConfig)
             registerPUnitVerifyTask(project, reportConfig)
             registerMavaiCheckTask(project, extension)
+            registerMavaiMaterialiseTask(project)
         }
     }
 
@@ -528,6 +529,22 @@ class PUnitPlugin : Plugin<Project> {
             resourceRoots.set(test.resources.srcDirs.map { it.absolutePath })
             explorationsRootPath.set(extension.explorationsDir)
             checkClasspath.from(test.runtimeClasspath)
+            dependsOn(project.tasks.named("testClasses"))
+        }
+    }
+
+    private fun registerMavaiMaterialiseTask(project: Project) {
+        project.tasks.register("mavaiMaterialise", PUnitMaterialiseTask::class.java).configure {
+            description = "Emits each declared contract as Java source the developer owns (graduation)"
+            group = "verification"
+            val test = project.extensions
+                .getByType(JavaPluginExtension::class.java)
+                .sourceSets.getByName("test")
+            contractFiles.from(test.resources.srcDirs.map { dir ->
+                project.fileTree(dir) { include("**/*.yaml") }
+            })
+            outputDir.set(project.layout.buildDirectory.dir("punit/materialised"))
+            materialiseClasspath.from(test.runtimeClasspath)
             dependsOn(project.tasks.named("testClasses"))
         }
     }
