@@ -608,9 +608,13 @@ public final class DeclaredRun implements Declared {
         try {
             return Class.forName(conventional, false, caller.getClassLoader());
         } catch (ClassNotFoundException absent) {
-            throw new ContractConfigurationException(
-                    "no bindings class: define " + conventional + " (the conventional name) or "
-                            + "pass one explicitly with .bindings(YourBindings.class)", absent);
+            // The conventional name is a convention, not a requirement: a
+            // contract whose service lives entirely in the services file
+            // needs no bindings class at all. Anything that actually
+            // needs a code registration — a binding, a @Check, a
+            // registered transform — refuses downstream naming the
+            // registration it misses.
+            return ContractChecker.NoBindings.class;
         }
     }
 }
