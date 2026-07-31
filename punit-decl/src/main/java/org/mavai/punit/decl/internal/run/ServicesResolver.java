@@ -50,7 +50,11 @@ final class ServicesResolver {
     static ServicesResolver resolve(
             Class<?> caller, Path explicitFile, BindingsRegistry registry, Posture posture) {
         ServicesResolver resolver = new ServicesResolver(posture);
-        for (ServiceType builtIn : ServiceLoader.load(ServiceType.class)) {
+        // The defining classloader, not the thread-context one: under a
+        // classloader-isolated Gradle task (mavaiCheck) the context
+        // loader is the build's and would discover nothing.
+        for (ServiceType builtIn
+                : ServiceLoader.load(ServiceType.class, ServiceType.class.getClassLoader())) {
             resolver.types.put(builtIn.name(), builtIn);
         }
         for (Map.Entry<String, java.lang.reflect.Method> factory : registry.factories().entrySet()) {
