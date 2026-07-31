@@ -303,7 +303,9 @@ public final class DeclaredRun implements Declared {
         Map<String, org.mavai.punit.decl.spi.StepperProvider> builtIns =
                 new java.util.LinkedHashMap<>();
         for (org.mavai.punit.decl.spi.StepperProvider provider
-                : java.util.ServiceLoader.load(org.mavai.punit.decl.spi.StepperProvider.class)) {
+                : java.util.ServiceLoader.load(
+                        org.mavai.punit.decl.spi.StepperProvider.class,
+                        org.mavai.punit.decl.spi.StepperProvider.class.getClassLoader())) {
             builtIns.put(provider.name(), provider);
         }
         for (String name : builtIns.keySet()) {
