@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mavai-org/mavai-R/schema/mavai-explore-1.schema.json",
   "title": "mavai exploration interchange artefact",
-  "description": "One document per explored experiment configuration: the configuration's identity and the descriptive results its run observed. Framework-neutral: emitted by any mavai-family framework, consumed by shared tooling such as the report renderer. This schema is the machine-checkable structural projection of the canonical format specification; it validates the parsed data model of the YAML document. Statistics are stated by the emitter (percentiles value-or-absent under the emitter's own minimum-sample gate) — consumers never derive them. Additive evolution: emitters may add fields anywhere; consumers ignore what they do not know.",
+  "description": "One document per explored experiment configuration: the configuration's identity and the descriptive results its run observed. Framework-neutral: emitted by any mavai-family framework, consumed by shared tooling such as the report renderer. This schema is the machine-checkable structural projection of the canonical format specification; it validates the parsed data model of the YAML document. Statistics are stated by the emitter (percentiles value-or-absent under the emitter's own minimum-sample gate) \u2014 consumers never derive them. Additive evolution: emitters may add fields anywhere; consumers ignore what they do not know.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -32,6 +32,11 @@
       "minLength": 1,
       "description": "The configuration's display name. Cross-document identity for consumers; filenames are never parsed."
     },
+    "baseConfiguration": {
+      "type": "boolean",
+      "const": true,
+      "description": "Marks this document's configuration as the one the sweep was built around \u2014 the base whose factor values the other configurations override. Stated by the emitter, which holds the authored fact; a consumer never infers it from a balanced design, where every configuration is structurally interchangeable. Additive and stated only on the base: at most one document per service contract carries it, and its absence means unstated, never 'not the base'. Named for the Experiment Configuration it marks \u2014 'baseline' belongs to the Empirical Baseline and is deliberately not reused here."
+    },
     "generatedAt": {
       "type": "string",
       "format": "date-time",
@@ -41,16 +46,30 @@
       "type": "object",
       "description": "The configuration's factor values, keyed by factor name. May be absent for a single-configuration exploration with no varied factors.",
       "additionalProperties": {
-        "type": ["string", "number", "boolean"]
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
       }
     },
     "execution": {
       "type": "object",
-      "required": ["samplesPlanned", "samplesExecuted", "terminationReason"],
+      "required": [
+        "samplesPlanned",
+        "samplesExecuted",
+        "terminationReason"
+      ],
       "additionalProperties": true,
       "properties": {
-        "samplesPlanned": { "type": "integer", "minimum": 0 },
-        "samplesExecuted": { "type": "integer", "minimum": 0 },
+        "samplesPlanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "samplesExecuted": {
+          "type": "integer",
+          "minimum": 0
+        },
         "terminationReason": {
           "type": "string",
           "minLength": 1,
@@ -58,9 +77,15 @@
         }
       }
     },
-    "statistics": { "$ref": "#/$defs/statistics" },
-    "cost": { "$ref": "#/$defs/cost" },
-    "latency": { "$ref": "#/$defs/latency" },
+    "statistics": {
+      "$ref": "#/$defs/statistics"
+    },
+    "cost": {
+      "$ref": "#/$defs/cost"
+    },
+    "latency": {
+      "$ref": "#/$defs/latency"
+    },
     "resultProjection": {
       "description": "Informational per-sample detail, emitter-formatted. Consumers must not require it."
     }
@@ -68,7 +93,12 @@
   "$defs": {
     "statistics": {
       "type": "object",
-      "required": ["observed", "successes", "failures", "criteria"],
+      "required": [
+        "observed",
+        "successes",
+        "failures",
+        "criteria"
+      ],
       "additionalProperties": true,
       "properties": {
         "observed": {
@@ -77,38 +107,193 @@
           "maximum": 1,
           "description": "Overall observed pass rate (successes / executed)."
         },
-        "successes": { "type": "integer", "minimum": 0 },
-        "failures": { "type": "integer", "minimum": 0 },
-        "failureDistribution": { "$ref": "#/$defs/failureDistribution" },
+        "successes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failureDistribution": {
+          "$ref": "#/$defs/failureDistribution"
+        },
         "criteria": {
           "type": "object",
           "minProperties": 1,
-          "description": "One entry per declared criterion, keyed by criterion name — including the single-criterion case.",
-          "additionalProperties": { "$ref": "#/$defs/criterion" }
+          "description": "One entry per declared criterion, keyed by criterion name \u2014 including the single-criterion case.",
+          "additionalProperties": {
+            "$ref": "#/$defs/criterion"
+          }
         }
       },
       "if": {
-        "properties": { "failures": { "exclusiveMinimum": 0 } },
-        "required": ["failures"]
+        "properties": {
+          "failures": {
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "failures"
+        ]
       },
       "then": {
-        "required": ["failureDistribution"]
+        "required": [
+          "failureDistribution"
+        ]
       }
     },
     "criterion": {
       "type": "object",
-      "required": ["observedPassRate", "pass", "fail"],
+      "required": [
+        "observedPassRate",
+        "pass",
+        "fail"
+      ],
       "additionalProperties": true,
       "properties": {
-        "observedPassRate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "pass": { "type": "integer", "minimum": 0 },
-        "fail": { "type": "integer", "minimum": 0 },
-        "failureDistribution": { "$ref": "#/$defs/failureDistribution" }
+        "observedPassRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failureDistribution": {
+          "$ref": "#/$defs/failureDistribution"
+        },
+        "standings": {
+          "$ref": "#/$defs/standings"
+        }
+      }
+    },
+    "standings": {
+      "type": "object",
+      "description": "The criterion's descriptive postcondition standings (amendment 2026-07-28): the per-(input, check) tally of the per-trial check outcomes the evaluator computes. Binding when present, additive \u2014 absent in pre-amendment emissions; consumers render absence as absence and never reconstruct standings from resultProjection. Counts and the observed fraction only \u2014 never a confidence interval, a threshold, or per-check verdict vocabulary; the criterion remains the family's only judged unit.",
+      "required": [
+        "rows"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "optionalSlack": {
+          "type": "string",
+          "pattern": "^[0-9]+%?$",
+          "description": "The criterion's declared optional-check failure budget, verbatim as authored: digits for a count ('2'), digits + % for a percentage ('20%'). Absent iff the contract declares none \u2014 absence is distinguishable from '0', the explicit budget of zero."
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One row per (input, check), in the emitter's stated order.",
+          "items": {
+            "type": "object",
+            "required": [
+              "inputIndex",
+              "check",
+              "optional",
+              "passed",
+              "failed",
+              "skipped",
+              "observedFraction"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "inputIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Zero-based structural input reference, as in failureDistribution."
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The check's bounded identity, as the contract declares it \u2014 never embedding input or response content."
+              },
+              "optional": {
+                "type": "boolean",
+                "description": "Whether the contract marks this check optional \u2014 stated explicitly for every row."
+              },
+              "passed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trials on which the check was not judged because an earlier transform failed."
+              },
+              "observedFraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "passed / (passed + failed + skipped), as stated by the emitter."
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The structural address the check judges, as declared (amendment 2026-07-28, structured rows). Present iff path-addressed; the by-path grouping key \u2014 never derived from check."
+              },
+              "form": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The comparison form's domain name, as the contract format spells it."
+              },
+              "expected": {
+                "type": "string",
+                "maxLength": 256,
+                "description": "Bounded excerpt of the declared operand, for display \u2014 never an identity."
+              },
+              "observed": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Obtained-value exemplars, failing exemplars first; distinct excerpts capped by the emitter, counts summing to at most the row's trials.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "excerpt",
+                    "count",
+                    "held"
+                  ],
+                  "additionalProperties": true,
+                  "properties": {
+                    "excerpt": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "held": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "elided": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trials whose obtained values were not exemplified."
+              }
+            }
+          }
+        }
       }
     },
     "failureDistribution": {
       "type": "array",
-      "description": "A sequence of failure entries aggregated over the run (amendment 2026-07-17: the earlier check-name-keyed mapping is withdrawn — no mapping key may derive from input or response content, per the interchange area's key discipline). Each failed trial is attributed to its first failing condition; the entries' counts sum to the enclosing failures total.",
+      "description": "A sequence of failure entries aggregated over the run (amendment 2026-07-17: the earlier check-name-keyed mapping is withdrawn \u2014 no mapping key may derive from input or response content, per the interchange area's key discipline). Each failed trial is attributed to its first failing condition; the entries' counts sum to the enclosing failures total.",
       "items": {
         "type": "object",
         "required": [
@@ -121,7 +306,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 256,
-            "description": "The violating condition's bounded identity, as the contract declares it — never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex."
+            "description": "The violating condition's bounded identity, as the contract declares it \u2014 never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex."
           },
           "count": {
             "type": "integer",
@@ -131,12 +316,12 @@
           "inputIndex": {
             "type": "integer",
             "minimum": 0,
-            "description": "Zero-based index into the inputs list, present when the condition is per-input — the structural input reference; the input value itself is never serialised as identity."
+            "description": "Zero-based index into the inputs list, present when the condition is per-input \u2014 the structural input reference; the input value itself is never serialised as identity."
           },
           "inputExcerpt": {
             "type": "string",
             "maxLength": 256,
-            "description": "Informational bounded excerpt of the driving input, for human orientation only — consumers correlate via inputIndex."
+            "description": "Informational bounded excerpt of the driving input, for human orientation only \u2014 consumers correlate via inputIndex."
           }
         }
       }
@@ -146,28 +331,65 @@
       "description": "Informational wall-clock and token totals/averages.",
       "additionalProperties": true,
       "properties": {
-        "totalTimeMs": { "type": "integer", "minimum": 0 },
-        "avgTimePerSampleMs": { "type": "integer", "minimum": 0 },
-        "totalTokens": { "type": "integer", "minimum": 0 },
-        "avgTokensPerSample": { "type": "integer", "minimum": 0 }
+        "totalTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "avgTimePerSampleMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "avgTokensPerSample": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "latency": {
       "type": "object",
       "description": "Absent as a whole when no sample passed. Percentiles are STATED value-or-absent: an absent key means 'not stateable at this sample count under the emitter's gate', never zero.",
-      "required": ["basis", "contributingSamples", "totalSamples", "sortedPassingLatenciesMs"],
+      "required": [
+        "basis",
+        "contributingSamples",
+        "totalSamples",
+        "sortedPassingLatenciesMs"
+      ],
       "additionalProperties": true,
       "properties": {
-        "basis": { "const": "passing-samples" },
-        "contributingSamples": { "type": "integer", "minimum": 1 },
-        "totalSamples": { "type": "integer", "minimum": 1 },
-        "p50Ms": { "type": "number", "minimum": 0 },
-        "p95Ms": { "type": "number", "minimum": 0 },
-        "p99Ms": { "type": "number", "minimum": 0 },
+        "basis": {
+          "const": "passing-samples"
+        },
+        "contributingSamples": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "totalSamples": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "p50Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p95Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p99Ms": {
+          "type": "number",
+          "minimum": 0
+        },
         "sortedPassingLatenciesMs": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "number", "minimum": 0 },
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
           "description": "Recorded passing-trial durations, milliseconds, ascending. For shape-only consumption."
         }
       }

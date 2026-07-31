@@ -79,10 +79,27 @@ public final class ExploreOutputWriter {
     public String writeYaml(String serviceContractId, FactorBundle factorBundle,
             PerConfigSummary<?, ?> entry,
             java.util.List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria) {
+        return writeYaml(serviceContractId, factorBundle, entry, criteria, false);
+    }
+
+    /**
+     * As above, stating whether this configuration is the one the sweep
+     * was built around — the {@code mavai-explore-1} schema's additive
+     * {@code baseConfiguration} marker. Stated only on the base, and
+     * only as {@code true}: an absent marker means this emitter said
+     * nothing, never "not the base".
+     */
+    public String writeYaml(String serviceContractId, FactorBundle factorBundle,
+            PerConfigSummary<?, ?> entry,
+            java.util.List<? extends org.mavai.punit.api.criterion.Criterion<?>> criteria,
+            boolean baseConfiguration) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
         root.put("serviceContractId", serviceContractId);
         root.put("configuration", filenameFor(factorBundle));
+        if (baseConfiguration) {
+            root.put("baseConfiguration", Boolean.TRUE);
+        }
         root.put("generatedAt", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
         root.put("factors", factorsBlock(factorBundle));
         root.put("execution", executionBlock(entry));

@@ -107,6 +107,10 @@ public final class ExploreEmitter {
                 .map(entry -> FactorBundle.of(entry.factors()))
                 .toList();
         String experimentDirectory = writer.experimentDirectory(grid);
+        // The base is stated by identity against the declared grid point,
+        // never by position: the emitter reports what the experiment
+        // declared, and an experiment declaring none states none.
+        java.util.Optional<Object> base = experiment.baseConfiguration();
         experiment.dispatch(new Spec.Dispatcher<Void>() {
             @Override
             public <FT, IT, OT> Void apply(TypedSpec<FT, IT, OT> typed) {
@@ -118,7 +122,8 @@ public final class ExploreEmitter {
                     FactorBundle bundle = FactorBundle.of(factors);
                     String stem = writer.filenameFor(bundle);
                     String yaml = writer.writeYaml(
-                            serviceContractId, bundle, entry, contract.effectiveCriteria());
+                            serviceContractId, bundle, entry, contract.effectiveCriteria(),
+                            base.isPresent() && base.get().equals(factors));
                     sink.accept(serviceContractId + "/" + experimentDirectory + "/"
                             + stem + ".yaml", yaml);
                 }

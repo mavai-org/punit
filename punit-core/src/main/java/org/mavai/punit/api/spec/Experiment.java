@@ -213,6 +213,19 @@ public final class Experiment implements Spec {
     }
 
     /**
+     * The explored grid point the sweep was built around, when the
+     * experiment declared one. Empty for a grid that is a plain product
+     * of factor values — such a grid has no base, and the artefacts
+     * state none. Consumed by the EXPLORE artefact emitter.
+     */
+    public Optional<Object> baseConfiguration() {
+        if (internal instanceof ExploreInternal<?, ?, ?> e) {
+            return Optional.ofNullable(e.baseConfiguration);
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Diagnostic accessor populated only after an optimize experiment
      * has run. Returns the best-scoring iteration per the
      * optimisation's declared direction (maximise / minimise).
@@ -378,12 +391,14 @@ public final class Experiment implements Spec {
     private static final class ExploreInternal<FT, IT, OT> extends Internal<FT, IT, OT> {
 
         private final List<FT> grid;
+        private final FT baseConfiguration;
         private final Map<FT, SampleSummary<OT>> perConfig = new LinkedHashMap<>();
         private final Map<FT, Integer> perConfigSamplesPlanned = new LinkedHashMap<>();
 
         private ExploreInternal(ExploreBuilder<FT, IT, OT> b) {
             super(b.sampling, b.experimentId != null ? b.experimentId : defaultId("explore"));
             this.grid = b.grid;
+            this.baseConfiguration = b.baseConfiguration;
         }
 
         @Override public Iterator<Configuration<FT, IT, OT>> configurations() {
@@ -466,6 +481,7 @@ public final class Experiment implements Spec {
         private final Sampling<FT, IT, OT> sampling;
         private List<FT> grid;
         private String experimentId;
+        private FT baseConfiguration;
 
         private ExploreBuilder(Sampling<FT, IT, OT> sampling) {
             this.sampling = sampling;
@@ -495,9 +511,30 @@ public final class Experiment implements Spec {
             return this;
         }
 
+        /**
+         * Names the grid element the sweep was built around — the base
+         * configuration whose factor values the other grid points vary.
+         * Optional: a grid that is a plain product of factor values has
+         * no base, and states none. Where there is one, stating it is
+         * what lets a consumer present the comparison as deviations
+         * from a known original instead of guessing an anchor, which a
+         * balanced grid makes impossible.
+         *
+         * @param factors the base configuration, which must be a grid element.
+         */
+        public ExploreBuilder<FT, IT, OT> baseConfiguration(FT factors) {
+            this.baseConfiguration = Objects.requireNonNull(factors, "baseConfiguration");
+            return this;
+        }
+
         public Experiment build() {
             if (grid == null) {
                 throw new IllegalStateException("grid is required — call .grid(...)");
+            }
+            if (baseConfiguration != null && !grid.contains(baseConfiguration)) {
+                throw new IllegalArgumentException(
+                        "the base configuration is not a grid element — it names the grid "
+                                + "point the sweep was built around, so it must be explored too");
             }
             return new Experiment(Kind.EXPLORE, new ExploreInternal<>(this));
         }

@@ -860,6 +860,17 @@ public final class PUnit {
             return this;
         }
 
+        /**
+         * Names the grid element the sweep was built around — the base
+         * configuration whose factor values the other grid points vary.
+         * Optional; a grid that is a plain product of factor values has
+         * no base and states none.
+         */
+        public ExploreBuilder<FT, IT, OT> baseConfiguration(FT factors) {
+            delegate.baseConfiguration(factors);
+            return this;
+        }
+
         public Experiment build() {
             return delegate.build();
         }
