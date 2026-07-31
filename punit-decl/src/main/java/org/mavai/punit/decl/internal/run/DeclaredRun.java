@@ -181,7 +181,11 @@ public final class DeclaredRun implements Declared {
         System.out.println("[PUNIT] run plan: contract '" + declaration.contract() + "', "
                 + grid.size() + " configurations x " + perConfig + " samples — explore");
 
-        PUnit.exploring(sampling).grid(grid).run();
+        // The grid is the services file's own `configuration:` followed
+        // by each `explorations:` delta merged over it, so its first
+        // point is the authored base — a fact only this side holds, and
+        // one no consumer can recover from a balanced sweep.
+        PUnit.exploring(sampling).grid(grid).baseConfiguration(grid.get(0)).run();
     }
 
     @Override

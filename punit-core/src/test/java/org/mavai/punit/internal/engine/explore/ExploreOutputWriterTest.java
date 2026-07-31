@@ -3,6 +3,7 @@ package org.mavai.punit.internal.engine.explore;
 import static org.mavai.punit.api.criterion.Criteria.meeting;
 import org.mavai.punit.api.criterion.Criteria;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -45,6 +46,63 @@ class ExploreOutputWriterTest {
             return meeting().<Integer>zeroFailures();
         }
 
+    }
+
+    @Test
+    @DisplayName("only the declared base configuration states the base marker")
+    void baseConfigurationIsStatedOnlyWhereDeclared() {
+        // The sweep's base is a fact the author holds and the artefact
+        // must carry: a balanced grid gives a consumer nothing to infer
+        // it from, every point holding each value equally often.
+        LlmFactors base = new LlmFactors("gpt-4o", 0.3);
+        LlmFactors other = new LlmFactors("gpt-4o-mini", 0.7);
+        Sampling<LlmFactors, String, Integer> sampling = Sampling
+                .<LlmFactors, String, Integer>builder()
+                .serviceContractFactory(f -> new LengthServiceContract())
+                .inputs("a")
+                .samples(1)
+                .build();
+        Experiment experiment = Experiment.exploring(sampling)
+                .grid(List.of(base, other))
+                .baseConfiguration(base)
+                .build();
+        new Engine().run(experiment);
+
+        ExploreOutputWriter writer = new ExploreOutputWriter();
+        PerConfigSummary<?, ?> baseEntry = experiment.perConfigSummaries().stream()
+                .filter(e -> e.factors().equals(base)).findFirst().orElseThrow();
+        PerConfigSummary<?, ?> otherEntry = experiment.perConfigSummaries().stream()
+                .filter(e -> e.factors().equals(other)).findFirst().orElseThrow();
+
+        Map<String, Object> marked = new Yaml().load(writer.writeYaml(
+                "LengthServiceContract", FactorBundle.of(baseEntry.factors()), baseEntry,
+                List.of(), true));
+        assertThat(marked).containsEntry("baseConfiguration", Boolean.TRUE);
+
+        // Absence, never a stated false: a consumer must not read silence
+        // as "not the base".
+        String unmarked = writer.writeYaml(
+                "LengthServiceContract", FactorBundle.of(otherEntry.factors()), otherEntry,
+                List.of(), false);
+        assertThat(unmarked).doesNotContain("baseConfiguration");
+        assertThat(new Yaml().load(unmarked).toString()).doesNotContain("baseConfiguration");
+    }
+
+    @Test
+    @DisplayName("a base configuration outside the grid is a misuse defect")
+    void baseConfigurationMustBeAGridElement() {
+        Sampling<LlmFactors, String, Integer> sampling = Sampling
+                .<LlmFactors, String, Integer>builder()
+                .serviceContractFactory(f -> new LengthServiceContract())
+                .inputs("a")
+                .samples(1)
+                .build();
+        assertThatThrownBy(() -> Experiment.exploring(sampling)
+                .grid(List.of(new LlmFactors("gpt-4o", 0.3)))
+                .baseConfiguration(new LlmFactors("never-explored", 0.1))
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not a grid element");
     }
 
     @Test
