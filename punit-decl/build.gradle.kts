@@ -18,7 +18,7 @@ dependencies {
     // transform's projection — distinct from the snakeyaml 1.1 punit-core
     // uses for spec serialisation. Per the optional-module rule, this
     // dependency lives here and never in punit-core.
-    implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
+    implementation("org.snakeyaml:snakeyaml-engine:3.1.1")
 
     // The format-conformance gate drives the FULL services format, whose
     // `language-model` built-in type ships in punit-lm. Runtime-only and
