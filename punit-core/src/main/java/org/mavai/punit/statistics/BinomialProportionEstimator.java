@@ -148,6 +148,21 @@ public class BinomialProportionEstimator {
         }
         validateConfidenceLevel(confidenceLevel);
 
+        // At pHat = 0 the centre and the margin are the same quantity,
+        // z^2 / (2n), so the bound is exactly 0 at every n and confidence.
+        // That is an algebraic identity, not a small number, and floating
+        // point does not reliably deliver it: over n in 1..1000 a residue
+        // near 1e-18 survives at 265 sizes at one-sided 90%, 201 at 95%,
+        // and 121 at 99%. The residue is invisible against any tolerance
+        // a caller would set and decisive on the artefact that binds,
+        // because the integer cutoff is ceil(n * threshold) and ceil
+        // turns any positive residue into 1 — demanding one success of a
+        // test whose baseline can demand nothing. Return the algebraic
+        // value rather than the computed one.
+        if (pHat == 0.0) {
+            return 0.0;
+        }
+
         double alpha = 1.0 - confidenceLevel;
         double z = STANDARD_NORMAL.inverseCumulativeProbability(1.0 - alpha);
         CenterMargin centerMargin = getCenterMargin(trials, z, pHat);

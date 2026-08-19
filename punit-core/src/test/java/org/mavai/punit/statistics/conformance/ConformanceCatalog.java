@@ -15,6 +15,7 @@ import org.mavai.punit.statistics.LatencyThresholdDeriver;
 import org.mavai.punit.statistics.OperationalApproach;
 import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
 import org.mavai.punit.statistics.SampleSizeCalculator;
+import org.mavai.punit.statistics.SizingRefusedException;
 import org.mavai.punit.statistics.SampleSizeRequirement;
 import org.mavai.punit.statistics.TestVerdictEvaluator;
 import org.mavai.punit.statistics.ThresholdDeriver;
@@ -27,7 +28,9 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mavai.punit.statistics.conformance.OracleAssert.assertOracle;
+import static org.mavai.punit.statistics.conformance.OracleAssert.assertOracleAbsent;
 
 /**
  * The registry of every conformance check punit runs against the mavai-R
@@ -234,6 +237,11 @@ final class ConformanceCatalog {
 
     private static void assertRiskDrivenSizingCase(
             ConformanceRecorder recorder, JsonNode c, double tolerance) {
+        if ("REFUSE".equals(c.get("expected").get("sizing_gate").asText())) {
+            assertSizingRefusalCase(recorder, c);
+            return;
+        }
+        assertOracle(recorder, "risk_driven_sizing", c, "sizing_gate", "ADMIT");
         switch (c.get("approach").asText()) {
             case "required_n" -> assertRequiredSampleSizeCase(recorder, c, tolerance);
             case "power_at" -> assertPowerAtCandidateSizeCase(recorder, c, tolerance);
@@ -261,6 +269,61 @@ final class ConformanceCatalog {
                 RISK_DRIVEN_SIZING.powerAt(requiredSamples, baselineRate,
                         minimumAcceptableRate, confidence),
                 tolerance);
+    }
+
+    /**
+     * An inadmissible sizing design: the refusal itself is the expected
+     * outcome, so the assertion is that the production surface declines and
+     * names the cause — not that it returns a number.
+     *
+     * <p>Sizing refusal is misconfiguration, so it travels on the exception
+     * channel (the family's {@code Outcome} channel carries the anticipated
+     * failure of a sample, and sizing happens before any sample is taken).
+     * What the fixture binds is that the refusal is *distinguishable*: the
+     * cause is carried as data on {@link SizingRefusedException}, so this
+     * assertion never parses a message.
+     */
+    private static void assertSizingRefusalCase(ConformanceRecorder recorder, JsonNode c) {
+        var inputs = c.get("inputs");
+        double baselineRate = inputs.get("baseline_rate").asDouble();
+        double confidence = inputs.get("confidence").asDouble();
+
+        SizingRefusedException refusal = catchThrowableOfType(
+                SizingRefusedException.class,
+                () -> {
+                    switch (c.get("approach").asText()) {
+                        case "required_n" -> RISK_DRIVEN_SIZING.requiredSamples(
+                                baselineRate, inputs.get("minimum_acceptable_rate").asDouble(),
+                                confidence, inputs.get("target_power").asDouble());
+                        case "power_at" -> RISK_DRIVEN_SIZING.powerAt(
+                                inputs.get("test_samples").asInt(), baselineRate,
+                                inputs.get("minimum_acceptable_rate").asDouble(), confidence);
+                        case "detectable_rate" -> RISK_DRIVEN_SIZING.detectableRate(
+                                inputs.get("test_samples").asInt(), baselineRate,
+                                confidence, inputs.get("target_power").asDouble());
+                        default -> throw new IllegalStateException(
+                                "unknown sizing approach '%s' in case '%s'".formatted(
+                                        c.get("approach").asText(), c.get("name").asText()));
+                    }
+                });
+
+        assertThat(refusal)
+                .as("risk_driven_sizing/%s: the oracle expects this design to be refused",
+                        c.get("name").asText())
+                .isNotNull();
+        assertOracle(recorder, "risk_driven_sizing", c, "sizing_gate", "REFUSE");
+        assertOracle(recorder, "risk_driven_sizing", c, "refusal_category",
+                refusal.refusalCause().name());
+
+        // The numerics the manifest still binds on this case. The refusal
+        // means there is no value for any of them, and saying so is the
+        // assertion: a framework that clamped the baseline and returned a
+        // number would fail here.
+        c.get("expected").fieldNames().forEachRemaining(field -> {
+            if (c.get("expected").get(field).isNull()) {
+                assertOracleAbsent(recorder, "risk_driven_sizing", c, field);
+            }
+        });
     }
 
     private static void assertPowerAtCandidateSizeCase(

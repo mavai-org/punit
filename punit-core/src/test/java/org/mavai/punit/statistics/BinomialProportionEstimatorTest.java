@@ -591,5 +591,46 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.0000, within(0.0005));
         }
     }
-}
 
+    @Nested
+    @DisplayName("Zero rate")
+    class ZeroRate {
+
+        @Test
+        @DisplayName("the bound is exactly zero, not a cancellation residue")
+        void zeroRateGivesExactlyZero() {
+            // At pHat = 0 the centre and the margin are the same quantity,
+            // z^2 / (2n), so they cancel and the bound is exactly 0 — an
+            // algebraic identity holding at every n and every confidence.
+            // Asserted with isEqualTo, not isCloseTo: a tolerance comparison
+            // is precisely what cannot see the failure this pins. The sweep
+            // is dense because the round numbers one would sample by hand
+            // mostly cancel cleanly on their own.
+            for (int n = 1; n <= 1000; n++) {
+                for (double confidence : new double[] {0.90, 0.95, 0.99}) {
+                    assertThat(estimator.lowerBoundFromRate(0.0, n, confidence))
+                            .as("n = %d, confidence = %s", n, confidence)
+                            .isEqualTo(0.0);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("the integer cutoff stays at zero")
+        void zeroRateLeavesTheCutoffAtZero() {
+            // Why the identity above earns a test of its own. The binding
+            // decision artefact is ceil(n * threshold), and ceil turns any
+            // positive residue into 1 — demanding one success of a test whose
+            // baseline can demand nothing. Against the previous arithmetic
+            // this failed at 265 sizes at 90%, 201 at 95% and 121 at 99%.
+            for (int n = 1; n <= 1000; n++) {
+                for (double confidence : new double[] {0.90, 0.95, 0.99}) {
+                    double threshold = estimator.lowerBoundFromRate(0.0, n, confidence);
+                    assertThat(Math.ceil(n * threshold))
+                            .as("n = %d, confidence = %s", n, confidence)
+                            .isEqualTo(0.0);
+                }
+            }
+        }
+    }
+}
