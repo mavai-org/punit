@@ -17,7 +17,7 @@ dependencies {
     // depends on snakeyaml as `implementation`, so it is not exposed here.
     implementation("org.yaml:snakeyaml:2.6")
 
-    testImplementation("org.xmlunit:xmlunit-core:2.12.0")
+    testImplementation("org.xmlunit:xmlunit-core:2.13.0")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
 }
 

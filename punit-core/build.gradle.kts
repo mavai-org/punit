@@ -82,7 +82,7 @@ dependencies {
     // networknt 3.x validates against Jackson 3 (the tools.jackson line),
     // distinct from the com.fasterxml Jackson 2 the statistics conformance
     // tests use above; both are test-only and coexist on the test classpath.
-    testImplementation("tools.jackson.core:jackson-databind:3.2.1")
+    testImplementation("tools.jackson.core:jackson-databind:3.2.2")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;
