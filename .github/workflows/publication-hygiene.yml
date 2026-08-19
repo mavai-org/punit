@@ -12,6 +12,6 @@ jobs:
   hygiene:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: No machine-local content in tracked files
         run: sh scripts/check-publication-hygiene.sh
