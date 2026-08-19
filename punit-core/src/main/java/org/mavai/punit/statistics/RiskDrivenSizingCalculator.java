@@ -155,7 +155,7 @@ public class RiskDrivenSizingCalculator {
             double confidence,
             double targetPower) {
         validateSampleSize(sampleSize);
-        validateProbability(baselineRate, "Baseline rate");
+        validateBaselineRate(baselineRate);
         validateProbability(confidence, "Confidence");
         validateProbability(targetPower, "Target power");
 
@@ -181,11 +181,12 @@ public class RiskDrivenSizingCalculator {
 
     private void validateSizingInputs(
             double baselineRate, double minimumAcceptableRate, double confidence) {
-        validateProbability(baselineRate, "Baseline rate");
+        validateBaselineRate(baselineRate);
         validateProbability(minimumAcceptableRate, "Minimum acceptable rate");
         validateProbability(confidence, "Confidence");
         if (minimumAcceptableRate >= baselineRate) {
-            throw new IllegalArgumentException(
+            throw new SizingRefusedException(
+                    SizingRefusedException.Cause.EMPTY_TOLERANCE_INTERVAL,
                     "Minimum acceptable rate (" + minimumAcceptableRate
                             + ") must sit below the measured baseline rate (" + baselineRate
                             + "): the moving-floor construction sizes the detection of a "
@@ -193,6 +194,30 @@ public class RiskDrivenSizingCalculator {
                             + "the baseline, re-measure the baseline rather than asserting "
                             + "improvement through the tolerance.");
         }
+    }
+
+    /**
+     * The baseline rate, with the zero baseline named rather than folded into
+     * the generic domain check.
+     *
+     * <p>A baseline that observed no successes has an effective rate of
+     * exactly 0 at every sample size (companion §4.3.4), so no declared
+     * tolerance can sit below it and no design is priceable. Saying so is
+     * more use to the operator than "must be in (0, 1)", and it is a
+     * different corrective action: measure a baseline, rather than adjust
+     * the tolerance.
+     */
+    private void validateBaselineRate(double baselineRate) {
+        if (baselineRate == 0.0) {
+            throw new SizingRefusedException(
+                    SizingRefusedException.Cause.ZERO_BASELINE,
+                    "Baseline rate is exactly 0: the baseline observed no successes, so "
+                            + "its effective rate is 0 at every sample size and there is no "
+                            + "tolerated rate below it to detect. No sample size can price "
+                            + "this design. Measure a baseline with at least one success "
+                            + "before sizing against it.");
+        }
+        validateProbability(baselineRate, "Baseline rate");
     }
 
     private void validateProbability(double value, String name) {

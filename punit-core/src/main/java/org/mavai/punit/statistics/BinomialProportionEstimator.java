@@ -148,6 +148,39 @@ public class BinomialProportionEstimator {
         }
         validateConfidenceLevel(confidenceLevel);
 
+        // At pHat = 0 the centre and the margin are the same quantity,
+        // z^2 / (2n), so the bound is exactly 0 at every n and confidence.
+        // That is an algebraic identity, not a small number, and floating
+        // point does not reliably deliver it: over n in 1..1000 a residue
+        // near 1e-18 survives at 265 sizes at one-sided 90%, 201 at 95%,
+        // and 121 at 99%. The residue is invisible against any tolerance
+        // a caller would set and decisive on the artefact that binds,
+        // because the integer cutoff is ceil(n * threshold) and ceil
+        // turns any positive residue into 1 — demanding one success of a
+        // test whose baseline can demand nothing. Return the algebraic
+        // value rather than the computed one.
+        //
+        // On the exact comparison, which is normally a smell: this is a
+        // test on an *input*, not on two computed quantities, and the
+        // input's domain is discrete. Baselines store (k, n) rather than
+        // a rate (companion §4.3), so pHat arrives here as either k/n —
+        // exactly +0.0 when k = 0, since IEEE 754 division of zero is
+        // exact — or as an effective baseline rate, which §4.3.2 bounds
+        // at n/(n + z^2), far from zero. There is no value between 0 and
+        // 1/n for the comparison to miss: the smallest non-zero rate a
+        // million-sample baseline can express is 1e-6. Negative zero
+        // compares equal, and NaN is rejected above.
+        //
+        // The failure mode of an exact test is also benign here. A rate
+        // that is genuinely tiny but non-zero is not a degenerate case
+        // needing to be snapped; it falls through and is computed by the
+        // formula, which is well defined there. Widening this to an
+        // epsilon would do the opposite of what it looks like — it would
+        // silently round real, small rates down to a threshold of zero.
+        if (pHat == 0.0) {
+            return 0.0;
+        }
+
         double alpha = 1.0 - confidenceLevel;
         double z = STANDARD_NORMAL.inverseCumulativeProbability(1.0 - alpha);
         CenterMargin centerMargin = getCenterMargin(trials, z, pHat);
