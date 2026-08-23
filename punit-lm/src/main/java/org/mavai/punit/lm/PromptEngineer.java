@@ -145,7 +145,8 @@ public final class PromptEngineer implements StepperProvider {
                     identity -> ConfiguredLanguageModel.of("prompt-engineer (meta)",
                             new LanguageModelParameters(systemPrompt, metaProvider, null,
                                     metaModel, temperature, null, null, null, null,
-                                    LanguageModelParameters.DEFAULT_MAX_TOKENS)));
+                                    LanguageModelParameters.DEFAULT_MAX_TOKENS,
+                                    LanguageModelParameters.DEFAULT_DEADLINE_MS)));
             System.out.println("[PUNIT] note: prompt-engineer meta model: provider "
                     + (metaProvider == null ? "openai-compatible" : metaProvider) + ", model "
                     + (metaModel == null ? "(environment default)" : metaModel)
