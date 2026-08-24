@@ -20,7 +20,20 @@ import java.util.Objects;
  *       ran.</li>
  * </ul>
  * Both kinds count in the denominator as a non-pass; {@link #fail()}
- * is their sum.
+ * is their sum, together with the third kind below.
+ *
+ * <p>{@link #applyFail()} is the third: a trial that failed at apply —
+ * a failed delivery, or any other {@code Outcome.fail} from the
+ * contract — so that <em>no</em> criterion judged anything. Such a
+ * trial counts as a failure against every declared criterion (owner
+ * ruling, 2026-08-24, adopting the family's Python reader's counting).
+ * It is a bucket of its own rather than a share of
+ * {@link #transformFail()} because the diagnostic axes mean particular
+ * things: a transform/no-value failure is one where a response
+ * <em>arrived</em> and no testable value could be derived from it,
+ * which is a fact about the contract's instrument. An apply failure is
+ * a fact about the service or the transport, and folding the two
+ * would misreport the axis a developer reads first.
  *
  * <p>The denominator is {@link #total()} = {@link #pass()} +
  * {@link #fail()}; the per-criterion observed pass rate is
@@ -37,29 +50,35 @@ import java.util.Objects;
  * @param transformFail count of FAIL samples where the transform
  *                     failed (or produced no value) and the chain
  *                     never ran
+ * @param applyFail    count of samples that failed at apply, before
+ *                     this criterion could judge anything
  */
 public record CriterionSampleCounts(
         String criterionId,
         int pass,
         int conditionFail,
-        int transformFail) {
+        int transformFail,
+        int applyFail) {
 
     public CriterionSampleCounts {
         Objects.requireNonNull(criterionId, "criterionId");
-        if (pass < 0 || conditionFail < 0 || transformFail < 0) {
+        if (pass < 0 || conditionFail < 0 || transformFail < 0 || applyFail < 0) {
             throw new IllegalArgumentException(
                     "counts must be non-negative; got pass=" + pass
                             + ", conditionFail=" + conditionFail
-                            + ", transformFail=" + transformFail);
+                            + ", transformFail=" + transformFail
+                            + ", applyFail=" + applyFail);
         }
     }
 
     /**
-     * Total failing trials — condition failures plus transform /
-     * no-value failures. Both count in the denominator as a non-pass.
+     * Total failing trials — condition failures, transform / no-value
+     * failures, and trials that failed before this criterion could
+     * judge anything. All three count in the denominator as a
+     * non-pass.
      */
     public int fail() {
-        return conditionFail + transformFail;
+        return conditionFail + transformFail + applyFail;
     }
 
     /** Sum of all per-criterion sample outcomes — the denominator. */

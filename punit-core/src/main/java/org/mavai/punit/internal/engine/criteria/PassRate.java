@@ -308,11 +308,21 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                             auto.criterionId(),
                             summary.successes(),
                             summary.failures(),
-                            auto.transformFail()));
+                            auto.transformFail(),
+                            // Zero, not the criterion's own applyFail:
+                            // run-level failures already include every
+                            // apply failure, so restating them here
+                            // would count them twice in the
+                            // denominator. The axes on this synthetic
+                            // row are not diagnostic anyway — it puts
+                            // every failure in the condition slot.
+                            0));
         }
         if (methodologyCriteria.isEmpty()) {
-            // Run produced no methodology-criterion sample counts
-            // (apply-level-failure run, or a hand-built test fixture).
+            // Run produced no methodology-criterion sample counts (a
+            // hand-built test fixture; an apply-level-failure run now
+            // records against every declared criterion and so no
+            // longer arrives here).
             // Fall back to run-level pass / fail counts. The criterion
             // id is borrowed from the baseline map's lone entry when
             // available (so the lookup below finds it); otherwise the
@@ -328,7 +338,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             }
             methodologyCriteria = List.of(
                     new CriterionSampleCounts(
-                            fallbackId, summary.successes(), summary.failures(), 0));
+                            fallbackId, summary.successes(), summary.failures(), 0, 0));
         }
         // Resolve the baseline map up-front (empirical mode only).
         if (isEmpirical()) {

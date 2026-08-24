@@ -227,6 +227,7 @@ public final class ExploreOutputWriter {
             row.put("fail", counts.fail());
             row.put("conditionFail", counts.conditionFail());
             row.put("transformFail", counts.transformFail());
+            row.put("applyFail", counts.applyFail());
             Map<String, Object> standings =
                     standingsByCriterion.get(EmittedKeys.bound(counts.criterionId()));
             if (standings != null) {

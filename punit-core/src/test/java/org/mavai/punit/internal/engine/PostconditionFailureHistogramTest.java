@@ -141,6 +141,19 @@ class PostconditionFailureHistogramTest {
         // No postcondition was evaluated because invoke failed every sample.
         assertThat(summary.failuresByPostcondition()).isEmpty();
         assertThat(summary.failures()).isEqualTo(5);
+
+        // But the criterion still counts them. The postcondition
+        // histogram stays empty because nothing was judged; the
+        // per-criterion tally does not, because a trial the contract
+        // never answered is still a trial that criterion did not pass.
+        // The two say different things and both are needed.
+        assertThat(summary.criterionSampleCounts()).hasSize(1);
+        var counts = summary.criterionSampleCounts().get(0);
+        assertThat(counts.applyFail()).isEqualTo(5);
+        assertThat(counts.conditionFail()).isZero();
+        assertThat(counts.transformFail()).isZero();
+        assertThat(counts.total()).isEqualTo(5);
+        assertThat(counts.observedPassRate()).isZero();
     }
 
     @Test

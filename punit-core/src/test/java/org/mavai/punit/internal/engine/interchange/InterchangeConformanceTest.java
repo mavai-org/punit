@@ -136,9 +136,69 @@ class InterchangeConformanceTest {
         }
     }
 
+    /**
+     * Never delivers: every trial fails at apply with a stated
+     * delivery cause, as a service whose endpoint is down does.
+     */
+    private static final class UndeliveredContract
+            implements ServiceContract<LlmFactors, String, Integer> {
+        @Override public String id() { return "interchange-undelivered"; }
+        @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) {
+            return DeliveryCause.CLIENT_DEADLINE.fail("stopped waiting after 250ms");
+        }
+        @Override public Criteria<Integer> criteria() {
+            return meeting().<Integer>zeroFailures()
+                    .name("never-reached")
+                    .satisfies("would-have-checked", v -> Outcome.ok());
+        }
+    }
+
     @Nested
     @DisplayName("delivery attribution")
     class DeliveryAttribution {
+
+        @Test
+        @DisplayName("a run that delivered nothing emits a document that opens")
+        void undeliveredRunStatesItsKind() {
+            Map<String, Object> doc = emitExplore(new UndeliveredContract(), 6);
+
+            // The run a reader most needs to open. Before the apply
+            // failure was counted against every declared criterion this
+            // emitted an empty criteria block and failed validation
+            // outright — the total-harness-failure run was the one
+            // producing a malformed artefact.
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entries =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+
+            // Six identically-caused failures are one entry, not six:
+            // the identity is the cause, so the count is readable.
+            assertThat(entries).hasSize(1);
+            assertThat(entries.get(0))
+                    .containsEntry("kind", "delivery")
+                    .containsEntry("condition", DeliveryCause.CLIENT_DEADLINE.token())
+                    .containsEntry("count", 6);
+            assertThat(((Number) statistics.get("failures")).intValue()).isEqualTo(6);
+
+            // The declared criterion judged nothing and says so: the
+            // apply failures are its whole denominator, on their own
+            // axis rather than folded into a condition or transform
+            // failure that never happened.
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> criteria =
+                    (Map<String, Map<String, Object>>) statistics.get("criteria");
+            assertThat(criteria).containsOnlyKeys("never-reached");
+            assertThat(criteria.get("never-reached"))
+                    .containsEntry("pass", 0)
+                    .containsEntry("conditionFail", 0)
+                    .containsEntry("transformFail", 0)
+                    .containsEntry("applyFail", 6)
+                    .containsEntry("observedPassRate", 0.0);
+        }
 
         @Test
         @DisplayName("a mixed run separates what was judged from what never arrived")

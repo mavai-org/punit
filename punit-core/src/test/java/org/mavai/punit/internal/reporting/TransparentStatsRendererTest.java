@@ -429,13 +429,13 @@ class TransparentStatsRendererTest {
                             new PerCriterionVerdict(
                                     "response-not-empty",
                                     Verdict.PASS,
-                                    new CriterionSampleCounts("response-not-empty", 100, 0, 0),
+                                    new CriterionSampleCounts("response-not-empty", 100, 0, 0, 0),
                                     1.0,
                                     0.85),
                             new PerCriterionVerdict(
                                     "valid-json",
                                     Verdict.PASS,
-                                    new CriterionSampleCounts("valid-json", 90, 5, 5),
+                                    new CriterionSampleCounts("valid-json", 90, 5, 5, 0),
                                     0.90,
                                     0.85)),
                     Verdict.PASS);
