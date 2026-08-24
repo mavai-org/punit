@@ -13,6 +13,7 @@ import java.util.TreeSet;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.spi.ConfiguredService;
+import org.mavai.punit.api.spec.DeliveryCause;
 import org.mavai.punit.decl.spi.MediaKind;
 import org.mavai.punit.lm.providers.LmProvider;
 import org.mavai.punit.lm.providers.Media;
@@ -30,6 +31,9 @@ import org.mavai.punit.lm.providers.Providers;
  * {@code Outcome} channel with its cause as the reason.
  */
 public final class ConfiguredLanguageModel implements ConfiguredService {
+
+    /** The peer stating that it stopped waiting — not that we did. */
+    private static final int GATEWAY_TIMEOUT = 504;
 
     private final LmProvider provider;
     private final LanguageModelParameters parameters;
@@ -103,13 +107,13 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
             // and only one of them is a statement about the service.
             // HttpConnectTimeoutException arrives here as a subtype —
             // correctly, since it is the same fact at the other level.
-            return Outcome.fail("service-delivery",
+            return DeliveryCause.CLIENT_DEADLINE.fail(
                     "service did not answer within the " + parameters.deadlineMs()
                             + "ms deadline at " + endpoint);
         } catch (IOException unreachable) {
             // No response at all — DNS, refused connection, broken pipe:
             // the service did not deliver, a failed sample with its cause.
-            return Outcome.fail("service-delivery",
+            return DeliveryCause.UNREACHABLE.fail(
                     "service unreachable at " + endpoint + ": " + unreachable.getMessage());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -119,11 +123,16 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         }
         if (response.statusCode() >= 500) {
             // The service answered that it is failing: a failed delivery.
+            // A 504 is the peer stating that *it* timed out waiting on
+            // something further upstream — a different fact from our own
+            // deadline elapsing, and stated as one.
             String detail = Json.excerpt(response.body(), 200);
-            return Outcome.fail("service-delivery",
-                    "service failed to deliver: " + provider.name() + " answered HTTP "
-                            + response.statusCode() + " at " + endpoint
-                            + (detail.isEmpty() ? "" : " — " + detail));
+            DeliveryCause cause = response.statusCode() == GATEWAY_TIMEOUT
+                    ? DeliveryCause.PEER_TIMEOUT
+                    : DeliveryCause.SERVER_ERROR;
+            return cause.fail("service failed to deliver: " + provider.name() + " answered HTTP "
+                    + response.statusCode() + " at " + endpoint
+                    + (detail.isEmpty() ? "" : " — " + detail));
         }
         if (response.statusCode() >= 400) {
             throw new ProviderResponseException(
@@ -134,7 +143,7 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         try {
             return Outcome.ok(provider.extract().apply(Json.read(response.body(), provider.name())));
         } catch (ServiceDeliveryException undelivered) {
-            return Outcome.fail("service-delivery", undelivered.getMessage());
+            return DeliveryCause.UNUSABLE_RESPONSE.fail(undelivered.getMessage());
         }
     }
 
