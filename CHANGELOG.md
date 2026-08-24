@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A language-model service states how long it will be waited for.**
+  The `deadline-ms:` configuration key bounds one exchange — the whole
+  exchange, not merely the connection, since the failure it guards
+  against is a peer that accepts a request and then goes silent on a
+  socket that connected perfectly. Unstated it defaults to 600000 and
+  is recorded as such: the deadline is part of the service's identity,
+  so it is fingerprinted like any covariate and a baseline measured
+  under one deadline does not resolve a test run under another.
+  Previously punit set no timeout at either level and such a peer held
+  a sample open indefinitely.
+
+- **A failed delivery says what kind of failure it was.** Explore and
+  optimize artefacts state `kind` on every failure entry, and a
+  delivery entry's condition is its cause — `unreachable`,
+  `client-deadline`, `peer-timeout`, `server-error`,
+  `unusable-response` — so a configuration whose endpoint was down and
+  one whose answers were bad no longer present identically at a pass
+  rate of zero. The counting rule is untouched: a failed delivery is a
+  failed sample, as before. Authors state a cause from their own
+  bindings through `DeliveryCause`.
+
 - **Token usage reaches the artefact cost blocks.** The declarative
   path now listens for token cost: `ConfiguredService` gains an
   additive token-sink invocation default, the language-model type
@@ -36,17 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   feed cost reporting. Providers, wire shapes, and validation stay
   internal; the module's exports pin moves from exports-nothing to
   exports-exactly-`api`.
-
-### Fixed
-
-- **Measure output names its persisted artefact.** A recording's
-  product is the baseline, not a verdict — every MEASURE run now
-  prints `baseline recorded: <path>` as the artefact lands, closing an
-  honest-output gap (the shape rule: a recording is labelled, renders
-  no composite verdict, and names what it persisted — the first two
-  already held, pinned by a new regression test alongside the fix).
-
-### Added
 
 - **Graduation: the `mavaiMaterialise` task.** For each declared
   contract, emits the equivalent contract as Java source the developer
@@ -92,7 +102,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   conformance corpus mavai-R v0.10.5 — the gate's known-unmet ledger
   is empty again).
 
+- **The declarative-format conformance gate.** punit-decl's test suite
+  now drives the format layer — contract parsing plus the load-time
+  construction walk, and full services-file resolution — over every
+  case of the family's published conformance corpus, fetched from the
+  latest mavai-R release on each build (`fetchPublishedFormats`; local
+  override `-PformatsDir`). The corpus manifest's binding obligations
+  (outcome, and refusal *category*; wording stays punit's own) are
+  asserted case by case, the run diffs its assertions against the full
+  obligation so selective assertion fails the build, and obligations
+  punit does not yet meet sit on a known-unmet ledger asserted
+  inverted — an entry names the directive that retires it, and the
+  ledger only shrinks truthfully.
+
+- **Normative judgement at experiment time.** A measure experiment over
+  a contract that declares normative criteria (`meeting().passRate(...)`)
+  now judges each one against its stipulated threshold using the run's
+  own samples — the Wilson one-sided lower confidence bound at the run's
+  sample count, at the criterion's confidence. The judgement (met /
+  failed / unsupportable-with-feasible-minimum) is rendered in the
+  experiment's console output and recorded per criterion in the baseline
+  file as an additive `normativeJudgement` marker that resolvers and
+  threshold derivation ignore; existing baseline files parse unchanged.
+  Empirical criteria remain unjudged at experiment time. `run()`'s
+  completion semantics are unchanged — it never fails on a failed
+  judgement; the new `assertMeets()` terminal (mutually exclusive with
+  `run()`) performs the same run and persistence, then throws
+  `AssertionFailedError` on a failed judgement and
+  `UnsupportableJudgementException` (a `TestAbortedException` subtype,
+  identifying the cause for listeners and report tooling) on an
+  unsupportable one, with the baseline artefact on disk before any
+  throw.
+- **`PUNIT_BASELINE_DIR` environment variable** for baseline-directory
+  resolution (`BaselineResolver.defaultDir()`), checked between the
+  existing `punit.baseline.dir` system property and the fixed convention
+  path. Closes a gap relative to punit's own documented configuration
+  resolution order (system property → environment variable → default);
+  particularly useful for sentinel deployments in containerized
+  environments, where setting an environment variable is typically more
+  natural than controlling the JVM launch command line.
+
 ### Changed
+
+- **A trial that fails before evaluation counts against every
+  criterion.** A failed delivery — or any other apply-level
+  `Outcome.fail` — judged nothing, and previously reached no
+  criterion's tally at all, so per-criterion pass rates were computed
+  over a denominator that silently excluded them and a run where
+  nothing was delivered emitted an empty `criteria` block that failed
+  schema validation outright. Such a trial is now a failure against
+  every declared criterion, on a `applyFail` axis of its own rather
+  than folded into condition or transform failures that did not
+  happen. Per-criterion rates and verdicts now agree with the
+  aggregate, which already counted these failures. Aligns punit with
+  the family's Python reader.
 
 - **Exploration output is laid out by swept keys.** Each EXPLORE run
   writes its per-configuration artefacts into an experiment-level
@@ -108,22 +171,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   report was left untouched: punit's report module is slated to be
   dropped in favour of the shared `mavai` renderer.)
 
-### Added
+- **Artefact key discipline and the redesigned `failureDistribution`
+  (breaking for exploration and optimization outputs).** The
+  `statistics.failureDistribution` block of `mavai-explore-1` and
+  `mavai-optimize-1` documents is now a *sequence* of
+  `{condition, count}` entries instead of a mapping keyed by
+  free-text check identity: each failed trial is attributed to its
+  first failing condition, so entry counts sum to the enclosing
+  `failures` total, and no mapping key carries unbounded free text.
+  Every mapping key punit emits into these artefacts (postcondition
+  descriptions in `resultProjection`, criterion names, factor names)
+  is now bounded at 256 characters — comfortably under YAML's
+  1,024-character implicit-key limit — with over-long keys truncated
+  to a bounded prefix plus a short content hash so distinct keys
+  stay distinct. Per-input identity remains structural
+  (`inputIndex`); input text appears only in values. The vendored
+  interchange schemas are re-pinned to the mavai-R v0.9.0
+  publication, and the conformance suite now drives a run with a
+  >1,024-character input and over-long condition identities to prove
+  the emitted document parses and validates.
 
-- **The declarative-format conformance gate.** punit-decl's test suite
-  now drives the format layer — contract parsing plus the load-time
-  construction walk, and full services-file resolution — over every
-  case of the family's published conformance corpus, fetched from the
-  latest mavai-R release on each build (`fetchPublishedFormats`; local
-  override `-PformatsDir`). The corpus manifest's binding obligations
-  (outcome, and refusal *category*; wording stays punit's own) are
-  asserted case by case, the run diffs its assertions against the full
-  obligation so selective assertion fails the build, and obligations
-  punit does not yet meet sit on a known-unmet ledger asserted
-  inverted — an entry names the directive that retires it, and the
-  ledger only shrinks truthfully.
+- **Canonical interchange schemas for experiment artefacts (breaking
+  for exploration and optimization outputs).** EXPLORE and OPTIMIZE
+  runs now emit the mavai family's canonical interchange formats —
+  `mavai-explore-1` (one YAML per explored configuration) and
+  `mavai-optimize-1` (one YAML per optimize run) — in place of the
+  punit-private `punit-spec-1` shape those two artefacts carried
+  before. The service identity field is now `serviceContractId`
+  (was `useCaseId`), exploration documents carry the configuration's
+  display name in a new body field `configuration` (the same
+  human-readable stem used for the filename, so consumers never
+  parse filenames), and the per-criterion `statistics.criteria`
+  decomposition is always present. The HTML comparison report
+  readers follow the new field names and schema identities, so
+  reports over newly emitted artefacts work unchanged; documents in
+  the old shape are no longer read. Baseline specs (MEASURE) and
+  verdict XML are untouched — `punit-spec-1` baselines and the spec
+  registry are unaffected. Emitted artefacts are validated in the
+  test suite against the pinned published JSON Schemas
+  (mavai-R release v0.8.6), including the semantic obligations the
+  schemas cannot express (ascending passing-latency vector,
+  floor-gated percentile statement, convergence consistency).
+
+- **Per-criterion matrix transposed in both comparison HTML reports.**
+  The exploration and optimization comparison reports' "Per-criterion
+  comparison" table now lists variants/iterations as rows and criteria
+  as columns (previously the reverse). Bounds the table's column count
+  to the criteria set instead of letting it grow with every
+  variant/iteration, and aligns row identity with the leaderboard
+  table above it.
+- **Comparison-report renderers de-duplicated.** The Explore and
+  Optimize `HtmlWriter`s shared a near-identical `CriterionResult`
+  record and near-identical per-criterion-matrix, latency-cell,
+  cost-cell, termination-cell, pass-rate-cell, number-formatting, and
+  chart-CSS code. `CriterionResult` and these section renderers now
+  live once in a new `org.mavai.punit.report.ComparisonReportHtml`
+  (alongside the existing shared `ReportHtml`); each report's
+  `HtmlWriter` supplies only what's genuinely report-specific. No
+  behavioural change — output is unchanged.
 
 ### Fixed
+
+- **A declarative service type is found from a consuming project.**
+  The `language-model` type is discovered through `ServiceLoader`,
+  which was asked for the *context* classloader's view — correct
+  inside punit's own build, and empty in a consuming project whose
+  test runtime loads punit-decl and punit-lm differently. A first
+  declarative test could resolve `type: language-model` in punit and
+  not in the project that depends on it. Discovery now uses the
+  defining classloader.
+
+- **A declarative project needs no bindings class.** A contract whose
+  every service is declared in `mavai-services.yaml` has nothing to
+  bind, but the loader still required a `MavaiBindings` class to
+  exist and refused when it did not. The bindings artefact is now
+  optional, which is what makes the two-YAML-files-and-a-one-line-body
+  path in the user guide actually reachable.
+
+- **The Wilson lower bound is exactly zero at a zero rate.** At
+  `p̂ = 0` the bound's centre and margin are the same quantity and
+  cancel; binary floating point does not reliably deliver that, and
+  the residue — invisible against any tolerance — turned a derived
+  cutoff of 0 into 1 through `ceil`, demanding one success of a test
+  whose baseline could demand none. Now returned exactly, with a
+  property test sweeping every sample size at three confidences.
+
+- **Measure output names its persisted artefact.** A recording's
+  product is the baseline, not a verdict — every MEASURE run now
+  prints `baseline recorded: <path>` as the artefact lands, closing an
+  honest-output gap (the shape rule: a recording is labelled, renders
+  no composite verdict, and names what it persisted — the first two
+  already held, pinned by a new regression test alongside the fix).
 
 - **An `initial:` overlay restating the baseline is now refused.** The
   conformance gate's first catch: an optimization's `initial:` that
@@ -193,79 +331,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   stays absent: the artefact never claims an identity the author did
   not declare.
 
-### Changed
-
-- **Artefact key discipline and the redesigned `failureDistribution`
-  (breaking for exploration and optimization outputs).** The
-  `statistics.failureDistribution` block of `mavai-explore-1` and
-  `mavai-optimize-1` documents is now a *sequence* of
-  `{condition, count}` entries instead of a mapping keyed by
-  free-text check identity: each failed trial is attributed to its
-  first failing condition, so entry counts sum to the enclosing
-  `failures` total, and no mapping key carries unbounded free text.
-  Every mapping key punit emits into these artefacts (postcondition
-  descriptions in `resultProjection`, criterion names, factor names)
-  is now bounded at 256 characters — comfortably under YAML's
-  1,024-character implicit-key limit — with over-long keys truncated
-  to a bounded prefix plus a short content hash so distinct keys
-  stay distinct. Per-input identity remains structural
-  (`inputIndex`); input text appears only in values. The vendored
-  interchange schemas are re-pinned to the mavai-R v0.9.0
-  publication, and the conformance suite now drives a run with a
-  >1,024-character input and over-long condition identities to prove
-  the emitted document parses and validates.
-
-- **Canonical interchange schemas for experiment artefacts (breaking
-  for exploration and optimization outputs).** EXPLORE and OPTIMIZE
-  runs now emit the mavai family's canonical interchange formats —
-  `mavai-explore-1` (one YAML per explored configuration) and
-  `mavai-optimize-1` (one YAML per optimize run) — in place of the
-  punit-private `punit-spec-1` shape those two artefacts carried
-  before. The service identity field is now `serviceContractId`
-  (was `useCaseId`), exploration documents carry the configuration's
-  display name in a new body field `configuration` (the same
-  human-readable stem used for the filename, so consumers never
-  parse filenames), and the per-criterion `statistics.criteria`
-  decomposition is always present. The HTML comparison report
-  readers follow the new field names and schema identities, so
-  reports over newly emitted artefacts work unchanged; documents in
-  the old shape are no longer read. Baseline specs (MEASURE) and
-  verdict XML are untouched — `punit-spec-1` baselines and the spec
-  registry are unaffected. Emitted artefacts are validated in the
-  test suite against the pinned published JSON Schemas
-  (mavai-R release v0.8.6), including the semantic obligations the
-  schemas cannot express (ascending passing-latency vector,
-  floor-gated percentile statement, convergence consistency).
-
-### Added
-
-- **Normative judgement at experiment time.** A measure experiment over
-  a contract that declares normative criteria (`meeting().passRate(...)`)
-  now judges each one against its stipulated threshold using the run's
-  own samples — the Wilson one-sided lower confidence bound at the run's
-  sample count, at the criterion's confidence. The judgement (met /
-  failed / unsupportable-with-feasible-minimum) is rendered in the
-  experiment's console output and recorded per criterion in the baseline
-  file as an additive `normativeJudgement` marker that resolvers and
-  threshold derivation ignore; existing baseline files parse unchanged.
-  Empirical criteria remain unjudged at experiment time. `run()`'s
-  completion semantics are unchanged — it never fails on a failed
-  judgement; the new `assertMeets()` terminal (mutually exclusive with
-  `run()`) performs the same run and persistence, then throws
-  `AssertionFailedError` on a failed judgement and
-  `UnsupportableJudgementException` (a `TestAbortedException` subtype,
-  identifying the cause for listeners and report tooling) on an
-  unsupportable one, with the baseline artefact on disk before any
-  throw.
-- **`PUNIT_BASELINE_DIR` environment variable** for baseline-directory
-  resolution (`BaselineResolver.defaultDir()`), checked between the
-  existing `punit.baseline.dir` system property and the fixed convention
-  path. Closes a gap relative to punit's own documented configuration
-  resolution order (system property → environment variable → default);
-  particularly useful for sentinel deployments in containerized
-  environments, where setting an environment variable is typically more
-  natural than controlling the JVM launch command line.
-
 ### Documentation
 
 - **Corrected baseline-directory guidance in `SENTINEL-DEPLOYMENT-GUIDE.md`
@@ -287,27 +352,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   previously described the convention-default path as "on the classpath"
   — it's a filesystem path relative to the working directory, not a
   classpath resource lookup; corrected in both places.
-
-### Changed
-
-- **Per-criterion matrix transposed in both comparison HTML reports.**
-  The exploration and optimization comparison reports' "Per-criterion
-  comparison" table now lists variants/iterations as rows and criteria
-  as columns (previously the reverse). Bounds the table's column count
-  to the criteria set instead of letting it grow with every
-  variant/iteration, and aligns row identity with the leaderboard
-  table above it.
-- **Comparison-report renderers de-duplicated.** The Explore and
-  Optimize `HtmlWriter`s shared a near-identical `CriterionResult`
-  record and near-identical per-criterion-matrix, latency-cell,
-  cost-cell, termination-cell, pass-rate-cell, number-formatting, and
-  chart-CSS code. `CriterionResult` and these section renderers now
-  live once in a new `org.mavai.punit.report.ComparisonReportHtml`
-  (alongside the existing shared `ReportHtml`); each report's
-  `HtmlWriter` supplies only what's genuinely report-specific. No
-  behavioural change — output is unchanged.
-
-### Documentation
 
 - Brought the optimize comparison report's description in the user guide
   (Part 11) in line with the 0.9.3 run-order layout — iterations listed in
