@@ -70,8 +70,8 @@ subprojects {
     implementation("org.yaml:snakeyaml:2.6")
 
     // Jackson - for JSON/CSV parsing in @InputSource
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.22.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.22.2")
 
     // Outcome - result types for contract postconditions
     // Resolved locally via composite build (settings.gradle.kts), or from Maven Central on CI
@@ -89,7 +89,7 @@ subprojects {
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     }
 
