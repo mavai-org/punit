@@ -18,7 +18,7 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.6")
 
     testImplementation("org.xmlunit:xmlunit-core:2.13.0")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
 }
 
 // --- published verdict interchange schemas ---------------------------------------
