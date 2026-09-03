@@ -19,6 +19,7 @@ import org.mavai.punit.api.Sampling;
 import org.mavai.punit.api.ServiceContract;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
+import org.mavai.punit.api.spec.DeliveryCause;
 import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.NextFactor;
 import org.mavai.punit.api.spec.Scorer;
@@ -96,6 +97,212 @@ class InterchangeConformanceTest {
         }
     }
 
+    /**
+     * Delivers on even invocations and not on odd ones — the mixed
+     * run the family's criterion 4 names: some failures judged, some
+     * never delivered, both stated distinctly in one document.
+     */
+    private static final class MixedDeliveryContract
+            implements ServiceContract<LlmFactors, String, Integer> {
+        private final AtomicInteger invocations = new AtomicInteger();
+        @Override public String id() { return "interchange-mixed-delivery"; }
+        @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) {
+            return invocations.getAndIncrement() % 2 == 0
+                    ? Outcome.ok(input.length())
+                    : DeliveryCause.CLIENT_DEADLINE.fail("stopped waiting after 250ms");
+        }
+        @Override public Criteria<Integer> criteria() {
+            return meeting().<Integer>zeroFailures()
+                    .name("judged-when-delivered")
+                    .satisfies("always-fails", v -> Outcome.fail("always-fails", "by design"));
+        }
+    }
+
+    /**
+     * Delivers, and answers badly, under a declared condition whose
+     * name collides with a delivery cause token — the case that
+     * separates recognising a namespace from matching a string.
+     */
+    private static final class CollidingNameContract
+            implements ServiceContract<LlmFactors, String, Integer> {
+        @Override public String id() { return "interchange-colliding"; }
+        @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) {
+            return Outcome.ok(input.length());
+        }
+        @Override public Criteria<Integer> criteria() {
+            return meeting().<Integer>zeroFailures()
+                    .name("author-vocabulary")
+                    .satisfies("server-error", v -> Outcome.fail("server-error", "judged, and bad"));
+        }
+    }
+
+    /**
+     * Never delivers: every trial fails at apply with a stated
+     * delivery cause, as a service whose endpoint is down does.
+     */
+    private static final class UndeliveredContract
+            implements ServiceContract<LlmFactors, String, Integer> {
+        @Override public String id() { return "interchange-undelivered"; }
+        @Override public Outcome<Integer> invoke(String input, TokenTracker tracker) {
+            return DeliveryCause.CLIENT_DEADLINE.fail("stopped waiting after 250ms");
+        }
+        @Override public Criteria<Integer> criteria() {
+            return meeting().<Integer>zeroFailures()
+                    .name("never-reached")
+                    .satisfies("would-have-checked", v -> Outcome.ok());
+        }
+    }
+
+    @Nested
+    @DisplayName("delivery attribution")
+    class DeliveryAttribution {
+
+        @Test
+        @DisplayName("a run that delivered nothing emits a document that opens")
+        void undeliveredRunStatesItsKind() {
+            Map<String, Object> doc = emitExplore(new UndeliveredContract(), 6);
+
+            // The run a reader most needs to open. Before the apply
+            // failure was counted against every declared criterion this
+            // emitted an empty criteria block and failed validation
+            // outright — the total-harness-failure run was the one
+            // producing a malformed artefact.
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entries =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+
+            // Six identically-caused failures are one entry, not six:
+            // the identity is the cause, so the count is readable.
+            assertThat(entries).hasSize(1);
+            assertThat(entries.get(0))
+                    .containsEntry("kind", "delivery")
+                    .containsEntry("condition", DeliveryCause.CLIENT_DEADLINE.token())
+                    .containsEntry("count", 6);
+            assertThat(((Number) statistics.get("failures")).intValue()).isEqualTo(6);
+
+            // The declared criterion judged nothing and says so: the
+            // apply failures are its whole denominator, on their own
+            // axis rather than folded into a condition or transform
+            // failure that never happened.
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> criteria =
+                    (Map<String, Map<String, Object>>) statistics.get("criteria");
+            assertThat(criteria).containsOnlyKeys("never-reached");
+            assertThat(criteria.get("never-reached"))
+                    .containsEntry("pass", 0)
+                    .containsEntry("conditionFail", 0)
+                    .containsEntry("transformFail", 0)
+                    .containsEntry("applyFail", 6)
+                    .containsEntry("observedPassRate", 0.0);
+        }
+
+        @Test
+        @DisplayName("a mixed run separates what was judged from what never arrived")
+        void mixedRunStatesBothKinds() {
+            Map<String, Object> doc = emitExplore(new MixedDeliveryContract(), 6);
+
+            // The schema's conditional binds here and nowhere else in
+            // this suite: kind: delivery obliges condition to be a
+            // deliveryCause token. A run with no delivery entry never
+            // exercises it, which is why this case exists.
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entries =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+
+            // Both kinds, distinctly — the reader can tell which half of
+            // this run is a quality story and which half never happened.
+            assertThat(entries).hasSize(2);
+            assertThat(entries).anySatisfy(entry -> assertThat(entry)
+                    .containsEntry("kind", "delivery")
+                    .containsEntry("condition", DeliveryCause.CLIENT_DEADLINE.token()));
+            assertThat(entries).anySatisfy(entry -> assertThat(entry)
+                    .containsEntry("kind", "evaluated")
+                    .containsEntry("condition", "always-fails"));
+
+            // The counting rule is untouched: every entry's count still
+            // sums to the same failure total it always did.
+            int attributed = entries.stream()
+                    .mapToInt(entry -> ((Number) entry.get("count")).intValue()).sum();
+            assertThat(attributed).isEqualTo(((Number) statistics.get("failures")).intValue());
+
+            // Identically-caused failures aggregate to one entry, not
+            // one per trial: the identity is the cause, so the count is
+            // readable.
+            assertThat(entries).allSatisfy(entry ->
+                    assertThat(((Number) entry.get("count")).intValue()).isGreaterThan(1));
+        }
+
+        @Test
+        @DisplayName("an ordinary failing run states no delivery kind")
+        void judgedRunStatesEvaluated() {
+            Map<String, Object> doc = emitExplore(new FailingContract(), 4);
+
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entries =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+            assertThat(entries).isNotEmpty();
+            assertThat(entries).allSatisfy(entry ->
+                    assertThat(entry).containsEntry("kind", "evaluated"));
+        }
+
+        @Test
+        @DisplayName("a declared condition named like a cause is still evaluated")
+        void authorVocabularyIsNotMistakenForTransport() {
+            Map<String, Object> doc = emitExplore(new CollidingNameContract(), 4);
+
+            assertThat(validate("mavai-explore-1", doc)).isEmpty();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> statistics = (Map<String, Object>) doc.get("statistics");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> entries =
+                    (List<Map<String, Object>>) statistics.get("failureDistribution");
+
+            // The author's condition happens to be spelled exactly like
+            // a transport cause. Reading it as one would tell a reader
+            // the service was never reached, when in truth it answered
+            // and failed a check — a stated cause that is wrong, which
+            // is worse than one that is absent.
+            assertThat(entries).hasSize(1);
+            assertThat(entries.get(0))
+                    .containsEntry("kind", "evaluated")
+                    .containsEntry("condition", "server-error");
+        }
+
+    }
+
+    /** Drives one exploration grid point and returns the emitted document. */
+    private static Map<String, Object> emitExplore(
+            ServiceContract<LlmFactors, String, Integer> contract, int samples) {
+        Sampling<LlmFactors, String, Integer> sampling = Sampling
+                .<LlmFactors, String, Integer>builder()
+                .serviceContractFactory(f -> contract)
+                .inputs("a", "bb")
+                .samples(samples)
+                .build();
+        Experiment experiment = Experiment.exploring(sampling)
+                .grid(List.of(new LlmFactors("gpt-4o", 0.3)))
+                .build();
+        new Engine().run(experiment);
+
+        Map<String, String> sink = new LinkedHashMap<>();
+        ExploreEmitter.emit(experiment, sink::put);
+        assertThat(sink).hasSize(1);
+        return new Yaml().load(sink.values().iterator().next());
+    }
+
     @Nested
     @DisplayName("exploration artefacts")
     class ExplorationArtefacts {
@@ -160,24 +367,6 @@ class InterchangeConformanceTest {
             assertThat(doc).doesNotContainKey("latency");
         }
 
-        private Map<String, Object> emitExplore(
-                ServiceContract<LlmFactors, String, Integer> contract, int samples) {
-            Sampling<LlmFactors, String, Integer> sampling = Sampling
-                    .<LlmFactors, String, Integer>builder()
-                    .serviceContractFactory(f -> contract)
-                    .inputs("a", "bb")
-                    .samples(samples)
-                    .build();
-            Experiment experiment = Experiment.exploring(sampling)
-                    .grid(List.of(new LlmFactors("gpt-4o", 0.3)))
-                    .build();
-            new Engine().run(experiment);
-
-            Map<String, String> sink = new LinkedHashMap<>();
-            ExploreEmitter.emit(experiment, sink::put);
-            assertThat(sink).hasSize(1);
-            return new Yaml().load(sink.values().iterator().next());
-        }
     }
 
     @Nested

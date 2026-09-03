@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A local endpoint standing in for a vendor: replays a canned response
@@ -21,11 +23,16 @@ final class StubLlm implements AutoCloseable {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Long enough that a deadline measured in tens of ms strikes first. */
+    private static final long STALL_MILLIS = 30_000;
+
     private final HttpServer server;
     private final List<JsonNode> requestBodies = new ArrayList<>();
     private final List<Map<String, List<String>>> requestHeaders = new ArrayList<>();
     private volatile int status = 200;
     private volatile String response = "{}";
+    private volatile boolean stall;
+    private final CountDownLatch closed = new CountDownLatch(1);
 
     private StubLlm(HttpServer server) {
         this.server = server;
@@ -40,6 +47,21 @@ final class StubLlm implements AutoCloseable {
                 synchronized (stub) {
                     stub.requestBodies.add(MAPPER.readTree(request));
                     stub.requestHeaders.add(exchange.getRequestHeaders());
+                }
+                if (stub.stall) {
+                    // Accepted, and then silent: the shape of the field
+                    // failure — a connected socket with nothing coming
+                    // back, which a connect-only deadline never catches.
+                    // The latch is held until close(), so the silence
+                    // outlasts any deadline under test without the
+                    // handler thread outliving the test that started it.
+                    try {
+                        stub.closed.await(STALL_MILLIS, TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    exchange.close();
+                    return;
                 }
                 byte[] body = stub.response.getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(stub.status, body.length);
@@ -57,6 +79,12 @@ final class StubLlm implements AutoCloseable {
     /** The stub's URL, for {@code mavai.llm.endpoint}. */
     String endpoint() {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+    }
+
+    /** Accept the request, then never answer. */
+    StubLlm stalling() {
+        this.stall = true;
+        return this;
     }
 
     StubLlm respond(int status, String body) {
@@ -103,6 +131,7 @@ final class StubLlm implements AutoCloseable {
 
     @Override
     public void close() {
+        closed.countDown();
         server.stop(0);
     }
 }

@@ -17,7 +17,8 @@ final class ParameterValidation {
 
     private static final Set<String> CONFIGURATION_KEYS = Set.of(
             "system-prompt", "provider", "capabilities", "model", "temperature",
-            "top-p", "thinking", "prompt-caching", "response-schema", "max-tokens");
+            "top-p", "thinking", "prompt-caching", "response-schema", "max-tokens",
+            "deadline-ms");
 
     private static final List<String> THINKING_VALUES = List.of("adaptive", "none");
 
@@ -46,6 +47,7 @@ final class ParameterValidation {
         Boolean promptCaching = promptCaching(serviceName, configuration);
         Map<String, Object> responseSchema = responseSchema(serviceName, configuration);
         int maxTokens = maxTokens(serviceName, configuration);
+        int deadlineMs = deadlineMs(serviceName, configuration);
         if ("adaptive".equals(thinking)
                 && maxTokens <= LanguageModelParameters.THINKING_MIN_MAX_TOKENS) {
             throw fail(serviceName, "`max-tokens: " + maxTokens + "` is too small for "
@@ -56,7 +58,7 @@ final class ParameterValidation {
                     + "nothing. Raise the ceiling or set `thinking: none`.");
         }
         return new LanguageModelParameters(systemPrompt, providerName, capabilities, model,
-                temperature, topP, thinking, promptCaching, responseSchema, maxTokens);
+                temperature, topP, thinking, promptCaching, responseSchema, maxTokens, deadlineMs);
     }
 
     private static String systemPrompt(String serviceName, Map<String, Object> configuration) {
@@ -173,6 +175,28 @@ final class ParameterValidation {
                     + LanguageModelParameters.DEFAULT_MAX_TOKENS + " and is recorded as such.");
         }
         return ceiling;
+    }
+
+    /**
+     * The declared wait, in whole milliseconds, or the recorded
+     * default. Zero has no meaning here: an unbounded wait is what this
+     * key exists to abolish, so the format gives it no spelling.
+     */
+    private static int deadlineMs(String serviceName, Map<String, Object> configuration) {
+        Object value = configuration.get("deadline-ms");
+        if (value == null) {
+            return LanguageModelParameters.DEFAULT_DEADLINE_MS;
+        }
+        if (value instanceof Boolean || !(value instanceof Integer deadline) || deadline < 1) {
+            throw fail(serviceName, "`deadline-ms:` must be a whole number of milliseconds "
+                    + "greater than zero — how long this framework waits for one response "
+                    + "before recording a failed delivery. It bounds the whole exchange, not "
+                    + "just the connection. Unstated, it defaults to "
+                    + LanguageModelParameters.DEFAULT_DEADLINE_MS + " and is recorded as such; "
+                    + "it is part of the service's identity, so a baseline measured under one "
+                    + "deadline does not resolve a test run under another.");
+        }
+        return deadline;
     }
 
     private static String string(

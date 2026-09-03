@@ -5,12 +5,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeSet;
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.spi.ConfiguredService;
+import org.mavai.punit.api.spec.DeliveryCause;
 import org.mavai.punit.decl.spi.MediaKind;
 import org.mavai.punit.lm.providers.LmProvider;
 import org.mavai.punit.lm.providers.Media;
@@ -29,11 +32,15 @@ import org.mavai.punit.lm.providers.Providers;
  */
 public final class ConfiguredLanguageModel implements ConfiguredService {
 
+    /** The peer stating that it stopped waiting — not that we did. */
+    private static final int GATEWAY_TIMEOUT = 504;
+
     private final LmProvider provider;
     private final LanguageModelParameters parameters;
     private final String endpoint;
     private final String model;
     private final Map<String, String> headers;
+    private final Duration deadline;
     private final HttpClient client;
 
     private ConfiguredLanguageModel(LmProvider provider, LanguageModelParameters parameters,
@@ -43,7 +50,12 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         this.endpoint = endpoint;
         this.model = model;
         this.headers = headers;
-        this.client = HttpClient.newHttpClient();
+        this.deadline = Duration.ofMillis(parameters.deadlineMs());
+        // Both levels, because Java separates them and the failure this
+        // guards against connected perfectly and then went silent: a
+        // connect-only deadline satisfies the letter of `deadline-ms:`
+        // and none of its purpose.
+        this.client = HttpClient.newBuilder().connectTimeout(deadline).build();
     }
 
     /**
@@ -82,15 +94,26 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
     public Outcome<org.mavai.punit.lm.api.LmReply> exchange(Object input) {
         String body = Json.write(provider.body().build(parameters, model, input));
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(endpoint))
+                .timeout(deadline)
                 .POST(HttpRequest.BodyPublishers.ofString(body));
         headers.forEach(request::header);
         final HttpResponse<String> response;
         try {
             response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        } catch (HttpTimeoutException elapsed) {
+            // The deadline this framework set, elapsed. Stating it as
+            // its own cause is what separates "we stopped waiting" from
+            // "the service is unreachable": both are failed deliveries,
+            // and only one of them is a statement about the service.
+            // HttpConnectTimeoutException arrives here as a subtype —
+            // correctly, since it is the same fact at the other level.
+            return DeliveryCause.CLIENT_DEADLINE.fail(
+                    "service did not answer within the " + parameters.deadlineMs()
+                            + "ms deadline at " + endpoint);
         } catch (IOException unreachable) {
             // No response at all — DNS, refused connection, broken pipe:
             // the service did not deliver, a failed sample with its cause.
-            return Outcome.fail("service-delivery",
+            return DeliveryCause.UNREACHABLE.fail(
                     "service unreachable at " + endpoint + ": " + unreachable.getMessage());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -100,11 +123,16 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         }
         if (response.statusCode() >= 500) {
             // The service answered that it is failing: a failed delivery.
+            // A 504 is the peer stating that *it* timed out waiting on
+            // something further upstream — a different fact from our own
+            // deadline elapsing, and stated as one.
             String detail = Json.excerpt(response.body(), 200);
-            return Outcome.fail("service-delivery",
-                    "service failed to deliver: " + provider.name() + " answered HTTP "
-                            + response.statusCode() + " at " + endpoint
-                            + (detail.isEmpty() ? "" : " — " + detail));
+            DeliveryCause cause = response.statusCode() == GATEWAY_TIMEOUT
+                    ? DeliveryCause.PEER_TIMEOUT
+                    : DeliveryCause.SERVER_ERROR;
+            return cause.fail("service failed to deliver: " + provider.name() + " answered HTTP "
+                    + response.statusCode() + " at " + endpoint
+                    + (detail.isEmpty() ? "" : " — " + detail));
         }
         if (response.statusCode() >= 400) {
             throw new ProviderResponseException(
@@ -115,7 +143,7 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         try {
             return Outcome.ok(provider.extract().apply(Json.read(response.body(), provider.name())));
         } catch (ServiceDeliveryException undelivered) {
-            return Outcome.fail("service-delivery", undelivered.getMessage());
+            return DeliveryCause.UNUSABLE_RESPONSE.fail(undelivered.getMessage());
         }
     }
 
@@ -151,6 +179,12 @@ public final class ConfiguredLanguageModel implements ConfiguredService {
         // The output ceiling shapes the response as strongly as any
         // sampling parameter, so it is fingerprinted like one.
         entries.put("maxTokens", String.valueOf(parameters.maxTokens()));
+        // Unconditional, unlike the declared-or-absent entries above: a
+        // deadline moves the boundary between a slow delivery and a
+        // failed one, so it is always part of what was measured, and an
+        // unrecorded default is exactly the hidden constant the key
+        // exists to abolish.
+        entries.put("deadlineMs", String.valueOf(parameters.deadlineMs()));
         return entries;
     }
 

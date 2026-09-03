@@ -46,7 +46,7 @@ class PerCriterionVerdictsTest {
         // 90 of 100 passed, threshold 0.80 → 0.90 >= 0.80 → PASS, mirrors legacy.
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.80)),
-                List.of(new CriterionSampleCounts("only", 90, 10, 0)));
+                List.of(new CriterionSampleCounts("only", 90, 10, 0, 0)));
         assertThat(eval.perCriterionVerdicts()).hasSize(1);
         PerCriterionVerdict row = eval.perCriterionVerdicts().get(0);
         assertThat(row.criterionId()).isEqualTo("only");
@@ -61,7 +61,7 @@ class PerCriterionVerdictsTest {
     void k1IsomorphismFail() {
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.95)),
-                List.of(new CriterionSampleCounts("only", 80, 20, 0)));
+                List.of(new CriterionSampleCounts("only", 80, 20, 0, 0)));
         assertThat(eval.perCriterionVerdicts().get(0).verdict()).isEqualTo(Verdict.FAIL);
         assertThat(eval.compositeVerdict()).isEqualTo(Verdict.FAIL);
     }
@@ -73,10 +73,39 @@ class PerCriterionVerdictsTest {
         // 100, observed 0.80. Both kinds of fail count as a non-pass.
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.85)),
-                List.of(new CriterionSampleCounts("crit", 80, 10, 10)));
+                List.of(new CriterionSampleCounts("crit", 80, 10, 10, 0)));
         PerCriterionVerdict row = eval.perCriterionVerdicts().get(0);
         assertThat(row.observed()).isEqualTo(0.80);
         assertThat(row.verdict()).isEqualTo(Verdict.FAIL);
+    }
+
+    @Test
+    @DisplayName("apply-failure samples count in the denominator as fails")
+    void applyFailureSamplesCountAsFails() {
+        // 80 PASS, 20 that failed before this criterion judged
+        // anything — a failed delivery, or any other apply-level
+        // failure. Denominator 100, observed 0.80: a trial the service
+        // never answered is a trial this criterion did not pass, which
+        // is what keeps the per-criterion rate honest against the
+        // aggregate.
+        PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
+                List.of(legacyPass(0.85)),
+                List.of(new CriterionSampleCounts("crit", 80, 0, 0, 20)));
+        PerCriterionVerdict row = eval.perCriterionVerdicts().get(0);
+        assertThat(row.observed()).isEqualTo(0.80);
+        assertThat(row.verdict()).isEqualTo(Verdict.FAIL);
+    }
+
+    @Test
+    @DisplayName("all three failure axes share one denominator")
+    void everyFailureAxisCountsOnce() {
+        // 70 PASS, 10 of each failure kind — denominator 100. The axes
+        // are diagnostic; none of them is exempt from the count, and
+        // none is counted twice.
+        PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
+                List.of(legacyPass(0.60)),
+                List.of(new CriterionSampleCounts("crit", 70, 10, 10, 10)));
+        assertThat(eval.perCriterionVerdicts().get(0).observed()).isEqualTo(0.70);
     }
 
     @Test
@@ -85,8 +114,8 @@ class PerCriterionVerdictsTest {
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyInconclusive()),
                 List.of(
-                        new CriterionSampleCounts("a", 100, 0, 0),
-                        new CriterionSampleCounts("b", 100, 0, 0)));
+                        new CriterionSampleCounts("a", 100, 0, 0, 0),
+                        new CriterionSampleCounts("b", 100, 0, 0, 0)));
         assertThat(eval.perCriterionVerdicts())
                 .allMatch(r -> r.verdict() == Verdict.INCONCLUSIVE);
         assertThat(eval.compositeVerdict()).isEqualTo(Verdict.INCONCLUSIVE);
@@ -103,9 +132,9 @@ class PerCriterionVerdictsTest {
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.85)),
                 List.of(
-                        new CriterionSampleCounts("good-1", 100, 0, 0),
-                        new CriterionSampleCounts("bad", 60, 40, 0),
-                        new CriterionSampleCounts("good-2", 100, 0, 0)));
+                        new CriterionSampleCounts("good-1", 100, 0, 0, 0),
+                        new CriterionSampleCounts("bad", 60, 40, 0, 0),
+                        new CriterionSampleCounts("good-2", 100, 0, 0, 0)));
         List<Verdict> verdicts = eval.perCriterionVerdicts().stream()
                 .map(PerCriterionVerdict::verdict).toList();
         assertThat(verdicts).containsExactly(Verdict.PASS, Verdict.FAIL, Verdict.PASS);
@@ -117,7 +146,7 @@ class PerCriterionVerdictsTest {
     void zeroSampleCriterionInconclusive() {
         PerCriterionEvaluation eval = PerCriterionVerdicts.derive(
                 List.of(legacyPass(0.80)),
-                List.of(new CriterionSampleCounts("empty", 0, 0, 0)));
+                List.of(new CriterionSampleCounts("empty", 0, 0, 0, 0)));
         assertThat(eval.perCriterionVerdicts().get(0).verdict())
                 .isEqualTo(Verdict.INCONCLUSIVE);
     }

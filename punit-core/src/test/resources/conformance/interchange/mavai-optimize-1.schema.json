@@ -36,6 +36,18 @@
       "format": "date-time",
       "description": "ISO 8601 UTC timestamp of emission."
     },
+    "inputs": {
+      "type": "array",
+      "description": "Informational: how each input the run drove presents itself \u2014 a file input's document name, a text input's bounded excerpt \u2014 for human orientation only. Stated for every input, not only for those that failed: naming some rows and leaving others blank is the asymmetry this block exists to remove. Consumers correlate via inputIndex and must render a document that omits it; nothing here is identity, which stays the inputs fingerprint.",
+      "items": {
+        "type": "object",
+        "required": ["inputIndex", "inputExcerpt"],
+        "properties": {
+          "inputIndex": { "type": "integer", "minimum": 0, "description": "Zero-based index into the inputs list \u2014 the structural input reference, the same one failureDistribution entries carry." },
+          "inputExcerpt": { "type": "string", "maxLength": 256, "description": "Informational bounded excerpt of the input, for human orientation only \u2014 consumers correlate via inputIndex." }
+        }
+      }
+    },
     "iterations": {
       "type": "array",
       "minItems": 1,
@@ -125,12 +137,108 @@
         "observedPassRate": { "type": "number", "minimum": 0, "maximum": 1 },
         "pass": { "type": "integer", "minimum": 0 },
         "fail": { "type": "integer", "minimum": 0 },
-        "failureDistribution": { "$ref": "#/$defs/failureDistribution" }
+        "failureDistribution": { "$ref": "#/$defs/failureDistribution" },
+        "standings": { "$ref": "#/$defs/standings" }
+      }
+    },
+    "standings": {
+      "type": "object",
+      "description": "The criterion's descriptive postcondition standings for this iteration (amendment 2026-07-28) — the identical shape and classification as the exploration schema's standings block, per the identical-statistics-shape rule. Binding when present, additive; counts and the observed fraction only — never a confidence interval, a threshold, or per-check verdict vocabulary.",
+      "required": ["rows"],
+      "additionalProperties": true,
+      "properties": {
+        "optionalSlack": {
+          "type": "string",
+          "pattern": "^[0-9]+%?$",
+          "description": "The criterion's declared optional-check failure budget, verbatim as authored: digits for a count ('2'), digits + % for a percentage ('20%'). Absent iff the contract declares none — absence is distinguishable from '0', the explicit budget of zero."
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One row per (input, check), in the emitter's stated order.",
+          "items": {
+            "type": "object",
+            "required": ["inputIndex", "check", "optional", "passed", "failed", "skipped", "observedFraction"],
+            "additionalProperties": true,
+            "properties": {
+              "inputIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Zero-based structural input reference, as in failureDistribution."
+              },
+              "provenance": {
+                "type": "string",
+                "enum": ["criterion", "input"],
+                "description": "Which declaration stated this postcondition: 'criterion' for one the criterion states, asserted of every input; 'input' for one an input's own expected values state, asserted only against that input. Both are postconditions \u2014 they differ in who stated them, and their denominators differ accordingly, which is why a consumer listing them together shows one figure out of six beside another out of twelve with nothing to explain it. Additive and optional: absence means 'criterion', which is what every pre-amendment emission means. A consumer meeting an unknown value reads it as 'criterion' and renders it without comment."
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The check's bounded identity, as the contract declares it — never embedding input or response content."
+              },
+              "optional": {
+                "type": "boolean",
+                "description": "Whether the contract marks this check optional — stated explicitly for every row."
+              },
+              "passed": { "type": "integer", "minimum": 0 },
+              "failed": { "type": "integer", "minimum": 0 },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trials on which the check was not judged because an earlier transform failed."
+              },
+              "observedFraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "passed / (passed + failed + skipped), as stated by the emitter."
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The structural address the check judges, as declared (amendment 2026-07-28, structured rows). Present iff path-addressed; the by-path grouping key — never derived from check."
+              },
+              "form": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The comparison form's domain name, as the contract format spells it."
+              },
+              "expected": {
+                "type": "string",
+                "maxLength": 256,
+                "description": "Bounded excerpt of the declared operand, for display — never an identity."
+              },
+              "observed": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Obtained-value exemplars, failing exemplars first; distinct excerpts capped by the emitter, counts summing to at most the row's trials.",
+                "items": {
+                  "type": "object",
+                  "required": ["excerpt", "count", "held"],
+                  "additionalProperties": true,
+                  "properties": {
+                    "excerpt": { "type": "string", "maxLength": 256 },
+                    "count": { "type": "integer", "minimum": 1 },
+                    "held": { "type": "boolean" }
+                  }
+                }
+              },
+              "elided": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trials whose obtained values were not exemplified."
+              }
+            }
+          }
+        }
       }
     },
     "failureDistribution": {
       "type": "array",
-      "description": "A sequence of failure entries aggregated over the run (amendment 2026-07-17: the earlier check-name-keyed mapping is withdrawn — no mapping key may derive from input or response content, per the interchange area's key discipline). Each failed trial is attributed to its first failing condition; the entries' counts sum to the enclosing failures total.",
+      "description": "A sequence of failure entries aggregated over the run (amendment 2026-07-17: the earlier check-name-keyed mapping is withdrawn \u2014 no mapping key may derive from input or response content, per the interchange area's key discipline). Each failed trial is attributed to its first failing condition; the entries' counts sum to the enclosing failures total.",
       "items": {
         "type": "object",
         "required": [
@@ -138,12 +246,41 @@
           "count"
         ],
         "additionalProperties": true,
+        "allOf": [
+          {
+            "$comment": "A delivery entry's condition is drawn from the closed cause vocabulary, never a free-text message: a cause that is not groupable is not countable, and one that is not bounded is not an identity.",
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "delivery"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "condition": {
+                  "$ref": "#/$defs/deliveryCause"
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "condition": {
             "type": "string",
             "minLength": 1,
             "maxLength": 256,
-            "description": "The violating condition's bounded identity, as the contract declares it — never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex."
+            "description": "The violating condition's bounded identity, as the contract declares it \u2014 never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex. On a delivery-kind entry this is the delivery cause instead, drawn from the closed vocabulary: there is no declared condition to name when nothing was delivered to judge."
+          },
+          "kind": {
+            "enum": [
+              "evaluated",
+              "delivery"
+            ],
+            "description": "Whether these trials were judged and found wanting (evaluated), or never delivered a response to judge (delivery). Absent in pre-amendment emissions \u2014 a consumer renders absence as not stated, never as evaluated. Diagnostic only: a failed delivery is a failed trial on the same counting rule, and this states what kind of failure it was, not how much it counts."
           },
           "count": {
             "type": "integer",
@@ -153,15 +290,26 @@
           "inputIndex": {
             "type": "integer",
             "minimum": 0,
-            "description": "Zero-based index into the inputs list, present when the condition is per-input — the structural input reference; the input value itself is never serialised as identity."
+            "description": "Zero-based index into the inputs list, present when the condition is per-input \u2014 the structural input reference; the input value itself is never serialised as identity."
           },
           "inputExcerpt": {
             "type": "string",
             "maxLength": 256,
-            "description": "Informational bounded excerpt of the driving input, for human orientation only — consumers correlate via inputIndex."
+            "description": "Informational bounded excerpt of the driving input, for human orientation only \u2014 consumers correlate via inputIndex."
           }
         }
       }
+    },
+    "deliveryCause": {
+      "enum": [
+        "unreachable",
+        "client-deadline",
+        "peer-timeout",
+        "server-error",
+        "unusable-response"
+      ],
+      "description": "Why a delivery failed, from a closed vocabulary — no emitter states a cause it cannot know. `unreachable`: no response at all (name resolution, refused connection). `client-deadline`: the framework's own stated deadline elapsed — it stopped waiting. `peer-timeout`: the peer stated that it timed out, which is a different fact from the one above and must not be conflated with it. `server-error`: the service answered that it is failing. `unusable-response`: a delivered body carrying nothing to judge.",
+      "$comment": "The two timeout senses are separate tokens deliberately. Before DIR-FAM-TIMEOUT-client-deadline no framework in the family set a deadline, so `we stopped waiting` was unsayable and any observed cut-off was the peer's; a single `timeout` token would have let a later emitter blur the two the moment deadlines arrived."
     },
     "cost": {
       "type": "object",

@@ -30,7 +30,13 @@
     "configuration": {
       "type": "string",
       "minLength": 1,
-      "description": "The configuration's display name. Cross-document identity for consumers; filenames are never parsed."
+      "description": "The configuration's identity: the string that distinguishes it from its siblings and correlates it across documents. Emitter-derived from the configuration's factor values; filenames are never parsed. Not a display name — a consumer with no configurationName derives something showable from this, which is what a reader saw before configurationName existed."
+    },
+    "configurationName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "The author's name for what this configuration is — the idea under test, stated on the grid entry rather than derived from its values. A consumer that shows a configuration to a reader shows this when present, and falls back to what it derived from `configuration` when absent — never to an empty name. Additive and stated only when authored: absence means the author named nothing. Prose, so bounded and carrying no uniqueness guarantee; it never becomes identity, and two configurations may state the same name and remain two configurations."
     },
     "baseConfiguration": {
       "type": "boolean",
@@ -74,6 +80,18 @@
           "type": "string",
           "minLength": 1,
           "description": "Why the run ended. Consumers flag anything other than COMPLETED."
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Informational: how each input the run drove presents itself \u2014 a file input's document name, a text input's bounded excerpt \u2014 for human orientation only. Stated for every input, not only for those that failed: naming some rows and leaving others blank is the asymmetry this block exists to remove. Consumers correlate via inputIndex and must render a document that omits it; nothing here is identity, which stays the inputs fingerprint.",
+      "items": {
+        "type": "object",
+        "required": ["inputIndex", "inputExcerpt"],
+        "properties": {
+          "inputIndex": { "type": "integer", "minimum": 0, "description": "Zero-based index into the inputs list \u2014 the structural input reference, the same one failureDistribution entries carry." },
+          "inputExcerpt": { "type": "string", "maxLength": 256, "description": "Informational bounded excerpt of the input, for human orientation only \u2014 consumers correlate via inputIndex." }
         }
       }
     },
@@ -208,6 +226,11 @@
                 "minimum": 0,
                 "description": "Zero-based structural input reference, as in failureDistribution."
               },
+              "provenance": {
+                "type": "string",
+                "enum": ["criterion", "input"],
+                "description": "Which declaration stated this postcondition: 'criterion' for one the criterion states, asserted of every input; 'input' for one an input's own expected values state, asserted only against that input. Both are postconditions \u2014 they differ in who stated them, and their denominators differ accordingly, which is why a consumer listing them together shows one figure out of six beside another out of twelve with nothing to explain it. Additive and optional: absence means 'criterion', which is what every pre-amendment emission means. A consumer meeting an unknown value reads it as 'criterion' and renders it without comment."
+              },
               "check": {
                 "type": "string",
                 "minLength": 1,
@@ -301,12 +324,41 @@
           "count"
         ],
         "additionalProperties": true,
+        "allOf": [
+          {
+            "$comment": "A delivery entry's condition is drawn from the closed cause vocabulary, never a free-text message: a cause that is not groupable is not countable, and one that is not bounded is not an identity.",
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "delivery"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "condition": {
+                  "$ref": "#/$defs/deliveryCause"
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "condition": {
             "type": "string",
             "minLength": 1,
             "maxLength": 256,
-            "description": "The violating condition's bounded identity, as the contract declares it \u2014 never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex."
+            "description": "The violating condition's bounded identity, as the contract declares it \u2014 never embedding input or response content. A per-input condition's identity is the condition name alone; the input travels structurally in inputIndex. On a delivery-kind entry this is the delivery cause instead, drawn from the closed vocabulary: there is no declared condition to name when nothing was delivered to judge."
+          },
+          "kind": {
+            "enum": [
+              "evaluated",
+              "delivery"
+            ],
+            "description": "Whether these trials were judged and found wanting (evaluated), or never delivered a response to judge (delivery). Absent in pre-amendment emissions \u2014 a consumer renders absence as not stated, never as evaluated. Diagnostic only: a failed delivery is a failed trial on the same counting rule, and this states what kind of failure it was, not how much it counts."
           },
           "count": {
             "type": "integer",
@@ -325,6 +377,17 @@
           }
         }
       }
+    },
+    "deliveryCause": {
+      "enum": [
+        "unreachable",
+        "client-deadline",
+        "peer-timeout",
+        "server-error",
+        "unusable-response"
+      ],
+      "description": "Why a delivery failed, from a closed vocabulary — no emitter states a cause it cannot know. `unreachable`: no response at all (name resolution, refused connection). `client-deadline`: the framework's own stated deadline elapsed — it stopped waiting. `peer-timeout`: the peer stated that it timed out, which is a different fact from the one above and must not be conflated with it. `server-error`: the service answered that it is failing. `unusable-response`: a delivered body carrying nothing to judge.",
+      "$comment": "The two timeout senses are separate tokens deliberately. Before DIR-FAM-TIMEOUT-client-deadline no framework in the family set a deadline, so `we stopped waiting` was unsayable and any observed cut-off was the peer's; a single `timeout` token would have let a later emitter blur the two the moment deadlines arrived."
     },
     "cost": {
       "type": "object",

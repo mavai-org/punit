@@ -374,6 +374,7 @@ public final class Engine {
             int pass = 0;
             int conditionFail = 0;
             int transformFail = 0;
+            int applyFail = 0;
         }
 
         private void recordCriterionSampleOutcomes(ServiceContractOutcome<?, OT> stamped) {
@@ -381,6 +382,11 @@ public final class Engine {
             // failure, synthesised defect outcome) or when this sample's
             // outcome was constructed without per-criterion detail (test
             // fixtures using the back-compat constructor).
+            if (stamped.criterionSampleResults().isEmpty()
+                    && stamped.value() instanceof org.mavai.outcome.Outcome.Fail<OT>) {
+                recordApplyFailure();
+                return;
+            }
             for (var entry : stamped.criterionSampleResults()) {
                 MutableCriterionCounts counts = criterionCounts.computeIfAbsent(
                         entry.criterionId(), k -> new MutableCriterionCounts());
@@ -398,6 +404,22 @@ public final class Engine {
                         }
                     }
                 }
+            }
+        }
+
+        /**
+         * A trial that failed at apply judged nothing, so it reaches
+         * no criterion's tally on its own. It is nonetheless a failure
+         * against every declared criterion — the family's counting
+         * rule, and the reason the aggregate failure count and the
+         * per-criterion denominators agree. Recorded here against the
+         * contract's declarations, since the sample itself carries no
+         * per-criterion detail to record from.
+         */
+        private void recordApplyFailure() {
+            for (var criterion : serviceContract.criteria().asList()) {
+                criterionCounts.computeIfAbsent(criterion.id(),
+                        k -> new MutableCriterionCounts()).applyFail++;
             }
         }
 
@@ -443,7 +465,7 @@ public final class Engine {
             for (var e : criterionCounts.entrySet()) {
                 MutableCriterionCounts c = e.getValue();
                 out.add(new CriterionSampleCounts(
-                        e.getKey(), c.pass, c.conditionFail, c.transformFail));
+                        e.getKey(), c.pass, c.conditionFail, c.transformFail, c.applyFail));
             }
             return List.copyOf(out);
         }

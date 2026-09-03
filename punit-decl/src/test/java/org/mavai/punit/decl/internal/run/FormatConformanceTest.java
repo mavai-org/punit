@@ -171,6 +171,7 @@ class FormatConformanceTest {
             Map.entry("lm-top-p-range", "`top-p:` must be a number in (0, 1]"),
             Map.entry("lm-prompt-caching-type", "`prompt-caching:` must be a boolean"),
             Map.entry("lm-max-tokens-range", "`max-tokens:` must be a whole number"),
+            Map.entry("lm-deadline-range", "`deadline-ms:` must be a whole number"),
             Map.entry("lm-capabilities-vocabulary", "unknown capability"),
             Map.entry("explorations-empty", "`explorations:` must be a non-empty list"),
             Map.entry("exploration-entry-null-value", "declares no value"),
