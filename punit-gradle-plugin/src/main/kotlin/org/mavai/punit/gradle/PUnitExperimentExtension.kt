@@ -12,6 +12,7 @@ import org.gradle.api.provider.Property
  *     optimizationsDir.set(layout.buildDirectory.dir("punit/optimizations").map { it.asFile.absolutePath })
  *     configureTestTask.set(true)
  *     excludeTestSubjects.set(true)
+ *     mavaiVersion.set("0.21.0")
  * }
  * ```
  *
@@ -36,4 +37,12 @@ abstract class PUnitExperimentExtension {
 
     /** Whether to exclude testsubjects directories from test and experiment tasks. Default: `true` */
     abstract val excludeTestSubjects: Property<Boolean>
+
+    /**
+     * Version of the `mavai` renderer (`org.mavai:mavai` on Maven Central) the
+     * `mavaiVerdict`, `mavaiExplore` and `mavaiOptimize` tasks resolve and run.
+     * Default: the version this plugin was built against. The `MAVAI_BIN`
+     * environment variable names an executable to use instead of any resolved one.
+     */
+    abstract val mavaiVersion: Property<String>
 }

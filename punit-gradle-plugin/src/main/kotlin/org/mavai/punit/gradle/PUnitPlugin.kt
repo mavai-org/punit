@@ -52,6 +52,7 @@ class PUnitPlugin : Plugin<Project> {
             )
             configureTestTask.convention(true)
             excludeTestSubjects.convention(true)
+            mavaiVersion.convention(MavaiVersion.VERSION)
         }
 
         // Create a dedicated configuration for punit-sentinel so it is only
@@ -75,6 +76,10 @@ class PUnitPlugin : Plugin<Project> {
         project.dependencies.add("punitReport",
             "org.mavai:punit-report:$punitVersion")
 
+        // The renderer itself: a native executable resolved from Maven Central
+        // for the host platform, so the report tasks need no install step.
+        val rendererConfig = MavaiRenderer.registerConfiguration(project) { extension.mavaiVersion.get() }
+
         project.afterEvaluate {
             if (extension.configureTestTask.get()) {
                 configureTestTask(project, extension)
@@ -92,6 +97,50 @@ class PUnitPlugin : Plugin<Project> {
             registerPUnitVerifyTask(project, reportConfig)
             registerMavaiCheckTask(project, extension)
             registerMavaiMaterialiseTask(project)
+            registerMavaiReportTasks(project, extension, rendererConfig)
+        }
+    }
+
+    /**
+     * The three report tasks, one per artefact kind a run emits, each a
+     * [MavaiReportTask] pointed at the directory the run writes and at the
+     * page it should produce. The verdict page is drawn over the parent of
+     * the XML directory the `test` task fills (the renderer walks one level
+     * down); the explore pages are one per service; the optimize page is one
+     * over every service.
+     */
+    private fun registerMavaiReportTasks(
+        project: Project,
+        extension: PUnitExperimentExtension,
+        rendererConfig: org.gradle.api.artifacts.Configuration
+    ) {
+        val reports = project.layout.buildDirectory.dir("reports/punit")
+        project.tasks.register("mavaiVerdict", MavaiReportTask::class.java).configure {
+            description = "Renders the verdict report over build/reports/punit with the mavai renderer"
+            group = "verification"
+            reportType.set("verdict")
+            artefactDir.set(reports)
+            outputFile.set(reports.map { it.file("verdict.html") })
+            rendererConfiguration.set(rendererConfig)
+            mustRunAfter(project.tasks.named("test"))
+        }
+        project.tasks.register("mavaiExplore", MavaiReportTask::class.java).configure {
+            description = "Renders one exploration comparison page per service with the mavai renderer"
+            group = "verification"
+            reportType.set("explore")
+            artefactDir.set(project.layout.dir(extension.explorationsDir.map { project.file(it) }))
+            perServiceOutputDir.set(reports)
+            rendererConfiguration.set(rendererConfig)
+            mustRunAfter(project.tasks.named("experiment"), project.tasks.named("exp"))
+        }
+        project.tasks.register("mavaiOptimize", MavaiReportTask::class.java).configure {
+            description = "Renders the optimization comparison page with the mavai renderer"
+            group = "verification"
+            reportType.set("optimize")
+            artefactDir.set(project.layout.dir(extension.optimizationsDir.map { project.file(it) }))
+            outputFile.set(reports.map { it.file("optimize.html") })
+            rendererConfiguration.set(rendererConfig)
+            mustRunAfter(project.tasks.named("experiment"), project.tasks.named("exp"))
         }
     }
 

@@ -69,7 +69,7 @@ PUnit ships as three published artefacts plus a Gradle plugin:
 | **punit-core**         | `org.mavai:punit-core`     | Foundational library: author-facing API (`ServiceContract`, `Contract`, `Sampling`, criteria), engine, statistics, baselines, runtime entry point. Carries the user-facing `@ProbabilisticTest` and `@Experiment` annotations (meta-annotated with `@Test`). JUnit-free at runtime; sentinel-deployable directly. |
 | **punit-sentinel**     | `org.mavai:punit-sentinel` | Sentinel runner for production/scheduled probabilistic checks without a test harness.                            |
 | **punit-report**       | `org.mavai:punit-report`   | Verdict-XML reader/writer, bundled verdict schemas and verifier; auto-registers an XML `VerdictSink` via `ServiceLoader`. Renders nothing: HTML comes from the shared `mavai` renderer. |
-| **punit Gradle plugin**| `org.mavai.punit` (plugin) | Auto-configures the `test` task, registers `experiment` / `exp` tasks, supports `-Prun=` filtering.              |
+| **punit Gradle plugin**| `org.mavai.punit` (plugin) | Auto-configures the `test` task, registers `experiment` / `exp` tasks, supports `-Prun=` filtering; resolves the shared `mavai` renderer from Maven Central and renders the reports (`mavaiVerdict`, `mavaiExplore`, `mavaiOptimize`). |
 
 The three library artefacts share the `punit-` prefix; `punit-core` is the foundation, the others extend it.
 

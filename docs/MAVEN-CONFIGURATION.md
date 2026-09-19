@@ -138,3 +138,72 @@ If your project uses PUnit's TestKit pattern (test subjects in `**/testsubjects/
     </configuration>
 </plugin>
 ```
+
+## Reports: the `mavai` renderer
+
+PUnit renders no HTML; the family's shared `mavai` executable does, from the artefacts a run writes (see the User Guide, Part 11). The Gradle plugin resolves and runs it for you; a Maven build does the same in two steps, because the renderer is on Maven Central as `org.mavai:mavai` with one platform-classified `exe` artefact per platform.
+
+Detect the platform with `os-maven-plugin`, which sets `${os.detected.classifier}` to the same vocabulary the artefacts are published under (`linux-x86_64`, `linux-aarch_64`, `osx-x86_64`, `osx-aarch_64`, `windows-x86_64`):
+
+```xml
+<build>
+    <extensions>
+        <extension>
+            <groupId>kr.motd.maven</groupId>
+            <artifactId>os-maven-plugin</artifactId>
+            <version>1.7.1</version>
+        </extension>
+    </extensions>
+</build>
+```
+
+Copy the executable into the build and run it after the tests:
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-dependency-plugin</artifactId>
+    <executions>
+        <execution>
+            <id>mavai-renderer</id>
+            <phase>post-integration-test</phase>
+            <goals><goal>copy</goal></goals>
+            <configuration>
+                <artifactItems>
+                    <artifactItem>
+                        <groupId>org.mavai</groupId>
+                        <artifactId>mavai</artifactId>
+                        <version>0.21.0</version>
+                        <classifier>${os.detected.classifier}</classifier>
+                        <type>exe</type>
+                        <destFileName>mavai</destFileName>
+                    </artifactItem>
+                </artifactItems>
+                <outputDirectory>${project.build.directory}/mavai</outputDirectory>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+<plugin>
+    <groupId>org.codehaus.mojo</groupId>
+    <artifactId>exec-maven-plugin</artifactId>
+    <executions>
+        <execution>
+            <id>mavai-verdict</id>
+            <phase>post-integration-test</phase>
+            <goals><goal>exec</goal></goals>
+            <configuration>
+                <executable>${project.build.directory}/mavai/mavai</executable>
+                <arguments>
+                    <argument>verdict</argument>
+                    <argument>${project.build.directory}/reports/punit</argument>
+                    <argument>-o</argument>
+                    <argument>${project.build.directory}/reports/punit/verdict.html</argument>
+                </arguments>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+On Windows the copied file needs the `.exe` name (`<destFileName>mavai.exe</destFileName>`) to be a command; on the other platforms mark it executable before running it (the `copy` goal does not). `mavai explore <explorations>/<service>` and `mavai optimize <optimizations>` render the experiment artefacts the same way.

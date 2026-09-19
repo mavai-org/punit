@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The Gradle plugin brings the renderer.** `mavai`, the family's
+  shared report tool, is now on Maven Central as `org.mavai:mavai` — one
+  native executable per platform, selected by classifier — and the plugin
+  resolves the one for the host and runs it, so adding punit to a build
+  brings the reports with it and nothing is installed by hand. Three
+  tasks render the three report kinds: `mavaiVerdict` over
+  `build/reports/punit`, `mavaiExplore` (one page per service under
+  `explorationsDir`) and `mavaiOptimize` over `optimizationsDir`, each
+  writing under `build/reports/punit/`. The plugin pins the renderer
+  version it was built against; `punit { mavaiVersion }` overrides it,
+  and `MAVAI_BIN` in the environment names an executable to use instead
+  of any resolved one. On a platform no artefact is published for, a
+  task says so and completes without a page; a `mavai` on `PATH` is used
+  when there is one. The User Guide's Part 11 is rewritten around the
+  tasks, with manual installation as the alternative, and
+  `MAVEN-CONFIGURATION.md` gains the `os-maven-plugin` +
+  `maven-dependency-plugin` recipe for a Maven build.
+
 ## [0.10.0] - 2026-09-07
 
 ### Removed
