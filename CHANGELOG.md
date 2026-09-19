@@ -9,21 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **The Gradle plugin brings the renderer.** `mavai`, the family's
+- **`punitReport` is back, and it delegates.** `mavai`, the family's
   shared report tool, is now on Maven Central as `org.mavai:mavai` — one
-  native executable per platform, selected by classifier — and the plugin
-  resolves the one for the host and runs it, so adding punit to a build
-  brings the reports with it and nothing is installed by hand. Three
-  tasks render the three report kinds: `mavaiVerdict` over
-  `build/reports/punit`, `mavaiExplore` (one page per service under
-  `explorationsDir`) and `mavaiOptimize` over `optimizationsDir`, each
-  writing under `build/reports/punit/`. The plugin pins the renderer
-  version it was built against; `punit { mavaiVersion }` overrides it,
-  and `MAVAI_BIN` in the environment names an executable to use instead
-  of any resolved one. On a platform no artefact is published for, a
-  task says so and completes without a page; a `mavai` on `PATH` is used
-  when there is one. The User Guide's Part 11 is rewritten around the
-  tasks, with manual installation as the alternative, and
+  native executable per platform, selected by classifier — and the
+  Gradle plugin resolves the one for the host and runs it, so adding
+  punit to a build brings the reports with it and nothing is installed
+  by hand. One task, `punitReport`, draws a page for every kind of
+  artefact the run left behind: `verdict.html` over the verdict XML,
+  `explore-<service>.html` per service under `explorationsDir`, and
+  `optimize.html` over `optimizationsDir`, all under
+  `build/reports/punit/`, with one line saying what was drawn and what
+  was skipped. `./gradlew test punitReport` works as it did in 0.9 —
+  what changed is that the page is the renderer's, not a punit writer's.
+  It pairs with `punitVerify` and is not part of `check`. `hideScores`
+  on the task omits the optimization page's score displays. The plugin
+  pins the renderer version it was built against; `punit { mavaiVersion }`
+  overrides it, and `MAVAI_BIN` in the environment names an executable to
+  use instead of any resolved one. On a platform no artefact is published
+  for, the task says so and completes without a page; a `mavai` on `PATH`
+  is used when there is one. The User Guide's Part 11 is rewritten around
+  the task, with manual installation as the alternative, and
   `MAVEN-CONFIGURATION.md` gains the `os-maven-plugin` +
   `maven-dependency-plugin` recipe for a Maven build.
 

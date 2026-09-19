@@ -6,7 +6,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 
 /**
- * Locates the `mavai` renderer a report task runs.
+ * Locates the `mavai` renderer `punitReport` runs.
  *
  * PUnit renders no HTML; the family's shared `mavai` executable does, from
  * the artefacts a run emits. The renderer is published to Maven Central as
@@ -142,7 +142,7 @@ object MavaiRenderer {
             .firstOrNull { it.isFile && it.canExecute() }
     }
 
-    /** The one lifecycle line a task prints when no renderer can be found. */
+    /** The one lifecycle line `punitReport` prints when no renderer can be found. */
     fun missingMessage(): String {
         val platform = classifier()
             ?: "${System.getProperty("os.name")}/${System.getProperty("os.arch")}, for which no renderer is published"

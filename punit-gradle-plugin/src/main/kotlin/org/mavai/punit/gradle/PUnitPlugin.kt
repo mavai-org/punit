@@ -77,8 +77,12 @@ class PUnitPlugin : Plugin<Project> {
             "org.mavai:punit-report:$punitVersion")
 
         // The renderer itself: a native executable resolved from Maven Central
-        // for the host platform, so the report tasks need no install step.
+        // for the host platform, so punitReport needs no install step.
         val rendererConfig = MavaiRenderer.registerConfiguration(project) { extension.mavaiVersion.get() }
+        // Registered now, not after evaluation, so a build script can configure
+        // it (`tasks.named<PUnitReportTask>("punitReport") { … }`); every
+        // input is a provider, so nothing is read before execution.
+        registerPUnitReportTask(project, extension, rendererConfig)
 
         project.afterEvaluate {
             if (extension.configureTestTask.get()) {
@@ -97,50 +101,32 @@ class PUnitPlugin : Plugin<Project> {
             registerPUnitVerifyTask(project, reportConfig)
             registerMavaiCheckTask(project, extension)
             registerMavaiMaterialiseTask(project)
-            registerMavaiReportTasks(project, extension, rendererConfig)
         }
     }
 
     /**
-     * The three report tasks, one per artefact kind a run emits, each a
-     * [MavaiReportTask] pointed at the directory the run writes and at the
-     * page it should produce. The verdict page is drawn over the parent of
-     * the XML directory the `test` task fills (the renderer walks one level
-     * down); the explore pages are one per service; the optimize page is one
-     * over every service.
+     * `punitReport`: the pages for whatever a run left behind, drawn by the
+     * shared renderer — the verdict page over the parent of the XML directory
+     * the `test` task fills, one exploration page per service, the
+     * optimization page. Pairs with `punitVerify`; not wired into `check`.
      */
-    private fun registerMavaiReportTasks(
+    private fun registerPUnitReportTask(
         project: Project,
         extension: PUnitExperimentExtension,
         rendererConfig: org.gradle.api.artifacts.Configuration
     ) {
-        val reports = project.layout.buildDirectory.dir("reports/punit")
-        project.tasks.register("mavaiVerdict", MavaiReportTask::class.java).configure {
-            description = "Renders the verdict report over build/reports/punit with the mavai renderer"
+        project.tasks.register("punitReport", PUnitReportTask::class.java).configure {
+            description = "Renders the verdict, exploration and optimization pages with the mavai renderer"
             group = "verification"
-            reportType.set("verdict")
-            artefactDir.set(reports)
-            outputFile.set(reports.map { it.file("verdict.html") })
+            verdictXmlDir.set(project.layout.buildDirectory.dir("reports/punit/xml"))
+            explorationsDir.set(project.layout.dir(extension.explorationsDir.map { project.file(it) }))
+            optimizationsDir.set(project.layout.dir(extension.optimizationsDir.map { project.file(it) }))
+            outputDir.set(project.layout.buildDirectory.dir("reports/punit"))
+            hideScores.convention(false)
             rendererConfiguration.set(rendererConfig)
-            mustRunAfter(project.tasks.named("test"))
-        }
-        project.tasks.register("mavaiExplore", MavaiReportTask::class.java).configure {
-            description = "Renders one exploration comparison page per service with the mavai renderer"
-            group = "verification"
-            reportType.set("explore")
-            artefactDir.set(project.layout.dir(extension.explorationsDir.map { project.file(it) }))
-            perServiceOutputDir.set(reports)
-            rendererConfiguration.set(rendererConfig)
-            mustRunAfter(project.tasks.named("experiment"), project.tasks.named("exp"))
-        }
-        project.tasks.register("mavaiOptimize", MavaiReportTask::class.java).configure {
-            description = "Renders the optimization comparison page with the mavai renderer"
-            group = "verification"
-            reportType.set("optimize")
-            artefactDir.set(project.layout.dir(extension.optimizationsDir.map { project.file(it) }))
-            outputFile.set(reports.map { it.file("optimize.html") })
-            rendererConfiguration.set(rendererConfig)
-            mustRunAfter(project.tasks.named("experiment"), project.tasks.named("exp"))
+            // The runs that write the artefacts are registered after evaluation;
+            // name them lazily so this task can be registered before them.
+            mustRunAfter(project.provider { project.tasks.matching { it.name == "test" || it.name == "experiment" || it.name == "exp" } })
         }
     }
 

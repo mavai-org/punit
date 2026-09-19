@@ -1713,31 +1713,41 @@ every number on a report page is one PUnit stated in the artefact — the
 renderer derives nothing — so the page can never disagree with the
 artefact your build archived.
 
-### The renderer comes with the plugin
+### `punitReport`: the pages, drawn by the renderer
 
 The Gradle plugin brings the renderer: `mavai` is published to Maven
 Central as `org.mavai:mavai`, one native executable per platform
 (Linux x86-64 and arm64, macOS Intel and Apple silicon, Windows x86-64),
 and the plugin resolves the one for your machine the way Gradle resolves
 any dependency — cached once, nothing installed, nothing fetched at
-report time. Three tasks render the three report kinds:
+report time. One task draws the pages for whatever the run left behind:
 
 ```bash
-./gradlew test mavaiVerdict      # build/reports/punit/verdict.html
-./gradlew exp mavaiExplore       # build/reports/punit/explore-<service>.html, one per service
-./gradlew exp mavaiOptimize      # build/reports/punit/optimize.html
+./gradlew test punitReport      # build/reports/punit/verdict.html
+./gradlew exp punitReport       # build/reports/punit/explore-<service>.html (one per service)
+                                # and build/reports/punit/optimize.html
 ```
 
-Each task points the renderer at the directory its run wrote (the
-`punit { }` extension's `explorationsDir` and `optimizationsDir`, and the
-verdict-XML default from the
-[configuration table](#appendix-a-configuration)) and names the page. The
-plugin pins the renderer version it was built against; `punit {
-mavaiVersion.set("…") }` overrides it for a build that must differ, and
-the `MAVAI_BIN` environment variable names an executable to use instead of
-any resolved one (a local build, say). On a platform no artefact is
-published for, the task says so and completes without a page; putting a
-`mavai` on `PATH` is then the route, and the tasks find it there.
+`punitReport` looks in the three places a run writes — the verdict XML
+directory, the `punit { }` extension's `explorationsDir` and
+`optimizationsDir` — draws a page for each kind that has artefacts, and
+says on one line what it drew and what it skipped. It pairs with
+`punitVerify`: verify gates the build on the verdicts, report draws them.
+It is not part of `check`; rendering is not verification.
+
+```kotlin
+tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {
+    hideScores.set(true)   // the optimization page without score displays (ranking unchanged)
+}
+```
+
+The plugin pins the renderer version it was built against;
+`punit { mavaiVersion.set("…") }` overrides it for a build that must
+differ, and the `MAVAI_BIN` environment variable names an executable to
+use instead of any resolved one (a local build, say). On a platform no
+artefact is published for, the task says so and completes without a page;
+putting a `mavai` on `PATH` is then the route, and the task finds it
+there.
 
 ### Installing the renderer by hand
 
@@ -1761,8 +1771,8 @@ platform; [MAVEN-CONFIGURATION.md](MAVEN-CONFIGURATION.md) has the recipe.
 
 ### Rendering a report
 
-The plugin's tasks run the commands below; this is what they do, for a
-build that runs the renderer itself. Every `mavai` command takes the
+`punitReport` runs the commands below; this is what they do, for a build
+that runs the renderer itself. Every `mavai` command takes the
 *directory* holding the artefacts and writes a single self-contained HTML
 page (embedded CSS, no JavaScript, no external assets) to stdout, or to a
 file with `-o`. Diagnostics go to stderr, and the exit code is non-zero
@@ -1811,16 +1821,15 @@ documents. PUnit's baselines are still written in its own
 baseline is inspected as YAML for now; the migration to the renderer's
 `mavai-baseline-1` format is tracked in the project's changelog.
 
-In CI, run the report task after the tests (`./gradlew test mavaiVerdict`)
-and publish the page as a build artefact. A failed render is a
+In CI, run the report task after the tests (`./gradlew test punitReport`)
+and publish the pages as build artefacts. A failed render is a
 diagnostic, not a verdict: the test task's own exit status states the run.
 
 > **Upgrading from 0.9.x.** The `punitReport`, `explorationReport` and
 > `optimizationReport` Gradle tasks, and the HTML writers behind them in
-> `punit-report`, were removed in 0.10.0; 0.11.0 brought the renderer
-> back within reach as `mavaiVerdict`, `mavaiExplore` and
-> `mavaiOptimize`, which run the shared `mavai` tool rather than a punit
-> writer. `punit-report` itself stays: it is where the verdict XML sink,
+> `punit-report`, were removed in 0.10.0; 0.11.0 brought `punitReport`
+> back as one task that runs the shared `mavai` tool rather than a punit
+> writer, drawing every kind of page the run produced. `punit-report` itself stays: it is where the verdict XML sink,
 > the bundled verdict schemas and the `punitVerify` verifier live.
 
 ### Verdict XML
