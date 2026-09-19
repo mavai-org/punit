@@ -117,8 +117,10 @@ dependencies {
 
 The plugin auto-registers the `experiment` and `exp` tasks for running
 experiments, configures the standard `test` task to exclude
-experiment-tagged methods, and supports `-Prun=` shorthand for
-filtering.
+experiment-tagged methods, supports `-Prun=` shorthand for filtering,
+gates `check` on the verdicts with `punitVerify`, and draws the HTML
+reports with `punitReport` ([Part 11](#part-11-reports)) — the renderer
+comes with the plugin, nothing to install.
 
 **Three static imports** give an author the criterion-authoring
 vocabulary. The rest of the examples in this guide assume them:
@@ -1123,8 +1125,8 @@ Artefacts land under
 sub-directory is named by the factors the experiment sweeps, joined with
 `+` (`temperature`, `temperature+model`), or `baseline-only` when nothing
 varies, so evolving what is swept opens a fresh directory and never
-strands a superseded artefact beside fresh ones. Render them with the
-shared `mavai explore` report ([Part 11](#part-11-reports)).
+strands a superseded artefact beside fresh ones. `./gradlew exp punitReport`
+draws one comparison page per service from them ([Part 11](#part-11-reports)).
 
 Output is an exploration grid file: one row per configuration with
 observed pass rate, latency percentiles, postcondition failure
@@ -1196,6 +1198,10 @@ histogram, and exemplars. The dominant-failure histogram is what
 makes the meta-prompt pattern work: an LLM-driven prompt-tuning loop
 can read the previous iteration's most-common failure and propose a
 prompt tweak addressing it.
+
+`./gradlew exp punitReport` draws the optimization comparison page —
+iterations ranked by the scorer, the chosen one marked — from the run's
+records ([Part 11](#part-11-reports)).
 
 Use OPTIMIZE when:
 
@@ -1638,9 +1644,9 @@ The Sentinel binary returns:
 
 Use these in container health checks, scheduled jobs, or CI pipeline
 steps. Verdict XML is emitted to a configured directory in the same
-shape as the development-time runs, so the same `mavai verdict` command
-renders it; [Part 11](#part-11-reports) covers the artefacts and the
-renderer.
+shape as the development-time runs, so the same page is drawn from it —
+`punitReport` in a Gradle build, `mavai verdict <dir>` anywhere else;
+[Part 11](#part-11-reports) covers the artefacts and the renderer.
 
 ### Baseline file location
 
@@ -1726,28 +1732,99 @@ report time. One task draws the pages for whatever the run left behind:
 ./gradlew test punitReport      # build/reports/punit/verdict.html
 ./gradlew exp punitReport       # build/reports/punit/explore-<service>.html (one per service)
                                 # and build/reports/punit/optimize.html
+./gradlew punitReport           # on its own: whatever the last runs left under build/
 ```
 
-`punitReport` looks in the three places a run writes — the verdict XML
-directory, the `punit { }` extension's `explorationsDir` and
-`optimizationsDir` — draws a page for each kind that has artefacts, and
-says on one line what it drew and what it skipped. It pairs with
-`punitVerify`: verify gates the build on the verdicts, report draws them.
-It is not part of `check`; rendering is not verification.
+The task pairs with `punitVerify`: verify gates the build on the
+verdicts, report draws them. It is in the `verification` group but not
+part of `check` — rendering is not verification — so it runs only when
+named. It is ordered after `test`, `experiment` and `exp` when they are
+in the same invocation, and is never up-to-date: the artefacts are the
+run's output, and a re-run draws them again.
+
+**What it looks at and what it writes.** The task reads the three
+places a run writes and draws a page for each kind that has artefacts:
+
+| Artefacts                                   | Where the task looks                                   | Page                                     |
+|---------------------------------------------|--------------------------------------------------------|------------------------------------------|
+| verdict XML (`./gradlew test`)               | `build/reports/punit/xml/*.xml` (`punit.report.dir`)   | `build/reports/punit/verdict.html`       |
+| `mavai-explore-1` YAML (`./gradlew exp`)     | `<explorationsDir>/<service>/…` — one page per service | `build/reports/punit/explore-<service>.html` |
+| `mavai-optimize-1` YAML (`./gradlew exp`)    | `<optimizationsDir>/<service>/…`                       | `build/reports/punit/optimize.html`      |
+
+`explorationsDir` and `optimizationsDir` are the `punit { }` extension's
+(defaults under `build/punit/`); the verdict directory is the
+[configuration table](#appendix-a-configuration)'s `punit.report.dir`.
+Pages go under `build/reports/punit/`, beside the XML. A kind with no
+artefacts is skipped, and the task ends with one line saying what it
+drew and what it skipped:
+
+```
+punitReport: verdict.html under build/reports/punit (no explorations, no optimizations)
+punitReport: explore-checkout.html, explore-search.html, optimize.html under build/reports/punit (no verdicts)
+punitReport: nothing to render — no verdict XML under build/reports/punit/xml, … Run test or exp first.
+```
+
+**Configuration.** Two knobs on the task, one on the extension, one in
+the environment:
 
 ```kotlin
+punit {
+    mavaiVersion.set("0.21.0")      // the renderer to resolve; default: the version this plugin was built against
+}
+
 tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {
-    hideScores.set(true)   // the optimization page without score displays (ranking unchanged)
+    hideScores.set(true)             // optimization page without score displays (ranking unchanged);
+                                     // for runs whose scorer is the observed pass rate
+    outputDir.set(layout.buildDirectory.dir("site/punit"))   // pages elsewhere
 }
 ```
 
-The plugin pins the renderer version it was built against;
-`punit { mavaiVersion.set("…") }` overrides it for a build that must
-differ, and the `MAVAI_BIN` environment variable names an executable to
-use instead of any resolved one (a local build, say). On a platform no
-artefact is published for, the task says so and completes without a page;
-putting a `mavai` on `PATH` is then the route, and the task finds it
-there.
+- `mavaiVersion` — the plugin pins the renderer version it was built
+  against and a release of the plugin states it in the changelog; set it
+  only for a build that must differ. The artefact is
+  `org.mavai:mavai:<version>:<classifier>@exe`, resolved from the
+  repositories the build declares, so `mavenCentral()` (or a mirror
+  carrying it) must be among them.
+- `hideScores` — the renderer's `--hide-scores` on the optimization
+  page.
+- `outputDir` — where the pages go; the file names are fixed.
+- `MAVAI_BIN` (environment) — names a `mavai` executable to use instead
+  of any resolved one: a local build of the renderer, or a pinned copy in
+  CI. A value that is not an executable file fails the task rather than
+  falling through, because you asked for that renderer and would
+  otherwise silently get another.
+
+**Where the renderer comes from, in order.** `MAVAI_BIN` if set; else
+the resolved artefact, copied once to `build/mavai/mavai` (`mavai.exe`
+on Windows) and marked executable — that file is yours to run by hand
+(`build/mavai/mavai --version`); else a `mavai` on `PATH`. Gradle
+resolves the artefact when the task first runs, not at configuration, so
+`./gradlew test` alone never touches the network for it; once cached,
+`--offline` builds render as usual. If the artefact cannot be resolved —
+offline before the first fetch, a version Central does not carry — the
+task says so as a warning and looks on `PATH`.
+
+**When there is no renderer.** On a platform no artefact is published
+for, or when nothing is on `PATH` either, the task completes without a
+page and says so on one line, naming the platform and the two remedies;
+the build does not fail. A page that *is* drawn but shows nothing is not
+a case: the renderer exits non-zero only when it found nothing
+renderable, and then the task fails with the renderer's diagnostics,
+which name every file it skipped and why.
+
+**In CI.** Run the task after the tests and publish the pages as build
+artefacts:
+
+```yaml
+- run: ./gradlew test punitReport
+- uses: actions/upload-artifact@v4
+  with:
+    name: punit-reports
+    path: build/reports/punit/*.html
+```
+
+A failed render is a diagnostic, not a verdict: `punitVerify`, and the
+test task's own exit status, state the run.
 
 ### Installing the renderer by hand
 
@@ -1771,8 +1848,10 @@ platform; [MAVEN-CONFIGURATION.md](MAVEN-CONFIGURATION.md) has the recipe.
 
 ### Rendering a report
 
-`punitReport` runs the commands below; this is what they do, for a build
-that runs the renderer itself. Every `mavai` command takes the
+`punitReport` runs the commands below, one per page; this is what they
+do, for a build that runs the renderer itself (a Maven build, a CI job
+without Gradle — see [MAVEN-CONFIGURATION.md](MAVEN-CONFIGURATION.md)
+for the Maven recipe). Every `mavai` command takes the
 *directory* holding the artefacts and writes a single self-contained HTML
 page (embedded CSS, no JavaScript, no external assets) to stdout, or to a
 file with `-o`. Diagnostics go to stderr, and the exit code is non-zero
@@ -1821,16 +1900,16 @@ documents. PUnit's baselines are still written in its own
 baseline is inspected as YAML for now; the migration to the renderer's
 `mavai-baseline-1` format is tracked in the project's changelog.
 
-In CI, run the report task after the tests (`./gradlew test punitReport`)
-and publish the pages as build artefacts. A failed render is a
-diagnostic, not a verdict: the test task's own exit status states the run.
-
 > **Upgrading from 0.9.x.** The `punitReport`, `explorationReport` and
 > `optimizationReport` Gradle tasks, and the HTML writers behind them in
 > `punit-report`, were removed in 0.10.0; 0.11.0 brought `punitReport`
 > back as one task that runs the shared `mavai` tool rather than a punit
-> writer, drawing every kind of page the run produced. `punit-report` itself stays: it is where the verdict XML sink,
-> the bundled verdict schemas and the `punitVerify` verifier live.
+> writer, drawing every kind of page the run produced, so
+> `./gradlew test punitReport` works as it did — with the page now the
+> renderer's, under `build/reports/punit/verdict.html`. The other two
+> names are not back: one task covers all three kinds. `punit-report`
+> itself stays: it is where the verdict XML sink, the bundled verdict
+> schemas and the `punitVerify` verifier live.
 
 ### Verdict XML
 
@@ -1989,15 +2068,26 @@ PUnit resolves configuration in this order (highest priority first):
 | Setting                 | System property              | Env var                     | Default                                            |
 |-------------------------|------------------------------|-----------------------------|----------------------------------------------------|
 | Baseline directory      | `punit.baseline.dir`         | `PUNIT_BASELINE_DIR`        | `src/test/resources/punit/baselines/` (filesystem, relative to CWD) |
-| Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/xml/` (verdict XML; render with `mavai verdict build/reports/punit`) |
+| Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/xml/` (verdict XML; `punitReport` draws the page from it) |
 | Transparent stats       | `punit.stats.transparent`    | `PUNIT_STATS_TRANSPARENT`   | `false`                                            |
 | Confidence level        | `punit.confidence`           | `PUNIT_CONFIDENCE`          | `0.95`                                             |
 | Latency enforcement     | `punit.latency.enforcement`  | `PUNIT_LATENCY_ENFORCEMENT` | `advisory`                                         |
 | Default samples         | `punit.samples`              | `PUNIT_SAMPLES`             | builder-supplied; no global default                |
 
 Gradle plugin configuration in the `punit { }` extension block
-mirrors the same settings. See the plugin module's README for the
-extension surface.
+mirrors the same settings, and adds the plugin's own:
+
+| Extension property     | Default                                   | Description                                                        |
+|------------------------|-------------------------------------------|--------------------------------------------------------------------|
+| `specsDir`             | `src/test/resources/punit/specs`          | Where MEASURE writes baselines (committed).                        |
+| `explorationsDir`      | `build/punit/explorations`                | Where EXPLORE writes; `punitReport` reads it.                      |
+| `optimizationsDir`     | `build/punit/optimizations`               | Where OPTIMIZE writes; `punitReport` reads it.                     |
+| `configureTestTask`    | `true`                                    | Whether the plugin configures `test` (tag exclusion, properties).  |
+| `excludeTestSubjects`  | `true`                                    | Whether `**/testsubjects/**` is excluded from test and experiment. |
+| `mavaiVersion`         | the version the plugin was built against  | The `org.mavai:mavai` renderer `punitReport` resolves and runs.    |
+
+`punitReport` itself takes `hideScores` and `outputDir`, and honours the
+`MAVAI_BIN` environment variable ([Part 11](#part-11-reports)).
 
 ### Per-sample progress counter
 

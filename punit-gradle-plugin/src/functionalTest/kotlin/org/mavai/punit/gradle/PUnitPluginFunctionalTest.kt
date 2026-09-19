@@ -404,6 +404,40 @@ class PUnitPluginFunctionalTest {
         }
 
         @Test
+        @DisplayName("outputDir moves the pages; the file names are fixed")
+        fun outputDirIsConfigurable() {
+            buildFile.writeText(buildFileWithPlugin("""
+                tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {
+                    outputDir.set(layout.buildDirectory.dir("site/punit"))
+                }
+            """.trimIndent()))
+            val renderer = fakeRenderer()
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(renderer)).build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            assertTrue(File(projectDir, "build/site/punit/verdict.html").isFile)
+            assertFalse(File(projectDir, "build/reports/punit/verdict.html").exists())
+        }
+
+        @Test
+        @DisplayName("MAVAI_BIN naming something that is not an executable fails the task rather than falling through")
+        fun badOverrideFails() {
+            assumeTrue(!isWindows, "executable bits are POSIX")
+            buildFile.writeText(buildFileWithPlugin())
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+            val notExecutable = File(projectDir, "tools/not-mavai").apply { parentFile.mkdirs(); writeText("nope") }
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(notExecutable)).buildAndFail()
+
+            assertEquals(TaskOutcome.FAILED, result.task(":punitReport")?.outcome)
+            assertTrue(result.output.contains("MAVAI_BIN names ${notExecutable.absolutePath}, which is not an executable file"), result.output)
+        }
+
+        @Test
         @DisplayName("with nothing to render the task says which directories were empty")
         fun nothingToRender() {
             buildFile.writeText(buildFileWithPlugin())
