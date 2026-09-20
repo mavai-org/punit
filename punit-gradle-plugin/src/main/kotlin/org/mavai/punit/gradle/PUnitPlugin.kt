@@ -52,6 +52,7 @@ class PUnitPlugin : Plugin<Project> {
             )
             configureTestTask.convention(true)
             excludeTestSubjects.convention(true)
+            mavaiVersion.convention(MavaiVersion.VERSION)
         }
 
         // Create a dedicated configuration for punit-sentinel so it is only
@@ -75,6 +76,14 @@ class PUnitPlugin : Plugin<Project> {
         project.dependencies.add("punitReport",
             "org.mavai:punit-report:$punitVersion")
 
+        // The renderer itself: a native executable resolved from Maven Central
+        // for the host platform, so punitReport needs no install step.
+        val rendererConfig = MavaiRenderer.registerConfiguration(project) { extension.mavaiVersion.get() }
+        // Registered now, not after evaluation, so a build script can configure
+        // it (`tasks.named<PUnitReportTask>("punitReport") { … }`); every
+        // input is a provider, so nothing is read before execution.
+        registerPUnitReportTask(project, extension, rendererConfig)
+
         project.afterEvaluate {
             if (extension.configureTestTask.get()) {
                 configureTestTask(project, extension)
@@ -92,6 +101,32 @@ class PUnitPlugin : Plugin<Project> {
             registerPUnitVerifyTask(project, reportConfig)
             registerMavaiCheckTask(project, extension)
             registerMavaiMaterialiseTask(project)
+        }
+    }
+
+    /**
+     * `punitReport`: the pages for whatever a run left behind, drawn by the
+     * shared renderer — the verdict page over the parent of the XML directory
+     * the `test` task fills, one exploration page per service, the
+     * optimization page. Pairs with `punitVerify`; not wired into `check`.
+     */
+    private fun registerPUnitReportTask(
+        project: Project,
+        extension: PUnitExperimentExtension,
+        rendererConfig: org.gradle.api.artifacts.Configuration
+    ) {
+        project.tasks.register("punitReport", PUnitReportTask::class.java).configure {
+            description = "Renders the verdict, exploration and optimization pages with the mavai renderer"
+            group = "verification"
+            verdictXmlDir.set(project.layout.buildDirectory.dir("reports/punit/xml"))
+            explorationsDir.set(project.layout.dir(extension.explorationsDir.map { project.file(it) }))
+            optimizationsDir.set(project.layout.dir(extension.optimizationsDir.map { project.file(it) }))
+            outputDir.set(project.layout.buildDirectory.dir("reports/punit"))
+            hideScores.convention(false)
+            rendererConfiguration.set(rendererConfig)
+            // The runs that write the artefacts are registered after evaluation;
+            // name them lazily so this task can be registered before them.
+            mustRunAfter(project.provider { project.tasks.matching { it.name == "test" || it.name == "experiment" || it.name == "exp" } })
         }
     }
 

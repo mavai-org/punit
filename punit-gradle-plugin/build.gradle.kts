@@ -107,10 +107,12 @@ dependencies {
 // Generate a Kotlin source file with the PUnit version baked in at compile time.
 // This avoids classloader/resource-loading issues with Gradle's pluginManagement { includeBuild }.
 val punitVersion = property("punitVersion") as String
+val mavaiVersion = property("mavaiVersion") as String
 val generateVersionFile = tasks.register("generateVersionFile") {
     val outputDir = layout.buildDirectory.dir("generated/punit-version")
     outputs.dir(outputDir)
     inputs.property("punitVersion", punitVersion)
+    inputs.property("mavaiVersion", mavaiVersion)
     doLast {
         val dir = outputDir.get().asFile.resolve("org/mavai/punit/gradle")
         dir.mkdirs()
@@ -120,6 +122,18 @@ val generateVersionFile = tasks.register("generateVersionFile") {
 
             internal object PUnitVersion {
                 const val VERSION = "$punitVersion"
+            }
+            """.trimIndent() + "\n"
+        )
+        // The renderer version the plugin was built against, stated the same
+        // way: a release of the plugin pins the renderer it resolves, and a
+        // build that must differ says so through `punit { mavaiVersion }`.
+        dir.resolve("MavaiVersion.kt").writeText(
+            """
+            package org.mavai.punit.gradle
+
+            internal object MavaiVersion {
+                const val VERSION = "$mavaiVersion"
             }
             """.trimIndent() + "\n"
         )

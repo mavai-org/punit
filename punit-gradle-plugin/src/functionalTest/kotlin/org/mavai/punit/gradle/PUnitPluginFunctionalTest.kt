@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 @DisplayName("PUnit Gradle Plugin")
 class PUnitPluginFunctionalTest {
@@ -255,13 +256,13 @@ class PUnitPluginFunctionalTest {
     inner class Reporting {
 
         @Test
-        @DisplayName("the plugin registers no HTML report tasks: rendering belongs to the mavai renderer")
-        fun noReportTasks() {
+        @DisplayName("the plugin writes no HTML itself: one punitReport task, delegating to the mavai renderer, and no per-kind writers")
+        fun oneReportTaskDelegating() {
             buildFile.writeText(buildFileWithPlugin())
 
             val result = runner("tasks", "--all").build()
 
-            assertFalse(result.output.contains("punitReport - "))
+            assertTrue(result.output.contains("punitReport - Renders the verdict, exploration and optimization pages with the mavai renderer"))
             assertFalse(result.output.contains("explorationReport"))
             assertFalse(result.output.contains("optimizationReport"))
         }
@@ -295,6 +296,176 @@ class PUnitPluginFunctionalTest {
             val result = runner("tasks", "--all").build()
 
             assertTrue(result.output.contains("BUILD SUCCESSFUL"))
+        }
+    }
+
+    @Nested
+    @DisplayName("punitReport and the mavai renderer")
+    inner class PUnitReport {
+
+        private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+
+        /** A stand-in renderer: a script that writes its arguments as the page (the -o path is the last argument). */
+        private fun fakeRenderer(name: String = "mavai"): File {
+            assumeTrue(!isWindows, "the stand-in renderer is a shell script")
+            val file = File(projectDir, "tools/$name")
+            file.parentFile.mkdirs()
+            file.writeText("#!/bin/sh\nfor last; do :; done\nprintf '<html>%s</html>' \"$*\" > \"\$last\"\n")
+            file.setExecutable(true)
+            return file
+        }
+
+        private fun environmentWithout(vararg names: String): Map<String, String> =
+            System.getenv().filterKeys { it !in names }
+
+        private fun withOverride(renderer: File) =
+            environmentWithout("MAVAI_BIN") + ("MAVAI_BIN" to renderer.absolutePath)
+
+        @Test
+        @DisplayName("punitReport is registered beside punitVerify")
+        fun reportTaskRegistered() {
+            buildFile.writeText(buildFileWithPlugin())
+
+            val result = runner("tasks", "--group=verification").build()
+
+            assertTrue(result.output.contains("punitReport - Renders the verdict, exploration and optimization pages"))
+            assertTrue(result.output.contains("punitVerify"))
+            assertFalse(result.output.contains("mavaiVerdict"))
+        }
+
+        @Test
+        @DisplayName("MAVAI_BIN names the renderer; the verdict page is drawn over the parent of the XML directory")
+        fun overrideRendersTheVerdictPage() {
+            buildFile.writeText(buildFileWithPlugin())
+            val renderer = fakeRenderer()
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(renderer)).build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            val page = File(projectDir, "build/reports/punit/verdict.html")
+            assertTrue(page.isFile, "the page is written where the task said")
+            val args = page.readText()
+            assertTrue(args.startsWith("<html>verdict "), "the report type leads the arguments: $args")
+            assertTrue(args.contains(File(projectDir, "build/reports/punit").canonicalPath + " "), "the artefact directory is the XML directory's parent: $args")
+            assertTrue(args.contains("-o ${page.canonicalPath}"), "the destination is the -o argument: $args")
+            assertTrue(result.output.contains("punitReport: verdict.html under build/reports/punit (no explorations, no optimizations)"), result.output)
+        }
+
+        @Test
+        @DisplayName("the renderer resolves from a Maven repository for the host platform and runs from build/mavai")
+        fun resolvedRendererRuns() {
+            val classifier = MavaiRenderer.classifier()
+            assumeTrue(classifier != null, "the host has no published classifier")
+            val version = "9.9.9"
+            val repo = File(projectDir, "repo/org/mavai/mavai/$version").apply { mkdirs() }
+            File(repo, "mavai-$version.pom").writeText("""
+                <project><modelVersion>4.0.0</modelVersion><groupId>org.mavai</groupId>
+                <artifactId>mavai</artifactId><version>$version</version><packaging>exe</packaging></project>
+            """.trimIndent())
+            fakeRenderer().copyTo(File(repo, "mavai-$version-$classifier.exe"))
+            buildFile.writeText(buildFileWithPlugin("""
+                repositories { maven { url = uri("repo") } }
+                punit { mavaiVersion.set("$version") }
+            """.trimIndent()))
+            File(projectDir, "build/punit/optimizations/svc").mkdirs()
+
+            val result = runner("punitReport", "--offline").withEnvironment(environmentWithout("MAVAI_BIN")).build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            val placed = File(projectDir, "build/mavai/${MavaiRenderer.executableName()}")
+            assertTrue(placed.isFile && placed.canExecute(), "the resolved renderer is placed under build/mavai as an executable")
+            val page = File(projectDir, "build/reports/punit/optimize.html")
+            assertTrue(page.isFile && page.readText().startsWith("<html>optimize "), "the resolved renderer drew the page")
+        }
+
+        @Test
+        @DisplayName("explorations render one page per service, and hideScores reaches the optimize command")
+        fun exploreAndOptimizeTogether() {
+            buildFile.writeText(buildFileWithPlugin("""
+                tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") { hideScores.set(true) }
+            """.trimIndent()))
+            val renderer = fakeRenderer()
+            File(projectDir, "build/punit/explorations/alpha/temp").mkdirs()
+            File(projectDir, "build/punit/explorations/beta/temp").mkdirs()
+            File(projectDir, "build/punit/optimizations/svc").mkdirs()
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(renderer)).build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            val alpha = File(projectDir, "build/reports/punit/explore-alpha.html")
+            val beta = File(projectDir, "build/reports/punit/explore-beta.html")
+            assertTrue(alpha.isFile && beta.isFile, "one page per service")
+            assertTrue(alpha.readText().contains(File(projectDir, "build/punit/explorations/alpha").canonicalPath), "each page is drawn over its own service directory")
+            val optimize = File(projectDir, "build/reports/punit/optimize.html").readText()
+            assertTrue(optimize.contains(" --hide-scores -o "), "hideScores becomes the renderer's flag: $optimize")
+            assertTrue(result.output.contains("punitReport: explore-alpha.html, explore-beta.html, optimize.html under build/reports/punit (no verdicts)"), result.output)
+        }
+
+        @Test
+        @DisplayName("outputDir moves the pages; the file names are fixed")
+        fun outputDirIsConfigurable() {
+            buildFile.writeText(buildFileWithPlugin("""
+                tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {
+                    outputDir.set(layout.buildDirectory.dir("site/punit"))
+                }
+            """.trimIndent()))
+            val renderer = fakeRenderer()
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(renderer)).build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            assertTrue(File(projectDir, "build/site/punit/verdict.html").isFile)
+            assertFalse(File(projectDir, "build/reports/punit/verdict.html").exists())
+        }
+
+        @Test
+        @DisplayName("MAVAI_BIN naming something that is not an executable fails the task rather than falling through")
+        fun badOverrideFails() {
+            assumeTrue(!isWindows, "executable bits are POSIX")
+            buildFile.writeText(buildFileWithPlugin())
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+            val notExecutable = File(projectDir, "tools/not-mavai").apply { parentFile.mkdirs(); writeText("nope") }
+
+            val result = runner("punitReport", "--offline").withEnvironment(withOverride(notExecutable)).buildAndFail()
+
+            assertEquals(TaskOutcome.FAILED, result.task(":punitReport")?.outcome)
+            assertTrue(result.output.contains("MAVAI_BIN names ${notExecutable.absolutePath}, which is not an executable file"), result.output)
+        }
+
+        @Test
+        @DisplayName("with nothing to render the task says which directories were empty")
+        fun nothingToRender() {
+            buildFile.writeText(buildFileWithPlugin())
+
+            val result = runner("punitReport", "--offline").build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            assertTrue(result.output.contains("punitReport: nothing to render"), result.output)
+        }
+
+        @Test
+        @DisplayName("with no renderer anywhere the task completes and says so")
+        fun noRendererIsReportedNotFailed() {
+            assumeTrue(!isWindows, "PATH is emptied with a POSIX layout")
+            buildFile.writeText(buildFileWithPlugin("""
+                punit { mavaiVersion.set("0.0.0-absent") }
+            """.trimIndent()))
+            File(projectDir, "build/reports/punit/xml").mkdirs()
+            File(projectDir, "build/reports/punit/xml/one.xml").writeText("<verdict-record/>")
+            val emptyPath = File(projectDir, "empty-path").apply { mkdirs() }
+
+            val result = runner("punitReport", "--offline")
+                .withEnvironment(environmentWithout("MAVAI_BIN", "PATH") + ("PATH" to emptyPath.absolutePath))
+                .build()
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":punitReport")?.outcome)
+            assertTrue(result.output.contains("no mavai renderer for"), "the build says the page was not rendered and why")
+            assertFalse(File(projectDir, "build/reports/punit/verdict.html").exists())
         }
     }
 }
