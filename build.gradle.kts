@@ -67,7 +67,7 @@ subprojects {
     implementation("org.apache.commons:commons-statistics-distribution:1.3")
 
     // SnakeYAML - for YAML serialization in spec generation
-    implementation("org.yaml:snakeyaml:2.6")
+    implementation("org.yaml:snakeyaml:2.7")
 
     // Jackson - for JSON/CSV parsing in @InputSource
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
