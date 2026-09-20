@@ -81,7 +81,7 @@ A probabilistic test calls `PUnit.testing(serviceContract).assertPasses()` insid
 
 ```kotlin
 plugins {
-    id("org.mavai.punit") version "0.10.0"
+    id("org.mavai.punit") version "0.11.0"
 }
 
 repositories {
@@ -89,8 +89,8 @@ repositories {
 }
 
 dependencies {
-    testImplementation("org.mavai:punit-core:0.10.0")
-    testImplementation("org.mavai:punit-report:0.10.0")
+    testImplementation("org.mavai:punit-core:0.11.0")
+    testImplementation("org.mavai:punit-report:0.11.0")
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 ```
@@ -101,13 +101,13 @@ dependencies {
 <dependency>
     <groupId>org.mavai</groupId>
     <artifactId>punit-core</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
     <scope>test</scope>
 </dependency>
 <dependency>
     <groupId>org.mavai</groupId>
     <artifactId>punit-report</artifactId>
-    <version>0.10.0</version>
+    <version>0.11.0</version>
     <scope>test</scope>
 </dependency>
 ```

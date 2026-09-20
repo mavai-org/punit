@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-20
+
 ### Added
 
 - **`punitReport` is back, and it delegates.** `mavai`, the family's
@@ -1443,7 +1445,8 @@ unit testing of non-deterministic systems.
 - Verbose statistical explanation output
 - Gradle plugin (`org.javai.punit`) for test/experiment task configuration
 
-[Unreleased]: https://github.com/mavai-org/punit/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mavai-org/punit/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mavai-org/punit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mavai-org/punit/compare/v0.9.3...v0.10.0
 [0.7.0-alpha5]: https://github.com/javai-org/punit/compare/v0.7.0-alpha4...v0.7.0-alpha5
 [0.7.0-alpha4]: https://github.com/javai-org/punit/compare/v0.7.0-alpha3...v0.7.0-alpha4
