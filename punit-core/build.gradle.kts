@@ -1,4 +1,3 @@
-import java.net.HttpURLConnection
 import java.net.URI
 
 plugins {
@@ -91,25 +90,27 @@ dependencies {
 }
 
 // --- mavai-R conformance reference data ----------------------------------------
-// Fetches the latest mavai-R release (resolved via the GitHub /releases/latest
-// redirect, which costs no API-rate-limit quota), downloads its cases-<tag>.zip
-// asset, caches it keyed by tag, and extracts into a directory on the test
-// classpath so that /conformance/*.json resolves.
+// Fetches the mavai-R release pinned by `mavaiRTag` (gradle.properties), downloads
+// its cases-<tag>.zip asset, caches it keyed by tag, and extracts into a directory
+// on the test classpath so that /conformance/*.json resolves. The pin moves by a
+// deliberate edit, never because mavai-R published a newer release.
+
+val mavaiRTag = providers.gradleProperty("mavaiRTag")
 
 val conformanceResourcesDir = layout.buildDirectory.dir("generated/conformance")
 
 val fetchConformanceData by tasks.registering {
-    description = "Fetches the latest mavai-R conformance reference data release"
+    description = "Fetches the pinned mavai-R conformance reference data release"
     group = "verification"
 
     outputs.dir(conformanceResourcesDir)
     outputs.upToDateWhen { false }
 
     // Local-directory override: -PconformanceCasesDir=/path/to/mavai-R/inst/cases
-    // sources the fixture JSON from a local checkout instead of the latest
+    // sources the fixture JSON from a local checkout instead of the pinned
     // GitHub release. Intended for working against fixture content that is
-    // merged upstream but not yet tagged/released; the default fetch-latest
-    // behaviour is unchanged when the property is absent.
+    // merged upstream but not yet tagged/released; the default pinned fetch
+    // is unchanged when the property is absent.
     val conformanceCasesDirOverride = providers.gradleProperty("conformanceCasesDir")
 
     doLast {
@@ -129,21 +130,9 @@ val fetchConformanceData by tasks.registering {
             logger.lifecycle("Using local mavai-R conformance fixtures: $srcDir")
             return@doLast
         }
-        val latestUrl = URI(
-            "https://github.com/mavai-org/mavai-R/releases/latest"
-        ).toURL()
-        val conn = latestUrl.openConnection() as HttpURLConnection
-        conn.instanceFollowRedirects = false
-        conn.requestMethod = "HEAD"
-        val status = conn.responseCode
-        val location = conn.getHeaderField("Location")
-        conn.disconnect()
-        require(status in 301..308 && location != null) {
-            "Expected redirect from $latestUrl, got $status (location=$location)"
-        }
-        val tag = location.substringAfterLast("/tag/")
+        val tag = mavaiRTag.get()
         require(tag.matches(Regex("^v\\d+\\.\\d+\\.\\d+$"))) {
-            "Unexpected tag format '$tag' in $location"
+            "mavaiRTag must name a mavai-R release tag (vX.Y.Z), got '$tag'"
         }
 
         val cacheZip = layout.buildDirectory
