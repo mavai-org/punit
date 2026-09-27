@@ -1,4 +1,3 @@
-import java.net.HttpURLConnection
 import java.net.URI
 
 plugins {
@@ -21,15 +20,16 @@ dependencies {
 // The verdict XSDs embedded in this module's resources are vendored snapshots
 // of the published family schemas (mavai-R's `schema/verdict-*.xsd`, shipped
 // in the `interchange-<tag>.zip` release asset), synced per release. This task
-// fetches the latest published set (same latest-release resolution and cache
-// as punit-core's conformance-data fetch) onto the test classpath so the
+// fetches the set published in the release pinned by `mavaiRTag` (same pin and
+// cache as punit-core's conformance-data fetch) onto the test classpath so the
 // snapshot-sync test can assert the embedded copies are byte-identical to the
 // published ones — a drifted snapshot fails the build instead of shipping.
 
 val publishedInterchangeDir = layout.buildDirectory.dir("generated/interchange")
+val mavaiRTag = providers.gradleProperty("mavaiRTag")
 
 val fetchPublishedInterchangeSchemas by tasks.registering {
-    description = "Fetches the latest published mavai-R interchange schemas"
+    description = "Fetches the pinned mavai-R interchange schemas"
     group = "verification"
 
     outputs.dir(publishedInterchangeDir)
@@ -37,7 +37,7 @@ val fetchPublishedInterchangeSchemas by tasks.registering {
 
     // Local-directory override: -PinterchangeSchemaDir=/path/to/mavai-R/schema
     // sources the published schemas from a local checkout instead of the
-    // latest GitHub release (for working against merged-but-untagged content).
+    // pinned GitHub release (for working against merged-but-untagged content).
     val interchangeSchemaDirOverride = providers.gradleProperty("interchangeSchemaDir")
 
     doLast {
@@ -57,19 +57,9 @@ val fetchPublishedInterchangeSchemas by tasks.registering {
             logger.lifecycle("Using local published interchange schemas: $srcDir")
             return@doLast
         }
-        val latestUrl = URI("https://github.com/mavai-org/mavai-R/releases/latest").toURL()
-        val conn = latestUrl.openConnection() as HttpURLConnection
-        conn.instanceFollowRedirects = false
-        conn.requestMethod = "HEAD"
-        val status = conn.responseCode
-        val location = conn.getHeaderField("Location")
-        conn.disconnect()
-        require(status in 301..308 && location != null) {
-            "Expected redirect from $latestUrl, got $status (location=$location)"
-        }
-        val tag = location.substringAfterLast("/tag/")
+        val tag = mavaiRTag.get()
         require(tag.matches(Regex("^v\\d+\\.\\d+\\.\\d+$"))) {
-            "Unexpected tag format '$tag' in $location"
+            "mavaiRTag must name a mavai-R release tag (vX.Y.Z), got '$tag'"
         }
 
         val cacheZip = layout.buildDirectory
