@@ -61,8 +61,8 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.7")
 
     // Jackson — for JSON/CSV parsing in @InputSource
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.22.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.22.3")
 
     // Outcome — result types for contract postconditions
     api("org.mavai:outcome:1.0.0-alpha1")
@@ -74,14 +74,14 @@ dependencies {
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter-api")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
     // JSON Schema validation (draft 2020-12) for the interchange
     // emitter conformance tests — test-only, never shipped.
     testImplementation("com.networknt:json-schema-validator:3.0.7")
     // networknt 3.x validates against Jackson 3 (the tools.jackson line),
     // distinct from the com.fasterxml Jackson 2 the statistics conformance
     // tests use above; both are test-only and coexist on the test classpath.
-    testImplementation("tools.jackson.core:jackson-databind:3.2.2")
+    testImplementation("tools.jackson.core:jackson-databind:3.2.3")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
     testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.1")
     // punit-report provides the default VerdictSink (XML) via ServiceLoader;

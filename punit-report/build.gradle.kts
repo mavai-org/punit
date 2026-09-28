@@ -13,7 +13,7 @@ dependencies {
     api(project(":punit-core"))
 
     testImplementation("org.xmlunit:xmlunit-core:2.14.0")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
 }
 
 // --- published verdict interchange schemas ---------------------------------------
