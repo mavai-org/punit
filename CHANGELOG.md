@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-29
+
 **Methodology 1.5.0 (Statistical Companion 1.5.0), conformant with the
 mavai-R v0.11.1 reference data.** This release changes how every
 verdict is decided. It is a breaking release: decisions, thresholds,
@@ -1571,7 +1573,8 @@ unit testing of non-deterministic systems.
 - Verbose statistical explanation output
 - Gradle plugin (`org.javai.punit`) for test/experiment task configuration
 
-[Unreleased]: https://github.com/mavai-org/punit/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mavai-org/punit/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mavai-org/punit/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mavai-org/punit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mavai-org/punit/compare/v0.9.3...v0.10.0
 [0.7.0-alpha5]: https://github.com/javai-org/punit/compare/v0.7.0-alpha4...v0.7.0-alpha5
