@@ -185,7 +185,6 @@ class SentinelExecutorTest {
                 Optional.empty(),
                 new ProbabilisticTestVerdict.StatisticalAnalysis(
                         0.95, 0.0, 0.9,
-                        Optional.empty(), Optional.empty(),
                         Optional.empty(), Optional.empty(), List.of()),
                 ProbabilisticTestVerdict.CovariateStatus.allAligned(),
                 new ProbabilisticTestVerdict.CostSummary(

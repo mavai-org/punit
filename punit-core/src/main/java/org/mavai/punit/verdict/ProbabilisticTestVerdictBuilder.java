@@ -128,6 +128,12 @@ public class ProbabilisticTestVerdictBuilder {
     private Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings =
             Optional.empty();
 
+    // ── The decision behind the verdict ───────────────────────────────────
+    private TestDecision decision = TestDecision.NONE;
+    private Optional<RegressionDisclosure> regression = Optional.empty();
+    private Optional<Verdict> latencyVerdict = Optional.empty();
+    private List<LatencyEvaluation> latencyEvaluations = List.of();
+
     // ── Builder methods ───────────────────────────────────────────────────
 
     public ProbabilisticTestVerdictBuilder correlationId(String correlationId) {
@@ -371,6 +377,34 @@ public class ProbabilisticTestVerdictBuilder {
         return this;
     }
 
+    /**
+     * The decision behind the verdict: the configuration errors of a
+     * refused configuration, or the deciding rule, the triggering
+     * criteria and constraints, and the Type-I envelopes.
+     */
+    public ProbabilisticTestVerdictBuilder decision(TestDecision decision) {
+        this.decision = java.util.Objects.requireNonNull(decision, "decision");
+        return this;
+    }
+
+    /** What the deciding {@code regression/fisher} rule discloses about the design. */
+    public ProbabilisticTestVerdictBuilder regressionDisclosure(RegressionDisclosure disclosure) {
+        this.regression = Optional.ofNullable(disclosure);
+        return this;
+    }
+
+    /**
+     * The latency dimension's verdict {@code V_latency} and the enforced
+     * constraints' evaluations; the verdict is empty when the test
+     * enforces no latency constraint.
+     */
+    public ProbabilisticTestVerdictBuilder latencyEvaluations(
+            Optional<Verdict> latencyVerdict, List<LatencyEvaluation> evaluations) {
+        this.latencyVerdict = java.util.Objects.requireNonNull(latencyVerdict, "latencyVerdict");
+        this.latencyEvaluations = List.copyOf(evaluations);
+        return this;
+    }
+
     // ── Build ─────────────────────────────────────────────────────────────
 
     public ProbabilisticTestVerdict build() {
@@ -396,7 +430,8 @@ public class ProbabilisticTestVerdictBuilder {
                 environment, junitPassed, punitVerdict, verdictReason,
                 postconditionFailures,
                 perCriterion,
-                postconditionStandings
+                postconditionStandings,
+                decision
         );
     }
 
@@ -465,7 +500,10 @@ public class ProbabilisticTestVerdictBuilder {
                 li.successfulSamples(), li.totalSamples(),
                 li.skipped(), Optional.ofNullable(li.skipReason()),
                 li.p50Ms(), li.p90Ms(), li.p95Ms(), li.p99Ms(), li.maxMs(),
-                li.caveats() != null ? li.caveats() : List.of()
+                li.caveats() != null ? li.caveats() : List.of(),
+                "passing-samples",
+                latencyVerdict,
+                latencyEvaluations
         ));
     }
 
@@ -493,14 +531,6 @@ public class ProbabilisticTestVerdictBuilder {
                 ? estimator.lowerBound(successes, samplesExecuted, confidenceLevel)
                 : 0.0;
 
-        Optional<Double> testStatistic = Optional.empty();
-        Optional<Double> pValue = Optional.empty();
-        if (samplesExecuted > 0) {
-            double z = estimator.zTestStatistic(observedPassRate, minPassRate, samplesExecuted);
-            testStatistic = Optional.of(z);
-            pValue = Optional.of(estimator.oneSidedPValue(z));
-        }
-
         Optional<String> thresholdDerivation = Optional.empty();
         Optional<BaselineSummary> baselineSummary = Optional.empty();
         if (baseline != null && baseline.hasEmpiricalData()) {
@@ -519,7 +549,7 @@ public class ProbabilisticTestVerdictBuilder {
 
         return new StatisticalAnalysis(
                 confidenceLevel, standardError, wilsonLower,
-                testStatistic, pValue, thresholdDerivation, baselineSummary, caveats
+                thresholdDerivation, baselineSummary, caveats, regression
         );
     }
 
@@ -527,7 +557,7 @@ public class ProbabilisticTestVerdictBuilder {
         if (baseline == null || !baseline.hasEmpiricalData()) {
             return "Inline threshold (no baseline spec)";
         }
-        return "Wilson";
+        return "regression/fisher";
     }
 
     private List<String> buildCaveats(CovariateStatus covariates) {
@@ -541,21 +571,30 @@ public class ProbabilisticTestVerdictBuilder {
         String originName = thresholdOrigin != null ? thresholdOrigin.name() : null;
         boolean isSmoke = intent == TestIntent.SMOKE;
 
+        double alpha = org.mavai.punit.statistics.Methodology.alphaFromConfidence(resolvedConfidence);
         if (!isSmoke && ComplianceEvidenceEvaluator.hasComplianceContext(originName, contractRef)) {
-            if (ComplianceEvidenceEvaluator.isUndersized(samplesExecuted, minPassRate)) {
+            if (ComplianceEvidenceEvaluator.isUndersized(samplesExecuted, minPassRate, alpha)) {
                 caveats.add(ComplianceEvidenceEvaluator.SIZING_NOTE);
             }
         }
 
-        if (isSmoke && thresholdOrigin != null && thresholdOrigin.isNormative()) {
+        // Intent-aware caveats for a SMOKE test against a normative
+        // requirement (Statistical Companion §5.7.3, §5.7.4).
+        if (isSmoke && samplesExecuted > 0
+                && thresholdOrigin != null && thresholdOrigin.isNormative()) {
             double target = minPassRate;
             if (!Double.isNaN(target) && target > 0.0 && target < 1.0) {
                 var result = VerificationFeasibilityEvaluator.evaluate(
                         samplesExecuted, target, resolvedConfidence);
                 if (!result.feasible()) {
                     caveats.add(String.format(
-                            "Sample not sized for verification (N=%d, need %d for target at %.0f%% confidence).",
-                            samplesExecuted, result.minimumSamples(), resolvedConfidence * 100));
+                            "PASS not possible at this size (N = %d, need at least %d). "
+                                    + "This result carries no evidence about the service.",
+                            samplesExecuted, result.minimumSamples()));
+                } else {
+                    caveats.add("PASS is possible at this size. Consider setting "
+                            + "intent = VERIFICATION for evidential strength, and check the "
+                            + "power statement.");
                 }
             }
         }
@@ -651,6 +690,11 @@ public class ProbabilisticTestVerdictBuilder {
     }
 
     private String deriveVerdictReason(PUnitVerdict punitVerdict, CovariateStatus covariates) {
+        if (decision.refused()) {
+            return "configuration refused: " + decision.configurationErrors().stream()
+                    .map(Enum::name)
+                    .collect(java.util.stream.Collectors.joining(" "));
+        }
         if (punitVerdict == PUnitVerdict.INCONCLUSIVE) {
             if (!covariates.aligned()) {
                 return InconclusiveReasons.COVARIATE_MISALIGNMENT;
@@ -659,16 +703,35 @@ public class ProbabilisticTestVerdictBuilder {
                 return InconclusiveReasons.BUDGET_EXHAUSTED;
             }
             return inconclusiveReasonFromCriteria()
+                    .or(this::triggeredBy)
                     .orElse(InconclusiveReasons.INSUFFICIENT_EVIDENCE);
         }
         if (terminationReason.isBudgetExhaustion()) {
             return InconclusiveReasons.BUDGET_EXHAUSTED;
+        }
+        if (punitVerdict == PUnitVerdict.FAIL) {
+            Optional<String> triggered = triggeredBy();
+            if (triggered.isPresent()) {
+                return triggered.get();
+            }
         }
         String comparator = observedPassRate >= minPassRate ? ">=" : "<";
         return String.format("%s %s %s",
                 RateFormat.format(observedPassRate),
                 comparator,
                 RateFormat.format(minPassRate));
+    }
+
+    /** "decided by criterion 'x', latency p95" — what decided a FAIL or INCONCLUSIVE. */
+    private Optional<String> triggeredBy() {
+        if (decision.triggering().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of("decided by " + decision.triggering().stream()
+                .map(t -> t.kind() == org.mavai.punit.api.spec.VerdictComposition.Trigger.Kind.LATENCY
+                        ? "latency " + t.id()
+                        : "criterion '" + t.id() + "'")
+                .collect(java.util.stream.Collectors.joining(", ")));
     }
 
     /**

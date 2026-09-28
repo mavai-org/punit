@@ -9,6 +9,9 @@ import javax.xml.stream.XMLStreamWriter;
 
 import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.FailureExemplar;
+import org.mavai.punit.statistics.DecisionRule;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.verdict.LatencyEvaluation;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
 
@@ -17,8 +20,12 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * interchange format.
  *
  * <p>The output conforms to the {@code http://mavai.org/verdict/1.0}
- * namespace and the {@code verdict-1.0.xsd} schema bundled with this
- * module.
+ * namespace and the {@code verdict-1.7.xsd} schema bundled with this
+ * module: every record states the methodology whose decision rules
+ * produced it, the versioned rule on every criterion row and latency
+ * evaluation, the latency dimension's verdict, and — for a configuration
+ * refused before any sample ran — the configuration errors in place of a
+ * verdict value (Statistical Companion 1.5.0).
  *
  * <p>PUnit-specific extensions not in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID, JUnit pass
@@ -34,9 +41,7 @@ public final class VerdictXmlWriter {
      * standard namespace.
      */
     static final String NAMESPACE = "http://mavai.org/verdict/1.0";
-    static final String VERSION_1_0 = "1.0";
-    static final String VERSION_1_2 = "1.2";
-    static final String VERSION_1_4 = "1.4";
+    static final String VERSION = "1.7";
 
     private static final XMLOutputFactory OUTPUT_FACTORY = XMLOutputFactory.newFactory();
 
@@ -68,19 +73,18 @@ public final class VerdictXmlWriter {
     private void writeVerdictRecord(XMLStreamWriter w, ProbabilisticTestVerdict v) throws XMLStreamException {
         w.writeStartElement("verdict-record");
         w.writeDefaultNamespace(NAMESPACE);
-        // version="1.4" when the postcondition-standings element is
-        // populated (1.3-shaped rows are valid 1.4 rows, so one revision
-        // covers both); "1.2" when only <per-criterion> content is;
-        // "1.0" otherwise. Consumers inspecting the attribute remain
-        // correctly informed about which optional elements may appear.
-        String version = v.postconditionStandings().isPresent() ? VERSION_1_4
-                : v.perCriterion().isPresent() ? VERSION_1_2
-                : VERSION_1_0;
-        w.writeAttribute("version", version);
+        w.writeAttribute("version", VERSION);
+        w.writeAttribute("methodology-version", Methodology.VERSION);
         w.writeAttribute("timestamp", v.timestamp().toString());
         w.writeAttribute("generator", resolveGenerator());
         if (v.correlationId() != null && !v.correlationId().isEmpty()) {
             w.writeAttribute("correlation-id", v.correlationId());
+        }
+
+        if (v.decision().refused()) {
+            writeRefusedBody(w, v);
+            w.writeEndElement();
+            return;
         }
 
         writeIdentity(w, v.identity());
@@ -101,6 +105,29 @@ public final class VerdictXmlWriter {
         writePostconditionStandings(w, v);
         writeVerdictElement(w, v);
 
+        w.writeEndElement();
+    }
+
+    /**
+     * A configuration refused before any sample ran: what was planned,
+     * the termination reason {@code CONFIGURATION_REFUSED} and every
+     * configuration error, in the fixed order, in place of a verdict
+     * value — a refusal is not INCONCLUSIVE.
+     */
+    private void writeRefusedBody(XMLStreamWriter w, ProbabilisticTestVerdict v)
+            throws XMLStreamException {
+        writeIdentity(w, v.identity());
+        writeExecution(w, v.execution());
+        writeCovariates(w, v.covariates());
+        v.provenance().ifPresent(p -> writeProvenanceUnchecked(w, p));
+        writeTermination(w, v.termination());
+        w.writeStartElement("verdict");
+        w.writeAttribute("configuration-error", v.decision().configurationErrors().stream()
+                .map(Enum::name)
+                .collect(java.util.stream.Collectors.joining(" ")));
+        if (v.verdictReason() != null && !v.verdictReason().isEmpty()) {
+            w.writeAttribute("reason", v.verdictReason());
+        }
         w.writeEndElement();
     }
 
@@ -171,6 +198,11 @@ public final class VerdictXmlWriter {
             if (!Double.isNaN(row.threshold())) {
                 w.writeAttribute("threshold", formatDouble(row.threshold()));
             }
+            if (row.decisionRule().isPresent()) {
+                DecisionRule rule = row.decisionRule().get();
+                w.writeAttribute("decision-rule", rule.id());
+                w.writeAttribute("decision-rule-version", Integer.toString(rule.version()));
+            }
             w.writeEndElement();
         }
         w.writeStartElement("composite");
@@ -217,15 +249,16 @@ public final class VerdictXmlWriter {
         }
         w.writeStartElement("latency");
         w.writeAttribute("successful-samples", Integer.toString(lat.successfulSamples()));
-        // The latency dimension at the verdict layer is descriptive
-        // only; declared-threshold gating happens at the criterion
-        // layer via PercentileLatency. strict-violations and
-        // advisory-violations therefore stay at zero in punit's
-        // emission. The schema retains them for future framework
-        // implementations that wire per-percentile evaluation data
-        // into the verdict-XML envelope.
-        w.writeAttribute("strict-violations", "0");
+        long strictViolations = lat.evaluations().stream()
+                .filter(e -> e.status() == LatencyEvaluation.Status.STRICT_FAIL)
+                .count();
+        w.writeAttribute("strict-violations", Long.toString(strictViolations));
+        // punit enforces every declared latency constraint; it has no
+        // advisory mode, so no advisory evaluation is ever recorded.
         w.writeAttribute("advisory-violations", "0");
+        if (lat.verdict().isPresent()) {
+            w.writeAttribute("verdict", lat.verdict().get().name());
+        }
 
         // Observed percentiles
         w.writeStartElement("observed");
@@ -235,6 +268,51 @@ public final class VerdictXmlWriter {
         writePercentileObserved(w, "p99", lat.p99Ms());
         w.writeEndElement();
 
+        if (!lat.evaluations().isEmpty()) {
+            w.writeStartElement("evaluations");
+            for (LatencyEvaluation e : lat.evaluations()) {
+                writeEvaluation(w, e);
+            }
+            w.writeEndElement();
+        }
+
+        w.writeEndElement();
+    }
+
+    /**
+     * One enforced latency constraint. A saturated baseline-derived
+     * constraint carries no threshold and no baseline rank: there is no
+     * threshold, and none is manufactured.
+     */
+    private void writeEvaluation(XMLStreamWriter w, LatencyEvaluation e) throws XMLStreamException {
+        w.writeStartElement("evaluation");
+        w.writeAttribute("percentile", e.percentile());
+        if (e.observedMs().isPresent()) {
+            w.writeAttribute("observed-ms", Long.toString(e.observedMs().getAsLong()));
+        }
+        if (e.thresholdMs().isPresent()) {
+            w.writeAttribute("threshold-ms", Long.toString(e.thresholdMs().getAsLong()));
+        }
+        w.writeAttribute("provenance", e.provenance().label());
+        w.writeAttribute("mode", "strict");
+        w.writeAttribute("status", e.status().name());
+        if (e.baselineConfidence().isPresent()) {
+            w.writeAttribute("baseline-confidence", formatDouble(e.baselineConfidence().getAsDouble()));
+        }
+        if (e.baselineRank().isPresent()) {
+            w.writeAttribute("baseline-rank", Integer.toString(e.baselineRank().getAsInt()));
+        }
+        if (e.baselineN().isPresent()) {
+            w.writeAttribute("baseline-n", Integer.toString(e.baselineN().getAsInt()));
+        }
+        w.writeAttribute("decision-rule", e.decisionRule().id());
+        w.writeAttribute("decision-rule-version", Integer.toString(e.decisionRule().version()));
+        if (e.withinThreshold().isPresent()) {
+            w.writeAttribute("within-threshold", Integer.toString(e.withinThreshold().getAsInt()));
+        }
+        if (e.requiredWithin().isPresent()) {
+            w.writeAttribute("required-within", Integer.toString(e.requiredWithin().getAsInt()));
+        }
         w.writeEndElement();
     }
 
@@ -256,8 +334,18 @@ public final class VerdictXmlWriter {
                 .map(SpecProvenance::thresholdOriginName)
                 .orElse("UNSPECIFIED");
         w.writeAttribute("threshold-origin", thresholdOrigin);
-        stats.testStatistic().ifPresent(t -> writeAttributeUnchecked(w, "test-statistic", formatDouble(t)));
-        stats.pValue().ifPresent(p -> writeAttributeUnchecked(w, "p-value", formatDouble(p)));
+        stats.regression().ifPresent(r -> {
+            r.sizeAtAssumedCommonRate().ifPresent(x ->
+                    writeAttributeUnchecked(w, "size-at-assumed-common-rate", formatDouble(x)));
+            if (r.designAlternativeRate().isPresent()) {
+                writeAttributeUnchecked(w, "design-alternative-rate",
+                        formatDouble(r.designAlternativeRate().getAsDouble()));
+                r.designPower().ifPresent(x ->
+                        writeAttributeUnchecked(w, "design-power", formatDouble(x)));
+                r.resolvedTestPower().ifPresent(x ->
+                        writeAttributeUnchecked(w, "resolved-test-power", formatDouble(x)));
+            }
+        });
         w.writeEndElement();
     }
 
@@ -399,6 +487,11 @@ public final class VerdictXmlWriter {
         if (v.verdictReason() != null && !v.verdictReason().isEmpty()) {
             w.writeAttribute("reason", v.verdictReason());
         }
+        if (v.decision().decisionRule().isPresent()) {
+            DecisionRule rule = v.decision().decisionRule().get();
+            w.writeAttribute("decision-rule", rule.id());
+            w.writeAttribute("decision-rule-version", Integer.toString(rule.version()));
+        }
         w.writeEndElement();
     }
 
@@ -418,6 +511,7 @@ public final class VerdictXmlWriter {
                  SUITE_TOKEN_BUDGET_EXHAUSTED,
                  OPTIMIZATION_TOKEN_BUDGET_EXHAUSTED -> "TOKEN_BUDGET_EXHAUSTED";
             case MUTATION_FAILURE, SCORING_FAILURE -> "COMPLETED";
+            case CONFIGURATION_REFUSED -> "CONFIGURATION_REFUSED";
         };
     }
 

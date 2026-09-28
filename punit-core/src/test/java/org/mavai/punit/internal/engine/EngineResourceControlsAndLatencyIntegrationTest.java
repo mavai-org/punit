@@ -424,9 +424,11 @@ class EngineResourceControlsAndLatencyIntegrationTest {
     @Test
     @DisplayName("mixed criteria: functional PASS + latency FAIL composes to FAIL when both REQUIRED")
     void mixedCriteriaBothRequiredComposesToFail() {
+        // A requirement of 0.5 is demonstrable at 5 samples (5 of 5 pass
+        // the exact test at alpha 0.05), so the functional criterion passes.
         ServiceContract<Factors, Integer, Boolean> slow = new ServiceContract<>() {
             @Override public Criteria<Boolean> criteria() {
-                return meeting().passRate(0.95);
+                return meeting().passRate(0.5);
             }
             @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
                 sleep(50);

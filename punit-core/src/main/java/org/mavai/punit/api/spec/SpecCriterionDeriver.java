@@ -1,5 +1,7 @@
 package org.mavai.punit.api.spec;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
@@ -41,6 +43,42 @@ public interface SpecCriterionDeriver {
      *         posture; empty otherwise
      */
     <O> Optional<Criterion<O, ?>> derive(CriterionPosture posture);
+
+    /**
+     * Map every contract criterion's posture to its spec-level
+     * evaluator, one evaluator per kind. One pass-rate evaluator judges
+     * every methodology criterion, each by its own posture; it is derived
+     * from an empirical posture where the contract declares one, so that
+     * the baseline is resolved whenever any criterion is baseline-derived
+     * (a requirement and a baseline on the same postconditions are two
+     * criteria of one contract).
+     *
+     * @param postures the contract criteria's postures, in declaration order
+     * @param <O> the contract's output value type
+     * @return the spec-side criteria, at most one per evaluator class
+     */
+    default <O> List<Criterion<O, ?>> deriveAll(List<CriterionPosture> postures) {
+        List<CriterionPosture> ordered = new ArrayList<>(postures.size());
+        for (CriterionPosture p : postures) {
+            if (p.kind() == CriterionPosture.Kind.STATISTICAL_EMPIRICAL) {
+                ordered.add(p);
+            }
+        }
+        for (CriterionPosture p : postures) {
+            if (p.kind() != CriterionPosture.Kind.STATISTICAL_EMPIRICAL) {
+                ordered.add(p);
+            }
+        }
+        List<Criterion<O, ?>> out = new ArrayList<>();
+        for (CriterionPosture p : ordered) {
+            this.<O>derive(p).ifPresent(c -> {
+                if (out.stream().noneMatch(existing -> existing.getClass() == c.getClass())) {
+                    out.add(c);
+                }
+            });
+        }
+        return out;
+    }
 
     /**
      * Locate the registered {@link SpecCriterionDeriver}

@@ -80,7 +80,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("returns a positive integer when a matching baseline exists")
     void returnsPositiveInteger(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.90, 1000);
+        writeBaselineWithRate(dir, 0.90, 20000);
 
         int n = PowerAnalysis.sampleSize(dir, baseline(), 0.02, 0.80);
 
@@ -93,8 +93,8 @@ class PowerAnalysisTest {
             throws IOException {
         // p=0.5 maximises p(1-p), so it requires the largest n. p=0.9 is much
         // less variable and so requires far fewer samples for the same MDE.
-        writeBaselineWithRate(dirA, 0.50, 1000);
-        writeBaselineWithRate(dirB, 0.90, 1000);
+        writeBaselineWithRate(dirA, 0.50, 20000);
+        writeBaselineWithRate(dirB, 0.90, 20000);
 
         int nAt50 = PowerAnalysis.sampleSize(dirA, baseline(), 0.05, 0.80);
         int nAt90 = PowerAnalysis.sampleSize(dirB, baseline(), 0.05, 0.80);
@@ -105,7 +105,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("required n shrinks as MDE grows (easier-to-detect effect needs fewer samples)")
     void nShrinksAsMdeGrows(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
 
         int small = PowerAnalysis.sampleSize(dir, baseline(), 0.01, 0.80);
         int medium = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
@@ -116,7 +116,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("required n grows as power grows (higher confidence in detection needs more samples)")
     void nGrowsAsPowerGrows(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
 
         int low = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.50);
         int med = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
@@ -136,7 +136,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("throws IllegalArgumentException when supplier yields a non-MEASURE Experiment")
     void rejectsNonMeasure(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
         Supplier<Experiment> exploreSupplier = () -> {
             Sampling<Factors, String, String> sampling = Sampling
                     .<Factors, String, String>builder()
@@ -177,7 +177,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("rejects mde out of (0, 1)")
     void rejectsMdeOutOfRange(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
         assertThatExceptionOfType(IllegalArgumentException.class)
                 .isThrownBy(() -> PowerAnalysis.sampleSize(dir, baseline(), 0.0, 0.80))
                 .withMessageContaining("mde");
@@ -193,7 +193,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("rejects power out of (0, 1)")
     void rejectsPowerOutOfRange(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
         assertThatExceptionOfType(IllegalArgumentException.class)
                 .isThrownBy(() -> PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.0))
                 .withMessageContaining("power");
@@ -207,14 +207,14 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("rejects an MDE that pushes the alternative-hypothesis rate to or below 0")
     void rejectsIncompatibleMde(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.10, 1000);
+        writeBaselineWithRate(dir, 0.10, 20000);
         // rate=0.10 with mde=0.10 → p1 = 0; rate=0.10 with mde=0.50 → p1 < 0.
         // Both must be rejected; the diagnostic names the one-sided
         // alternative-hypothesis rate invariant rather than the obsolete
         // symmetric [rate-mde, rate+mde] interval.
         assertThatExceptionOfType(IllegalArgumentException.class)
                 .isThrownBy(() -> PowerAnalysis.sampleSize(dir, baseline(), 0.10, 0.80))
-                .withMessageContaining("alternative-hypothesis rate");
+                .withMessageContaining("design alternative rate");
         assertThatExceptionOfType(IllegalArgumentException.class)
                 .isThrownBy(() -> PowerAnalysis.sampleSize(dir, baseline(), 0.50, 0.80));
     }
@@ -226,7 +226,7 @@ class PowerAnalysisTest {
         // because rate + mde >= 1; the relaxed one-sided check admits
         // it. Downstream, σ0 = 0 collapses the sample-size formula to
         // n = (z_β · σ1)² / δ², which the calculator now accepts.
-        writeBaselineWithRate(dir, 1.0, 1000);
+        writeBaselineWithRate(dir, 1.0, 20000);
 
         int n = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
 
@@ -238,7 +238,7 @@ class PowerAnalysisTest {
     void acceptsBaselineRateAboveOneMinusMde(@TempDir Path dir) throws IOException {
         // Previously rejected by the symmetric two-sided check; the
         // formula handles 0.99 cleanly (both σ0 and σ1 are positive).
-        writeBaselineWithRate(dir, 0.99, 1000);
+        writeBaselineWithRate(dir, 0.99, 20000);
 
         int n = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
 
@@ -248,7 +248,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("invokes the baseline supplier exactly once")
     void invokesSupplierOnce(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
         int[] callCount = {0};
         Supplier<Experiment> counting = () -> {
             callCount[0]++;
@@ -354,7 +354,7 @@ class PowerAnalysisTest {
         // resolver path still selects an unstamped candidate when
         // declarations are empty — this is the no-regression case
         // for the existing PowerAnalysis call sites.
-        writeBaselineWithRate(dir, 0.80, 1000);
+        writeBaselineWithRate(dir, 0.80, 20000);
 
         int n = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
 
@@ -392,7 +392,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("single-arg overload reads MDE / power from the contract's confidence-first criterion")
     void singleArgReadsFromContractCriterion(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.90, 1000);
+        writeBaselineWithRate(dir, 0.90, 20000);
 
         int viaContract = PowerAnalysis.sampleSize(dir, confidenceFirstBaseline(0.05, 0.80));
         int viaExplicit = PowerAnalysis.sampleSize(dir, baseline(), 0.05, 0.80);
@@ -403,7 +403,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("single-arg overload returns the max sample count across confidence-first criteria")
     void singleArgReturnsMaxAcrossCriteria(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.90, 1000);
+        writeBaselineWithRate(dir, 0.90, 20000);
         Supplier<Experiment> twoCriteria = () -> {
             ServiceContract<Factors, String, String> contract = new ServiceContract<>() {
                 @Override public String id() { return USE_CASE_ID; }
@@ -442,7 +442,7 @@ class PowerAnalysisTest {
     @Test
     @DisplayName("single-arg overload throws when no criterion declares MDE + power")
     void singleArgThrowsWhenNoConfidenceFirstCriterion(@TempDir Path dir) throws IOException {
-        writeBaselineWithRate(dir, 0.90, 1000);
+        writeBaselineWithRate(dir, 0.90, 20000);
 
         // The base `baseline()` uses ECHO — a no-criteria contract.
         assertThatExceptionOfType(IllegalStateException.class)

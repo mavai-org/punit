@@ -98,7 +98,6 @@ class VerdictXmlSinkTest {
                 Optional.empty(),
                 Optional.empty(),
                 new StatisticalAnalysis(0.95, 0.0218, 0.8948,
-                        Optional.of(2.29), Optional.of(0.011),
                         Optional.empty(), Optional.empty(), List.of()),
                 CovariateStatus.allAligned(),
                 new CostSummary(0, 0, 0, TokenMode.NONE, Optional.empty(), Optional.empty()),

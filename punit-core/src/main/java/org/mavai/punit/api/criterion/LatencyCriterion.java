@@ -336,24 +336,23 @@ public final class LatencyCriterion {
     }
 
     /**
-     * Set the per-criterion confidence floor for the binomial
-     * order-statistic upper bound (Statistical Companion §12.4.2).
-     * Composes only with {@link Mode#EMPIRICAL}; rejected on
-     * contractual latency (the ceiling is the threshold; nothing to
-     * estimate).
+     * Set the confidence {@code 1 − alpha} at which every latency
+     * constraint of this declaration is decided: an explicit ceiling by
+     * {@code latency/compliance-exact-binomial} (Statistical Companion
+     * §12.3.4), a baseline-derived threshold by {@code latency/precedence}
+     * (§12.4.2).
      *
      * <p>Defaults to {@code StatisticalDefaults.DEFAULT_CONFIDENCE}
      * (0.95) when not set explicitly.
      *
-     * @throws IllegalStateException on contractual or empty decls
+     * @throws IllegalStateException on an empty decl
      * @throws IllegalArgumentException when {@code confidence} is
      *         outside {@code (0, 1)}
      */
     public LatencyCriterion atConfidence(double confidence) {
-        if (mode != Mode.EMPIRICAL) {
+        if (mode == Mode.NONE) {
             throw new IllegalStateException(
-                    ".atConfidence(...) composes only with empirical latency; "
-                            + "the contractual ceiling is the threshold");
+                    ".atConfidence(...) needs a latency declaration to apply to");
         }
         if (Double.isNaN(confidence) || confidence <= 0.0 || confidence >= 1.0) {
             throw new IllegalArgumentException(

@@ -6,41 +6,35 @@ package org.mavai.punit.statistics;
  * criteria.
  *
  * <h2>Method</h2>
- * <p>Composes two existing constructs; it introduces no new
- * statistical machinery:
+ * <p>The judgement is the normative rule itself,
+ * {@code compliance/exact-binomial} (companion §3.6); it introduces no
+ * machinery of its own:
  *
  * <ol>
- *   <li><strong>Supportability gate</strong> — delegates to
- *       {@link VerificationFeasibilityEvaluator}: when even a perfect
- *       observation at the run's sample count could not place the
- *       Wilson one-sided lower confidence bound at or above the
- *       stipulated threshold, no judgement can be rendered at this
- *       sample size. The result is
- *       {@link State#UNSUPPORTABLE} with the feasible minimum sample
- *       count stated.</li>
- *   <li><strong>Judgement</strong> — the Wilson score one-sided lower
- *       confidence bound at the run's own sample count
- *       ({@link BinomialProportionEstimator#lowerBound}), at the
- *       criterion's confidence level, compared against the stipulated
- *       threshold: bound &ge; threshold is {@link State#MET},
- *       otherwise {@link State#FAILED}.</li>
+ *   <li><strong>Supportability</strong> — when no outcome of the run's
+ *       size could demonstrate the stipulation (the size is below
+ *       {@code ⌈log alpha / log p_req⌉}), no judgement can be rendered.
+ *       The result is {@link State#UNSUPPORTABLE} with the feasible
+ *       minimum sample count stated.</li>
+ *   <li><strong>Judgement</strong> — the run's success count against the
+ *       smallest passing count {@code k_min}: at or above it is
+ *       {@link State#MET}, below it {@link State#FAILED}. The one-sided
+ *       Clopper–Pearson lower bound, which coincides with the exact test,
+ *       is reported beside the judgement.</li>
  * </ol>
  *
  * <h2>Interpretation</h2>
  * <p>A {@link State#FAILED} judgement states one fact: this run's
- * evidence did not clear a stipulation in force at measure time. It
- * does <em>not</em> invalidate the service under measurement — an
+ * evidence did not demonstrate a stipulation in force at measure time.
+ * It does <em>not</em> invalidate the service under measurement — an
  * aspirational bar measured mid-development, or a service measured
  * precisely because it is suspected to be below its bar, fails its
- * stipulation as a matter of course. Consumers of this result must
- * word it as a relation to the stipulation, never as a claim about
- * the service's validity.
+ * stipulation as a matter of course. Consumers of this result must word
+ * it as a relation to the stipulation, never as a claim about the
+ * service's validity.
  */
 // mavai-ref: JVI-305FCX1 — do not remove (resolves in mavai-orchestrator)
 public final class NormativeJudgementEvaluator {
-
-    private static final BinomialProportionEstimator ESTIMATOR =
-            new BinomialProportionEstimator();
 
     private NormativeJudgementEvaluator() {
         // utility class
@@ -48,15 +42,15 @@ public final class NormativeJudgementEvaluator {
 
     /** The three possible judgement states. */
     public enum State {
-        /** The run's lower confidence bound clears the stipulated threshold. */
+        /** The run's success count demonstrates the stipulated threshold. */
         MET,
-        /** The run's lower confidence bound does not clear the stipulated threshold. */
+        /** The run's success count does not demonstrate the stipulated threshold. */
         FAILED,
         /**
          * The run's sample count cannot support the stipulated
          * threshold at the stated confidence — even a perfect
-         * observation would leave the bound below the threshold. No
-         * met/failed judgement is rendered.
+         * observation would not demonstrate it. No met/failed judgement
+         * is rendered.
          */
         UNSUPPORTABLE
     }
@@ -68,9 +62,10 @@ public final class NormativeJudgementEvaluator {
      * @param stipulatedThreshold    the threshold the run was judged against
      * @param confidence             the confidence level the bound was computed at
      * @param observedRate           the run's observed pass rate (successes / samples)
-     * @param lowerBound             the Wilson one-sided lower confidence bound at the
-     *                               run's sample count; {@code NaN} when the judgement
-     *                               is {@link State#UNSUPPORTABLE} (no bound is asserted)
+     * @param lowerBound             the one-sided Clopper–Pearson lower confidence bound
+     *                               at the run's sample count, reported beside the
+     *                               judgement; {@code NaN} when the judgement is
+     *                               {@link State#UNSUPPORTABLE} (no bound is asserted)
      * @param feasibleMinimumSamples the minimum sample count at which a judgement
      *                               against this threshold becomes supportable at
      *                               this confidence
@@ -98,24 +93,24 @@ public final class NormativeJudgementEvaluator {
             int successes, int samples, double stipulatedThreshold, double confidence) {
         validate(successes, samples, stipulatedThreshold, confidence);
         double observedRate = (double) successes / samples;
+        double alpha = Methodology.alphaFromConfidence(confidence);
         if (stipulatedThreshold <= 0.0) {
-            // A zero threshold is degenerate: any evidence clears it,
-            // and the feasibility machinery (which requires a target in
-            // (0, 1) exclusive) has nothing to gate. Trivially met.
+            // A zero threshold is degenerate: any evidence clears it, and
+            // the exact rule (which requires a requirement in (0, 1)) has
+            // nothing to decide. Trivially met.
             return new Judgement(State.MET, stipulatedThreshold, confidence,
-                    observedRate, ESTIMATOR.lowerBound(successes, samples, confidence), 1);
+                    observedRate, ComplianceRule.clopperPearsonLower(successes, samples, alpha), 1);
         }
-        VerificationFeasibilityEvaluator.FeasibilityResult feasibility =
-                VerificationFeasibilityEvaluator.evaluate(
-                        samples, stipulatedThreshold, confidence);
-        if (!feasibility.feasible()) {
+        int feasibleMinimum = ComplianceRule.minimumFeasibleSamples(stipulatedThreshold, alpha);
+        ComplianceRule.Decision decision =
+                ComplianceRule.decide(successes, samples, stipulatedThreshold, alpha);
+        if (!decision.passPossible()) {
             return new Judgement(State.UNSUPPORTABLE, stipulatedThreshold, confidence,
-                    observedRate, Double.NaN, feasibility.minimumSamples());
+                    observedRate, Double.NaN, feasibleMinimum);
         }
-        double lowerBound = ESTIMATOR.lowerBound(successes, samples, confidence);
-        State state = lowerBound >= stipulatedThreshold ? State.MET : State.FAILED;
+        State state = decision.verdict() == RuleVerdict.PASS ? State.MET : State.FAILED;
         return new Judgement(state, stipulatedThreshold, confidence,
-                observedRate, lowerBound, feasibility.minimumSamples());
+                observedRate, decision.clopperPearsonLower(), feasibleMinimum);
     }
 
     private static void validate(

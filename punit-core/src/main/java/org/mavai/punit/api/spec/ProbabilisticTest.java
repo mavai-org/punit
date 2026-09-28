@@ -28,8 +28,9 @@ import org.mavai.punit.api.ServiceContract;
  * claims the spec makes about the resulting population are expressed
  * by the criteria registered via {@link Builder#criterion(Criterion)}
  * (REQUIRED) and {@link Builder#reportOnly(Criterion)} (REPORT_ONLY).
- * The combined verdict is {@link Verdict#compose(List)}'d from the
- * REQUIRED subset.
+ * The combined verdict is the test verdict {@code V_test}: the
+ * structural composite of the REQUIRED functional criteria and latency
+ * constraints ({@link VerdictComposition}).
  *
  * <p>The public class carries no type parameters — composition-time
  * type safety lives on the typed {@link Builder}, and the engine
@@ -228,33 +229,27 @@ public final class ProbabilisticTest implements Spec {
             }
 
             EngineRunSummary engineSummary = buildEngineSummary(s, evaluated, baselineFilename);
+            List<EvaluatedCriterion> functional = new ArrayList<>();
+            List<EvaluatedCriterion> latency = new ArrayList<>();
+            for (int i = 0; i < registered.size(); i++) {
+                (registered.get(i).criterion() instanceof PercentileLatency<?> ? latency : functional)
+                        .add(evaluated.get(i));
+            }
+            // A latency declaration is counted per sample under its own id
+            // but is decided by the latency rules, not as a pass rate.
+            List<CriterionSampleCounts> functionalCounts = s.criterionSampleCounts().stream()
+                    .filter(c -> {
+                        org.mavai.punit.api.criterion.CriterionPosture p =
+                                criterionPostures.get(c.criterionId());
+                        return p == null || !p.isLatency();
+                    })
+                    .toList();
             PerCriterionEvaluation perCriterionEvaluation =
-                    PerCriterionVerdicts.derive(evaluated, s.criterionSampleCounts());
-            // Substitute the functional verdict-component's verdict with
-            // the per-criterion composite, then continue to use
-            // Verdict.compose for cross-dimension aggregation. This keeps
-            // latency-dimension criteria (PercentileLatency etc.) in
-            // their existing role — they remain spec-layer EvaluatedCriterion
-            // entries and contribute to the final verdict under the
-            // existing INCONCLUSIVE-first composition rule — while the
-            // functional dimension's verdict is now driven by the
-            // methodology-level per-criterion composite under the
-            // FAIL-dominant aggregation rule (§1.4.6).
-            //
-            // The substitution is a no-op for K=1 contracts (per-criterion
-            // composite over one verdict equals that verdict; step-3's
-            // K=1 isomorphism test pins this), preserving byte-identical
-            // behaviour. For K>1 contracts the hiding-result case flips:
-            // a single failing criterion now drives the functional
-            // verdict to FAIL.
-            //
-            // Empty per-criterion evaluation (apply-level-failure runs
-            // where Contract.evaluateClauses never fired) leaves the
-            // unsubstituted compose result intact.
-            List<EvaluatedCriterion> compositeAdjusted = perCriterionEvaluation.perCriterionVerdicts().isEmpty()
-                    ? evaluated
-                    : substituteFunctionalVerdict(evaluated, perCriterionEvaluation.compositeVerdict());
-            Verdict authoritative = Verdict.compose(compositeAdjusted);
+                    PerCriterionVerdicts.derive(functional, functionalCounts);
+            Optional<VerdictComposition> composition =
+                    composeVerdict(functional, latency, perCriterionEvaluation);
+            Verdict authoritative = composition.map(VerdictComposition::testVerdict)
+                    .orElse(Verdict.PASS);
             // Fail-on-expired policy: an expired baseline always carries
             // a caveat (already in `warnings` via lookup notes); under
             // the FAIL policy it additionally forces the verdict to FAIL,
@@ -291,34 +286,85 @@ public final class ProbabilisticTest implements Spec {
                     s.failuresByPostcondition(),
                     engineSummary,
                     perCriterionEvaluation,
-                    Optional.of(PostconditionStandings.from(s, contract.effectiveCriteria())));
+                    Optional.of(PostconditionStandings.from(s, contract.effectiveCriteria())),
+                    composition,
+                    List.of());
         }
 
         /**
-         * Returns a copy of {@code evaluated} in which the
-         * {@code bernoulli-pass-rate} entry's verdict is replaced by
-         * the supplied composite verdict. Other entries (latency,
-         * future dimensions) pass through unchanged. When no
-         * bernoulli-pass-rate entry is present (a spec without a
-         * functional criterion — currently unreachable but defensively
-         * supported), the list is returned unchanged.
+         * The test verdict {@code V_test} (Statistical Companion
+         * §12.3.2): the functional criteria — one decision per
+         * methodology criterion where the pass-rate evaluation judged
+         * them, else the evaluation's own verdict (a gate that fired
+         * before any rule, such as a missing baseline) — and the enforced
+         * latency constraints, composed by the structural rule. Only
+         * REQUIRED criteria enter; empty when none is registered.
          */
-        private static List<EvaluatedCriterion> substituteFunctionalVerdict(
-                List<EvaluatedCriterion> evaluated, Verdict composite) {
-            List<EvaluatedCriterion> out = new java.util.ArrayList<>(evaluated.size());
-            for (EvaluatedCriterion ec : evaluated) {
-                if ("bernoulli-pass-rate".equals(ec.result().criterionName())) {
-                    CriterionResult substituted = new CriterionResult(
-                            ec.result().criterionName(),
-                            composite,
-                            ec.result().explanation(),
-                            ec.result().detail());
-                    out.add(new EvaluatedCriterion(substituted, ec.role()));
+        private static Optional<VerdictComposition> composeVerdict(
+                List<EvaluatedCriterion> functional,
+                List<EvaluatedCriterion> latency,
+                PerCriterionEvaluation perCriterion) {
+            List<VerdictComposition.Decided> criteria = new ArrayList<>();
+            for (EvaluatedCriterion ec : functional) {
+                if (ec.role() != CriterionRole.REQUIRED) {
+                    continue;
+                }
+                Object decisions = ec.result().detail().get("decisionsByCriterion");
+                if (decisions instanceof java.util.Map<?, ?> byCriterion
+                        && !perCriterion.perCriterionVerdicts().isEmpty()) {
+                    for (PerCriterionVerdict row : perCriterion.perCriterionVerdicts()) {
+                        criteria.add(decided(row.criterionId(), row.verdict(),
+                                byCriterion.get(row.criterionId()), ""));
+                    }
                 } else {
-                    out.add(ec);
+                    criteria.add(new VerdictComposition.Decided(
+                            ec.result().criterionName(), ec.result().verdict()));
                 }
             }
-            return out;
+            List<VerdictComposition.Decided> constraints = new ArrayList<>();
+            for (EvaluatedCriterion ec : latency) {
+                if (ec.role() != CriterionRole.REQUIRED) {
+                    continue;
+                }
+                java.util.Map<String, Object> detail = ec.result().detail();
+                boolean any = false;
+                for (org.mavai.punit.api.PercentileKey key : org.mavai.punit.api.PercentileKey.values()) {
+                    Object v = detail.get("verdict." + key.detailKey());
+                    if (v instanceof String name) {
+                        constraints.add(decided(key.detailKey(), Verdict.valueOf(name), detail,
+                                "." + key.detailKey()));
+                        any = true;
+                    }
+                }
+                if (!any) {
+                    constraints.add(new VerdictComposition.Decided(
+                            ec.result().criterionName(), ec.result().verdict()));
+                }
+            }
+            if (criteria.isEmpty() && constraints.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(VerdictComposition.compose(criteria, constraints));
+        }
+
+        /**
+         * One decision, with the rule and alpha its detail names
+         * ({@code decisionRule} / {@code alpha}, suffixed per latency
+         * constraint).
+         */
+        private static VerdictComposition.Decided decided(
+                String id, Verdict verdict, Object detail, String suffix) {
+            if (!(detail instanceof java.util.Map<?, ?> map)) {
+                return new VerdictComposition.Decided(id, verdict);
+            }
+            Optional<org.mavai.punit.statistics.DecisionRule> rule =
+                    map.get("decisionRule" + suffix) instanceof String ruleId
+                            ? org.mavai.punit.statistics.DecisionRule.fromId(ruleId)
+                            : Optional.empty();
+            OptionalDouble alpha = map.get("alpha") instanceof Number n
+                    ? OptionalDouble.of(n.doubleValue())
+                    : OptionalDouble.empty();
+            return new VerdictComposition.Decided(id, verdict, rule, alpha);
         }
 
         /**
@@ -437,26 +483,99 @@ public final class ProbabilisticTest implements Spec {
         @Override public int maxExampleFailures() { return sampling.maxExampleFailures(); }
 
         @Override
+        public Optional<EngineResult> refusal(BaselineProvider provider, int plannedSamples) {
+            Objects.requireNonNull(provider, "provider");
+            FactorBundle factorBundle = FactorBundle.of(factors);
+            org.mavai.punit.api.ServiceContract<FT, IT, OT> contract =
+                    sampling.serviceContractFactory().apply(factors);
+            java.util.Map<String, org.mavai.punit.api.criterion.CriterionPosture> postures =
+                    new java.util.LinkedHashMap<>();
+            for (org.mavai.punit.api.criterion.Criterion<OT> c : contract.effectiveCriteria()) {
+                postures.put(c.id(), c.posture());
+            }
+            List<ConfigurationRefusal> refusals = new ArrayList<>();
+            for (Registered<OT> entry : registered) {
+                if (entry.role() != CriterionRole.REQUIRED) {
+                    continue;
+                }
+                refusals.addAll(refusalsOf(entry.criterion(), contract.id(), factorBundle,
+                        postures, plannedSamples, provider));
+            }
+            if (refusals.isEmpty()) {
+                return Optional.empty();
+            }
+            List<ConfigurationRefusal> ordered = refusals.stream()
+                    .sorted(java.util.Comparator.comparing(ConfigurationRefusal::code))
+                    .toList();
+            Optional<String> contractRef = postures.values().stream()
+                    .map(org.mavai.punit.api.criterion.CriterionPosture::contractRef)
+                    .flatMap(Optional::stream)
+                    .findFirst();
+            EngineRunSummary refusedSummary = new EngineRunSummary(
+                    plannedSamples, 0, 0, 0, 0L, 0L, 0,
+                    org.mavai.punit.api.LatencyResult.empty(),
+                    TerminationReason.CONFIGURATION_REFUSED,
+                    org.mavai.punit.statistics.StatisticalDefaults.DEFAULT_CONFIDENCE,
+                    Optional.empty(),
+                    org.mavai.punit.api.LatencyResult.empty());
+            return Optional.of(ProbabilisticTestResult.refused(
+                    factorBundle, intent, List.of(), contractRef, refusedSummary, ordered));
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private List<ConfigurationRefusal> refusalsOf(
+                Criterion<OT, ?> criterion,
+                String serviceContractId,
+                FactorBundle factorBundle,
+                java.util.Map<String, org.mavai.punit.api.criterion.CriterionPosture> postures,
+                int plannedSamples,
+                BaselineProvider provider) {
+            Optional<? extends BaselineStatistics> baseline = criterion.isEmpirical()
+                    ? provider.baselineFor(serviceContractId, factorBundle,
+                            criterion.name(), criterion.statisticsType())
+                    : Optional.empty();
+            TestIntent testIntent = this.intent;
+            ConfigurationCheck check = new ConfigurationCheck<BaselineStatistics>() {
+                @Override public int plannedSamples() { return plannedSamples; }
+                @Override public TestIntent intent() { return testIntent; }
+                @Override
+                public java.util.Map<String, org.mavai.punit.api.criterion.CriterionPosture>
+                        criterionPostures() {
+                    return postures;
+                }
+                @Override public Optional<BaselineStatistics> baseline() {
+                    return (Optional<BaselineStatistics>) baseline;
+                }
+            };
+            Criterion raw = criterion;
+            return (List<ConfigurationRefusal>) raw.configurationRefusals(check);
+        }
+
+        @Override
         public Optional<EarlyTerminationContext> earlyTermination() {
             if (earlyTerminationDisabled) {
                 return Optional.empty();
             }
+            // A required latency constraint is decided after the run on the
+            // successful latencies the run produced; a pass-rate guarantee
+            // must not end the run before that decision has its samples.
+            boolean successStopAllowed = registered.stream().noneMatch(e ->
+                    e.role() == CriterionRole.REQUIRED
+                            && e.criterion() instanceof PercentileLatency);
             for (Registered<OT> entry : registered) {
                 if (entry.role() != CriterionRole.REQUIRED) {
                     continue;
                 }
                 OptionalDouble threshold = entry.criterion().earlyTerminationPassRate();
                 if (threshold.isPresent()) {
-                    double rate = threshold.getAsDouble();
-                    int floor = new org.mavai.punit.statistics.BinomialProportionEstimator()
-                            .minSamplesForNormalApproximation(rate);
-                    // The confidence of the criterion's Wilson comparison —
+                    // The confidence of the criterion's exact binomial test —
                     // the guaranteed-success count must be derived under the
                     // same rule the criterion applies at evaluate time.
                     double confidence = entry.criterion().earlyTerminationConfidence()
                             .orElse(org.mavai.punit.statistics.StatisticalDefaults
                                     .DEFAULT_CONFIDENCE);
-                    return Optional.of(new EarlyTerminationContext(rate, floor, confidence));
+                    return Optional.of(new EarlyTerminationContext(
+                            threshold.getAsDouble(), confidence, successStopAllowed));
                 }
             }
             return Optional.empty();
@@ -555,13 +674,14 @@ public final class ProbabilisticTest implements Spec {
     private static <FT, IT, OT> void autoInjectFromContract(
             Sampling<FT, IT, OT> sampling, FT factors, List<Registered<OT>> registered) {
         ServiceContract<FT, IT, OT> probe = sampling.serviceContractFactory().apply(factors);
-        SpecCriterionDeriver deriver = SpecCriterionDeriver.lookup();
-        for (org.mavai.punit.api.criterion.Criterion<OT> c : probe.effectiveCriteria()) {
-            deriver.<OT>derive(c.posture()).ifPresent(sc -> {
-                if (!alreadyRegistered(registered, sc.getClass())) {
-                    registered.add(new Registered<>(sc, CriterionRole.REQUIRED));
-                }
-            });
+        List<org.mavai.punit.api.criterion.CriterionPosture> postures = probe.effectiveCriteria()
+                .stream()
+                .map(org.mavai.punit.api.criterion.Criterion::posture)
+                .toList();
+        for (Criterion<OT, ?> sc : SpecCriterionDeriver.lookup().<OT>deriveAll(postures)) {
+            if (!alreadyRegistered(registered, sc.getClass())) {
+                registered.add(new Registered<>(sc, CriterionRole.REQUIRED));
+            }
         }
     }
 

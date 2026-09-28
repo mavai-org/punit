@@ -72,11 +72,9 @@ class EngineIntegrationTest {
     @Test
     @DisplayName("ProbabilisticTest with PassRate.meeting() produces PASS when observed beats threshold")
     void contractualProducesPass() {
-        // 100 samples: the declared-threshold rule judges the test
-        // sample's Wilson lower bound against 0.95, and a perfect run
-        // only supports 0.95 from n = 52 upward (Wilson lower of
-        // 100/100 at 95% ≈ 0.974). 30 perfect samples support ≈ 0.917 —
-        // not confidence-grade evidence for the declared 0.95.
+        // 100 samples: the declared requirement of 0.95 is demonstrated
+        // by compliance/exact-binomial at k_min = 99 of 100 — a design
+        // needs at least 59 samples for any outcome to pass.
         Sampling<LlmFactors, Integer, Boolean> sampling = Sampling
                 .<LlmFactors, Integer, Boolean>builder()
                 .serviceContractFactory(f -> new AlwaysPassesServiceContract())
@@ -85,6 +83,7 @@ class EngineIntegrationTest {
                 .build();
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling, new LlmFactors("gpt-4o", 0.3))
+                .disableEarlyTermination()
                 .build();
 
         EngineResult outcome = new Engine().run(spec);
@@ -102,10 +101,9 @@ class EngineIntegrationTest {
     @Test
     @DisplayName("ProbabilisticTestResult carries engine-run summary populated from SampleSummary")
     void engineSummaryPopulated() {
-        // 100 samples: feasible for the declared 0.95 under the Wilson
-        // comparison, and the validity floor for 0.95 (= 100) keeps the
-        // guaranteed-success short-circuit from firing before the final
-        // sample, so all 100 planned samples execute → COMPLETED.
+        // 100 samples of a declared 0.95: k_min = 99, so after 99
+        // successes the verdict is determined and the run stops one
+        // sample early (SUCCESS_GUARANTEED).
         Sampling<LlmFactors, Integer, Boolean> sampling = Sampling
                 .<LlmFactors, Integer, Boolean>builder()
                 .serviceContractFactory(f -> new AlwaysPassesServiceContract())
@@ -120,12 +118,12 @@ class EngineIntegrationTest {
 
         var summary = result.engineSummary();
         assertThat(summary.plannedSamples()).isEqualTo(100);
-        assertThat(summary.samplesExecuted()).isEqualTo(100);
-        assertThat(summary.successes()).isEqualTo(100);
+        assertThat(summary.samplesExecuted()).isEqualTo(99);
+        assertThat(summary.successes()).isEqualTo(99);
         assertThat(summary.failures()).isZero();
         assertThat(summary.elapsedMs()).isGreaterThanOrEqualTo(0L);
         assertThat(summary.terminationReason())
-                .isEqualTo(TerminationReason.COMPLETED);
+                .isEqualTo(TerminationReason.SUCCESS_GUARANTEED);
         // Contractual mode runs at the framework's default confidence.
         assertThat(summary.confidence()).isEqualTo(0.95);
         assertThat(summary.baselineFilename()).isEmpty();
@@ -138,7 +136,7 @@ class EngineIntegrationTest {
                 .<LlmFactors, Integer, Boolean>builder()
                 .serviceContractFactory(f -> new AlwaysReturnsFailServiceContract())
                 .inputs(1, 2, 3)
-                .samples(15)
+                .samples(59)
                 .build();
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling, new LlmFactors("gpt-4o", 0.3))
@@ -154,7 +152,7 @@ class EngineIntegrationTest {
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
         var detail = result.criterionResults().get(0).result().detail();
         assertThat(detail).containsEntry("successes", 0);
-        assertThat(detail).containsEntry("failures", 15);
+        assertThat(detail).containsEntry("failures", 59);
     }
 
     @Test

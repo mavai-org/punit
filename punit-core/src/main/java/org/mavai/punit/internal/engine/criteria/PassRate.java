@@ -1,17 +1,19 @@
 package org.mavai.punit.internal.engine.criteria;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.function.Supplier;
 
-import java.util.ArrayList;
-import java.util.List;
-
+import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.api.criterion.CriterionPosture;
+import org.mavai.punit.api.spec.ConfigurationCheck;
+import org.mavai.punit.api.spec.ConfigurationRefusal;
 import org.mavai.punit.api.spec.Criterion;
 import org.mavai.punit.api.spec.CriterionResult;
 import org.mavai.punit.api.spec.CriterionSampleCounts;
@@ -22,9 +24,12 @@ import org.mavai.punit.api.spec.PassRateStatistics;
 import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.api.spec.SampleSummary;
 import org.mavai.punit.api.spec.Verdict;
-import org.mavai.punit.statistics.BinomialProportionEstimator;
-import org.mavai.punit.statistics.DerivedThreshold;
-import org.mavai.punit.statistics.ThresholdDeriver;
+import org.mavai.punit.statistics.ComplianceRule;
+import org.mavai.punit.statistics.ConfigurationError;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.statistics.RegressionRule;
+import org.mavai.punit.statistics.RuleVerdict;
+import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
  * A Bernoulli pass-rate criterion. Reads {@link PassRateStatistics}
@@ -32,54 +37,56 @@ import org.mavai.punit.statistics.ThresholdDeriver;
  *
  * <p>Three factory forms:
  * <ul>
- *   <li>{@link #meeting(double, ThresholdOrigin)} — contractual; the
- *       threshold is declared explicitly with non-empirical
- *       origin.</li>
+ *   <li>{@link #meeting(ThresholdOrigin, double)} — a declared
+ *       requirement with non-empirical origin.</li>
  *   <li>{@link #empirical()} — default closest-match baseline
- *       resolution; threshold derived at evaluate time from the
- *       baseline's observed pass rate.</li>
- *   <li>{@link #empiricalFrom(Supplier)} — pinned baseline; threshold
- *       derived from the explicitly supplied baseline.</li>
+ *       resolution; judged against the baseline's counts at evaluate
+ *       time.</li>
+ *   <li>{@link #empiricalFrom(Supplier)} — pinned baseline.</li>
  * </ul>
  *
- * <p>The empirical paths derive a threshold by applying the one-sided
- * Wilson lower bound at the test sample size to the baseline rate
- * (with a perfect-baseline two-step refinement when {@code k = n};
- * statistical companion §3.4 / §4.3.2), and PASS iff the raw observed
- * success count meets the derivation's integer cutoff
- * {@code c = ⌈n_test · p*⌉} — the companion's binding decision
- * artefact. The underlying statistical machinery is
- * {@link BinomialProportionEstimator}; this criterion holds no
- * statistical code of its own — that's the punit design rule
- * (statistics live only in {@code org.mavai.punit.statistics}). See
- * {@code CLAUDE.md} §"Statistics isolation rule".
+ * <p>Each methodology criterion the contract declares is decided by the
+ * rule its threshold's origin selects (Statistical Companion §3.2):
  *
- * <p>The contractual (declared-threshold) path judges the test
- * sample's own one-sided Wilson lower bound against the declared
- * threshold (companion §3.2/§3.6): a declared commitment is met when
- * the sample provides confidence-grade evidence for it, not when the
- * point estimate happens to graze it.
+ * <ul>
+ *   <li>a <b>declared</b> requirement by {@code compliance/exact-binomial}
+ *       (§3.6): PASS iff the observed success count reaches {@code k_min},
+ *       the smallest count the exact one-sided binomial test accepts at
+ *       the criterion's alpha;</li>
+ *   <li>a <b>baseline-derived</b> bar by {@code regression/fisher}
+ *       (§3.4): PASS iff the observed count reaches the integer cutoff of
+ *       the one-sided Fisher exact test, derived from the baseline's
+ *       counts at the test's own size;</li>
+ *   <li>a <b>zero-failures</b> commitment by the count of failures
+ *       alone.</li>
+ * </ul>
  *
- * <p>Lives in {@code punit-core} rather than {@code api package} because
- * the empirical path needs {@code BinomialProportionEstimator} and
- * {@code api package} is contractually free of statistics-library
- * dependencies. The {@link Criterion} interface itself stays in
- * {@code api package}; only this implementation moved.
+ * <p>A requirement and a baseline on the same postconditions are two
+ * criteria, each decided by its own rule at its own alpha, composed by
+ * the structural composite (§1.4.6). The criterion holds no statistical
+ * code of its own — the rules live in {@code org.mavai.punit.statistics}
+ * (see {@code CLAUDE.md} §"Statistics isolation rule").
+ *
+ * <p>Lives in {@code punit-core} rather than {@code api} because the
+ * rules need the statistics package, and {@code api} is contractually
+ * free of statistics-library dependencies. The {@link Criterion}
+ * interface itself stays in {@code api}.
  */
 // mavai-ref: JVI-C5P3EQE — do not remove (resolves in mavai-orchestrator)
 public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateStatistics> {
 
     private static final String NAME = "bernoulli-pass-rate";
-    private static final double DEFAULT_CONFIDENCE = 0.95;
-    private static final ThresholdDeriver DERIVER = new ThresholdDeriver();
-    private static final BinomialProportionEstimator ESTIMATOR = new BinomialProportionEstimator();
 
     private enum Mode { CONTRACTUAL, EMPIRICAL_DEFAULT, EMPIRICAL_PINNED, ZERO_FAILURES }
+
+    /** How one methodology criterion is decided. */
+    private enum Kind { COMPLIANCE, REGRESSION, ZERO_FAILURES }
 
     private final Mode mode;
     private final double threshold;
     private final ThresholdOrigin origin;
     private final double confidence;
+    private final boolean confidenceDeclared;
     private final Supplier<Experiment> baselineSupplier;
 
     private PassRate(
@@ -87,11 +94,13 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             double threshold,
             ThresholdOrigin origin,
             double confidence,
+            boolean confidenceDeclared,
             Supplier<Experiment> baselineSupplier) {
         this.mode = mode;
         this.threshold = threshold;
         this.origin = origin;
         this.confidence = confidence;
+        this.confidenceDeclared = confidenceDeclared;
         this.baselineSupplier = baselineSupplier;
     }
 
@@ -106,19 +115,19 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
                     "ThresholdOrigin.EMPIRICAL is reserved for the empirical factories; "
                             + "call PassRate.empirical() or .empiricalFrom(...) instead");
         }
-        return new PassRate<>(
-                Mode.CONTRACTUAL, threshold, origin, DEFAULT_CONFIDENCE, null);
+        return new PassRate<>(Mode.CONTRACTUAL, threshold, origin,
+                StatisticalDefaults.DEFAULT_CONFIDENCE, false, null);
     }
 
     static <OT> PassRate<OT> empirical() {
-        return new PassRate<>(
-                Mode.EMPIRICAL_DEFAULT, Double.NaN, ThresholdOrigin.EMPIRICAL, DEFAULT_CONFIDENCE, null);
+        return new PassRate<>(Mode.EMPIRICAL_DEFAULT, Double.NaN, ThresholdOrigin.EMPIRICAL,
+                StatisticalDefaults.DEFAULT_CONFIDENCE, false, null);
     }
 
     static <OT> PassRate<OT> empiricalFrom(Supplier<Experiment> baseline) {
         Objects.requireNonNull(baseline, "baseline");
-        return new PassRate<>(
-                Mode.EMPIRICAL_PINNED, Double.NaN, ThresholdOrigin.EMPIRICAL, DEFAULT_CONFIDENCE, baseline);
+        return new PassRate<>(Mode.EMPIRICAL_PINNED, Double.NaN, ThresholdOrigin.EMPIRICAL,
+                StatisticalDefaults.DEFAULT_CONFIDENCE, false, baseline);
     }
 
     /**
@@ -127,11 +136,6 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
      * {@link #contractualTarget()} and {@link #earlyTerminationPassRate()}
      * return empty so the framework does not try to underwrite or
      * short-circuit a non-statistical commitment.
-     *
-     * <p>Used by {@link #fromPosture(org.mavai.punit.api.criterion.CriterionPosture)}
-     * to auto-inject an evaluator for contracts whose criteria declared
-     * a {@code .zeroFailures(...)} posture or no posture at all (the
-     * implicit zero-failures default).
      */
     static <OT> PassRate<OT> forZeroFailures(ThresholdOrigin origin) {
         Objects.requireNonNull(origin, "origin");
@@ -139,48 +143,33 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             throw new IllegalArgumentException(
                     "forZeroFailures(EMPIRICAL) is contradictory — zero-failures is a binary commitment");
         }
-        return new PassRate<>(
-                Mode.ZERO_FAILURES, 1.0, origin, DEFAULT_CONFIDENCE, null);
+        return new PassRate<>(Mode.ZERO_FAILURES, 1.0, origin,
+                StatisticalDefaults.DEFAULT_CONFIDENCE, false, null);
     }
 
     /**
      * Derive a pass-rate spec-criterion from a contract criterion's
      * posture. Used by the test-spec builder when no
-     * {@code .criterion(...)} was registered: the contract's
-     * acceptance posture drives the spec's evaluator.
-     *
-     * <p>Maps:
-     * <ul>
-     *   <li>{@code STATISTICAL_CONTRACTUAL} → {@link #meeting(double, ThresholdOrigin)}</li>
-     *   <li>{@code STATISTICAL_EMPIRICAL} → {@link #empirical()}</li>
-     * </ul>
-     *
-     * <p>{@code ZERO_FAILURES} and {@code IMPLICIT_ZERO_FAILURES}
-     * postures map to a {@link #forZeroFailures(ThresholdOrigin)}
-     * pass-rate that fails on any sample failure. The implicit
-     * default uses {@link ThresholdOrigin#POLICY} as its origin per
-     * methodology.
+     * {@code .criterion(...)} was registered: the contract's acceptance
+     * posture drives the spec's evaluator. The posture's confidence
+     * becomes this evaluator's default; every methodology criterion is
+     * still judged at its own posture's confidence.
      */
-    public static <OT> Optional<PassRate<OT>> fromPosture(
-            org.mavai.punit.api.criterion.CriterionPosture posture) {
+    public static <OT> Optional<PassRate<OT>> fromPosture(CriterionPosture posture) {
         Objects.requireNonNull(posture, "posture");
+        double postureConfidence = posture.confidenceFloor()
+                .orElse(StatisticalDefaults.DEFAULT_CONFIDENCE);
         return switch (posture.kind()) {
             case STATISTICAL_CONTRACTUAL -> {
-                double threshold = posture.threshold().orElseThrow(() -> new IllegalStateException(
+                double t = posture.threshold().orElseThrow(() -> new IllegalStateException(
                         "STATISTICAL_CONTRACTUAL posture without threshold"));
-                ThresholdOrigin origin = posture.origin().orElseThrow(() -> new IllegalStateException(
+                ThresholdOrigin o = posture.origin().orElseThrow(() -> new IllegalStateException(
                         "STATISTICAL_CONTRACTUAL posture without origin"));
-                PassRate<OT> base = PassRate.meeting(origin, threshold);
-                yield Optional.of(posture.confidenceFloor().isPresent()
-                        ? base.atConfidence(posture.confidenceFloor().getAsDouble())
-                        : base);
+                PassRate<OT> base = PassRate.meeting(o, t);
+                yield Optional.of(base.withDefaultConfidence(postureConfidence));
             }
-            case STATISTICAL_EMPIRICAL -> {
-                PassRate<OT> base = PassRate.empirical();
-                yield Optional.of(posture.confidenceFloor().isPresent()
-                        ? base.atConfidence(posture.confidenceFloor().getAsDouble())
-                        : base);
-            }
+            case STATISTICAL_EMPIRICAL -> Optional.of(
+                    PassRate.<OT>empirical().withDefaultConfidence(postureConfidence));
             case ZERO_FAILURES -> Optional.of(PassRate.<OT>forZeroFailures(
                     posture.origin().orElseThrow(() -> new IllegalStateException(
                             "ZERO_FAILURES posture without origin"))));
@@ -190,53 +179,45 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         };
     }
 
+    private PassRate<OT> withDefaultConfidence(double c) {
+        return new PassRate<>(mode, threshold, origin, c, false, baselineSupplier);
+    }
+
     /**
-     * Returns a new criterion with the declared confidence — used for
-     * the empirical path's Wilson-score lower-bound comparison.
+     * Returns a new criterion declaring the test's confidence
+     * {@code 1 − alpha}. A contract criterion's own
+     * {@code .atConfidence(c)} is a floor the test cannot loosen: a
+     * declared confidence below it is refused at evaluate time.
      */
     public PassRate<OT> atConfidence(double confidence) {
         if (Double.isNaN(confidence) || confidence <= 0.0 || confidence >= 1.0) {
             throw new IllegalArgumentException(
                     "confidence must be in (0, 1), got " + confidence);
         }
-        return new PassRate<>(mode, threshold, origin, confidence, baselineSupplier);
+        return new PassRate<>(mode, threshold, origin, confidence, true, baselineSupplier);
     }
 
     /**
      * The baseline supplier when this criterion was built with
-     * {@link #empiricalFrom(Supplier)}; empty otherwise. The
-     * framework consults this at spec-conclude time to route a
-     * pinned baseline into the evaluation context.
+     * {@link #empiricalFrom(Supplier)}; empty otherwise.
      */
     public Optional<Supplier<Experiment>> baselineSupplier() {
         return Optional.ofNullable(baselineSupplier);
     }
 
     /**
-     * The confidence level (1 − α) used by the empirical Wilson-score
-     * comparison. Defaults to {@code 0.95}; override via
-     * {@link #atConfidence(double)}. Surfaced for the framework's
-     * pre-flight feasibility check (see {@code PUnit}'s wire-up of
-     * {@link org.mavai.punit.statistics.VerificationFeasibilityEvaluator})
-     * — given a configured {@code samples} and a resolved baseline
-     * rate, the check needs the criterion's confidence to decide
-     * whether the configuration is verification-grade.
+     * The confidence level {@code 1 − alpha} of this evaluator: the
+     * test's declared confidence, else the posture's it was derived
+     * from, else the framework default.
      */
     public double confidence() {
         return confidence;
     }
 
     /**
-     * The contractual target rate when this criterion was built with
-     * {@link #meeting(double, ThresholdOrigin)}; empty for empirical
-     * criteria, whose target is resolved from the baseline at
-     * evaluate time.
-     *
-     * <p>Surfaced for the framework's pre-flight feasibility check:
-     * a contractual SLA / SLO / POLICY threshold is no less in need
-     * of statistical underwriting than an empirical one — n=50 with
-     * a 99.99% target at 95% confidence is infeasible regardless of
-     * where the 99.99% came from.
+     * The declared requirement when this criterion was built with
+     * {@link #meeting(ThresholdOrigin, double)}; empty for empirical
+     * criteria, whose bar is resolved from the baseline at evaluate time.
      */
     public OptionalDouble contractualTarget() {
         return mode == Mode.CONTRACTUAL
@@ -281,424 +262,454 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         return Map.of("confidence", confidence);
     }
 
+    // ── Configuration refusal (§5.7.1) ──────────────────────────────
+
+    /**
+     * {@code COMPLIANCE_INFEASIBLE} for a declared requirement no outcome
+     * of the planned size can demonstrate, under VERIFICATION; and
+     * {@code TEST_LARGER_THAN_BASELINE} for a baseline-derived bar whose
+     * baseline run is smaller than the test.
+     */
+    @Override
+    public List<ConfigurationRefusal> configurationRefusals(
+            ConfigurationCheck<PerCriterionPassRateStatistics> check) {
+        List<ConfigurationRefusal> refusals = new ArrayList<>();
+        int planned = check.plannedSamples();
+        boolean anyRegression = false;
+        for (Map.Entry<String, CriterionPosture> entry : postures(check.criterionPostures())) {
+            Kind kind = kindOf(entry.getValue());
+            if (kind == Kind.COMPLIANCE && check.intent() == TestIntent.VERIFICATION) {
+                double requirement = requirementOf(entry.getValue());
+                if (requirement > 0.0) {
+                    double alpha = Methodology.alphaFromConfidence(
+                            confidenceFor(entry.getKey(), entry.getValue()));
+                    int minimum = ComplianceRule.minimumFeasibleSamples(requirement, alpha);
+                    if (planned < minimum) {
+                        refusals.add(new ConfigurationRefusal(
+                                ConfigurationError.COMPLIANCE_INFEASIBLE,
+                                String.format("criterion '%s': no count of %d samples can "
+                                                + "demonstrate %s at alpha %s (feasibility "
+                                                + "minimum %d)",
+                                        entry.getKey(), planned, requirement, alpha, minimum)));
+                    }
+                }
+            }
+            anyRegression |= kind == Kind.REGRESSION;
+        }
+        if (anyRegression && check.baseline().isPresent()) {
+            int baselineSamples = baselineRunSamples(check.baseline().get());
+            if (planned > baselineSamples) {
+                refusals.add(new ConfigurationRefusal(
+                        ConfigurationError.TEST_LARGER_THAN_BASELINE,
+                        String.format("the test (%d samples) is larger than its baseline "
+                                + "(%d samples)", planned, baselineSamples)));
+            }
+        }
+        return refusals;
+    }
+
+    private static int baselineRunSamples(PerCriterionPassRateStatistics baseline) {
+        int max = 0;
+        for (PassRateStatistics stats : baseline.byCriterion().values()) {
+            max = Math.max(max, stats.sampleCount());
+        }
+        return max;
+    }
+
+    /**
+     * The postures to judge: the contract's, or — for an evaluator
+     * registered against a contract that declared none — this
+     * evaluator's own, under its name.
+     */
+    private List<Map.Entry<String, CriterionPosture>> postures(Map<String, CriterionPosture> declared) {
+        if (!declared.isEmpty()) {
+            List<Map.Entry<String, CriterionPosture>> functional = declared.entrySet().stream()
+                    .filter(e -> !e.getValue().isLatency())
+                    .toList();
+            if (!functional.isEmpty()) {
+                return functional;
+            }
+        }
+        return List.of(Map.entry(NAME, CriterionPosture.implicit()));
+    }
+
+    // ── Evaluation ──────────────────────────────────────────────────
+
     @Override
     public CriterionResult evaluate(EvaluationContext<OT, PerCriterionPassRateStatistics> ctx) {
         Objects.requireNonNull(ctx, "ctx");
         SampleSummary<OT> summary = ctx.summary();
-        int total = summary.total();
-        if (total == 0) {
+        if (summary.total() == 0) {
             return inconclusive("zero samples taken", Map.of());
         }
-        // Resolve the per-criterion baseline map up-front (empirical
-        // paths only). Identity / sample-size gates also fire once at
-        // the run level — identity is a property of the matched
-        // baseline file, not of any one criterion.
+        List<CriterionSampleCounts> methodologyCriteria = methodologyCriteria(summary, ctx);
         PerCriterionPassRateStatistics baselineMap = null;
-        List<CriterionSampleCounts> methodologyCriteria = summary.criterionSampleCounts();
-        // K=1 path uses run-level counts (summary.successes/failures),
-        // not the auto-derived methodology criterion's counts. The
-        // legacy K=1 behaviour read these run-level numbers, and
-        // K=1 tests are pinned against them. K>1 must use per-criterion
-        // counts so each methodology criterion is evaluated against
-        // its own pass/fail tally.
-        if (methodologyCriteria.size() == 1) {
-            CriterionSampleCounts auto = methodologyCriteria.get(0);
-            methodologyCriteria = List.of(
-                    new CriterionSampleCounts(
-                            auto.criterionId(),
-                            summary.successes(),
-                            summary.failures(),
-                            auto.transformFail(),
-                            // Zero, not the criterion's own applyFail:
-                            // run-level failures already include every
-                            // apply failure, so restating them here
-                            // would count them twice in the
-                            // denominator. The axes on this synthetic
-                            // row are not diagnostic anyway — it puts
-                            // every failure in the condition slot.
-                            0));
-        }
-        if (methodologyCriteria.isEmpty()) {
-            // Run produced no methodology-criterion sample counts (a
-            // hand-built test fixture; an apply-level-failure run now
-            // records against every declared criterion and so no
-            // longer arrives here).
-            // Fall back to run-level pass / fail counts. The criterion
-            // id is borrowed from the baseline map's lone entry when
-            // available (so the lookup below finds it); otherwise the
-            // criterion's own name is used as a stable placeholder
-            // — there's no baseline entry to match in that case
-            // (contractual mode) so the placeholder is never queried.
-            String fallbackId = NAME;
-            if (isEmpirical()) {
-                PerCriterionPassRateStatistics b = ctx.baseline().orElse(null);
-                if (b != null && b.byCriterion().size() == 1) {
-                    fallbackId = b.byCriterion().keySet().iterator().next();
-                }
-            }
-            methodologyCriteria = List.of(
-                    new CriterionSampleCounts(
-                            fallbackId, summary.successes(), summary.failures(), 0, 0));
-        }
-        // Resolve the baseline map up-front (empirical mode only).
         if (isEmpirical()) {
             baselineMap = ctx.baseline().orElse(null);
             if (baselineMap == null || baselineMap.byCriterion().isEmpty()) {
                 return EmpiricalChecks.noBaseline(NAME, empiricalDetail());
             }
-            Map<String, Object> empiricalDetail = Map.of("confidence", confidence);
             String baselineIdentity = ctx.baselineInputsIdentity().orElseThrow(() ->
                     new IllegalStateException(
                             "baseline statistics were resolved but baselineInputsIdentity is empty — "
                                     + "the BaselineProvider is producing inconsistent state"));
             Optional<CriterionResult> identityViolation = EmpiricalChecks.inputsIdentityMatch(
-                    NAME, ctx.testInputsIdentity(), baselineIdentity, empiricalDetail);
+                    NAME, ctx.testInputsIdentity(), baselineIdentity, empiricalDetail());
             if (identityViolation.isPresent()) {
                 return identityViolation.get();
             }
         }
 
-        // Evaluate each methodology criterion against its own basis
-        // (empirical: per-criterion Wilson threshold; contractual:
-        // shared external threshold). Compose per the FAIL-dominant
-        // rule (companion §1.4.6).
-        List<Verdict> perCriterionVerdicts = new ArrayList<>(methodologyCriteria.size());
-        Map<String, Double> thresholdsByCriterion = new LinkedHashMap<>();
-        Map<String, Double> observedByCriterion = new LinkedHashMap<>();
-        Map<String, PassRateStatistics> resolvedBaselineByCriterion = new LinkedHashMap<>();
-        // The judged three-valued verdict per methodology criterion —
-        // published on the result detail so downstream aggregation
-        // (PerCriterionVerdicts) reuses the criterion's own judgement
-        // instead of re-deriving one from observed vs threshold.
-        Map<String, String> verdictsByCriterion = new LinkedHashMap<>();
-        // Declared-threshold path: the test sample's Wilson lower bound
-        // per criterion (companion §3.2/§3.6 decision artefact).
-        Map<String, Double> wilsonLowerByCriterion = new LinkedHashMap<>();
-        // Empirical path: the derivation carrying the integer cutoff and
-        // achieved size (companion §3.4 decision artefacts).
-        Map<String, DerivedThreshold> decisionByCriterion = new LinkedHashMap<>();
-        List<String> perCriterionExplanations = new ArrayList<>();
-        ThresholdOrigin resolvedOrigin = isEmpirical()
-                ? ThresholdOrigin.EMPIRICAL
-                : origin;
-
-        // K=1 short-circuit: when there's a single criterion and an
-        // empirical-check violation fires (sample-size constraint), the
-        // result is the violation's full CriterionResult — preserving
-        // the legacy detail keys (testSampleCount, baselineSampleCount)
-        // and explanation phrasing that downstream consumers depend on.
-        // Identity violations already returned above.
         boolean isK1 = methodologyCriteria.size() == 1;
-
+        List<Judged> judged = new ArrayList<>(methodologyCriteria.size());
         for (CriterionSampleCounts counts : methodologyCriteria) {
-            int criterionTotal = counts.pass() + counts.fail();
-            double observed = criterionTotal == 0
-                    ? 0.0
-                    : (double) counts.pass() / (double) criterionTotal;
-            observedByCriterion.put(counts.criterionId(), observed);
-
-            // Resolve the criterion's posture (commitment) — read from
-            // the contract's per-criterion declaration. STATISTICAL_CONTRACTUAL
-            // and ZERO_FAILURES shortcut the legacy threshold-on-PassRate
-            // path; STATISTICAL_EMPIRICAL and IMPLICIT_ZERO_FAILURES
-            // delegate to the existing logic so step 1 preserves
-            // legacy behaviour for un-postured criteria.
             CriterionPosture posture = ctx.criterionPostures().getOrDefault(
                     counts.criterionId(), CriterionPosture.implicit());
-
-            // Confidence-floor ratchet: contract criterion's
-            // .atConfidence(c_criterion) cannot be loosened by the test.
-            if (posture.confidenceFloor().isPresent()
-                    && confidence < posture.confidenceFloor().getAsDouble()) {
-                throw new IllegalStateException(String.format(
-                        "criterion '%s' declares a confidence floor of %.4f but the test runs at %.4f — "
-                                + "the contract's floor cannot be loosened by the test (raise the test's "
-                                + "confidence to %.4f or remove the floor on the criterion)",
-                        counts.criterionId(),
-                        posture.confidenceFloor().getAsDouble(),
-                        confidence,
-                        posture.confidenceFloor().getAsDouble()));
+            Optional<Judged> j = judge(counts, posture, baselineMap, isK1);
+            if (j.isEmpty()) {
+                // A single criterion with no matching baseline entry: the
+                // criterion has no baseline to compare against.
+                return EmpiricalChecks.noBaseline(NAME, empiricalDetail());
             }
-
-            // Posture-driven shortcut: STATISTICAL_CONTRACTUAL and
-            // ZERO_FAILURES skip the legacy mode handling and use the
-            // criterion's own commitment directly.
-            if (posture.kind() == CriterionPosture.Kind.STATISTICAL_CONTRACTUAL) {
-                double pThreshold = posture.threshold().getAsDouble();
-                ThresholdOrigin pOrigin = posture.origin().orElseThrow();
-                thresholdsByCriterion.put(counts.criterionId(), pThreshold);
-                Verdict pv;
-                if (criterionTotal == 0) {
-                    pv = Verdict.INCONCLUSIVE;
-                } else {
-                    // Declared threshold (companion §3.2/§3.6): the test
-                    // sample's own Wilson lower bound must clear it.
-                    double wilsonLower = ESTIMATOR.lowerBound(
-                            counts.pass(), criterionTotal, confidence);
-                    wilsonLowerByCriterion.put(counts.criterionId(), wilsonLower);
-                    pv = wilsonLower >= pThreshold ? Verdict.PASS : Verdict.FAIL;
-                }
-                perCriterionVerdicts.add(pv);
-                verdictsByCriterion.put(counts.criterionId(), pv.name());
-                perCriterionExplanations.add(String.format(
-                        "%s: observed=%.4f, Wilson-%.0f%% lower=%.4f vs threshold=%.4f "
-                                + "(origin=%s) over %d samples → %s",
-                        counts.criterionId(), observed, confidence * 100.0,
-                        wilsonLowerByCriterion.getOrDefault(counts.criterionId(), Double.NaN),
-                        pThreshold, pOrigin, criterionTotal, pv));
-                continue;
-            }
-            // zero-failures fires when the contract committed explicitly
-            // (posture == ZERO_FAILURES) or when the criterion was
-            // auto-injected for an implicit-zero-failures posture (mode
-            // == ZERO_FAILURES). A bare default IMPLICIT_ZERO_FAILURES
-            // posture without a matching auto-injected PassRate is not
-            // enough — that combination arises in hand-built test fixtures
-            // that use PassRate.meeting/empirical and expect their own
-            // mode to drive evaluation.
-            if (posture.kind() == CriterionPosture.Kind.ZERO_FAILURES
-                    || mode == Mode.ZERO_FAILURES) {
-                // Binary semantics: any failed sample fails the criterion.
-                // Implicit zero-failures defaults origin to POLICY.
-                ThresholdOrigin ztOrigin = posture.origin().orElse(ThresholdOrigin.POLICY);
-                thresholdsByCriterion.put(counts.criterionId(), 1.0);
-                Verdict pv;
-                if (criterionTotal == 0) {
-                    pv = Verdict.INCONCLUSIVE;
-                } else if (counts.fail() == 0) {
-                    pv = Verdict.PASS;
-                } else {
-                    pv = Verdict.FAIL;
-                }
-                perCriterionVerdicts.add(pv);
-                verdictsByCriterion.put(counts.criterionId(), pv.name());
-                perCriterionExplanations.add(String.format(
-                        "%s: zero-failures (origin=%s); failures=%d "
-                                + "(of which transform/no-value=%d) over %d samples → %s",
-                        counts.criterionId(),
-                        ztOrigin,
-                        counts.fail(), counts.transformFail(), criterionTotal, pv));
-                continue;
-            }
-
-            double criterionThreshold;
-            Double baselineRate = null;
-            Integer baselineSampleCount = null;
-            DerivedThreshold derived = null;
-            if (mode == Mode.CONTRACTUAL) {
-                criterionThreshold = threshold;
-            } else {
-                PassRateStatistics criterionBaseline =
-                        baselineMap.byCriterion().get(counts.criterionId());
-                if (criterionBaseline == null
-                        && isK1 && baselineMap.byCriterion().size() == 1) {
-                    // K=1 isomorphism: when there's exactly one
-                    // methodology criterion on both the run side and
-                    // the baseline side, treat them as the same
-                    // criterion even when their ids differ. Older
-                    // baselines were written with the legacy default
-                    // id "contract"; newer runs auto-derive an id
-                    // from the service contract class name.
-                    criterionBaseline = baselineMap.byCriterion().values().iterator().next();
-                }
-                if (criterionBaseline == null) {
-                    if (isK1) {
-                        return EmpiricalChecks.noBaseline(NAME, empiricalDetail());
-                    }
-                    perCriterionVerdicts.add(Verdict.INCONCLUSIVE);
-                    verdictsByCriterion.put(counts.criterionId(), Verdict.INCONCLUSIVE.name());
-                    perCriterionExplanations.add(String.format(
-                            "%s: INCONCLUSIVE (no baseline entry for this criterion)",
-                            counts.criterionId()));
-                    thresholdsByCriterion.put(counts.criterionId(), Double.NaN);
-                    continue;
-                }
-                Optional<CriterionResult> sizeViolation =
-                        EmpiricalChecks.sampleSizeConstraint(
-                                NAME, criterionTotal, criterionBaseline.sampleCount(),
-                                Map.of("confidence", confidence));
-                if (sizeViolation.isPresent()) {
-                    if (isK1) {
-                        return sizeViolation.get();
-                    }
-                    perCriterionVerdicts.add(sizeViolation.get().verdict());
-                    verdictsByCriterion.put(
-                            counts.criterionId(), sizeViolation.get().verdict().name());
-                    perCriterionExplanations.add(
-                            counts.criterionId() + ": " + sizeViolation.get().explanation());
-                    thresholdsByCriterion.put(counts.criterionId(), Double.NaN);
-                    continue;
-                }
-                resolvedBaselineByCriterion.put(counts.criterionId(), criterionBaseline);
-                int baselineSuccesses = (int) Math.round(
-                        criterionBaseline.observedPassRate() * criterionBaseline.sampleCount());
-                derived = DERIVER.deriveSampleSizeFirst(
-                        criterionBaseline.sampleCount(), baselineSuccesses, criterionTotal, confidence);
-                decisionByCriterion.put(counts.criterionId(), derived);
-                criterionThreshold = derived.value();
-                baselineRate = criterionBaseline.observedPassRate();
-                baselineSampleCount = criterionBaseline.sampleCount();
-            }
-            thresholdsByCriterion.put(counts.criterionId(), criterionThreshold);
-
-            Verdict v;
-            if (criterionTotal == 0) {
-                v = Verdict.INCONCLUSIVE;
-            } else if (mode == Mode.CONTRACTUAL) {
-                // Declared threshold (companion §3.2/§3.6): the test
-                // sample's own Wilson lower bound must clear it.
-                double wilsonLower = ESTIMATOR.lowerBound(
-                        counts.pass(), criterionTotal, confidence);
-                wilsonLowerByCriterion.put(counts.criterionId(), wilsonLower);
-                v = wilsonLower >= criterionThreshold ? Verdict.PASS : Verdict.FAIL;
-            } else {
-                // Baseline-derived threshold (companion §3.4): the binding
-                // decision artefact is the derivation's integer cutoff —
-                // PASS iff the raw observed success count K meets it.
-                v = counts.pass() >= derived.cutoff().orElseThrow()
-                        ? Verdict.PASS : Verdict.FAIL;
-            }
-            perCriterionVerdicts.add(v);
-            verdictsByCriterion.put(counts.criterionId(), v.name());
-            if (mode == Mode.CONTRACTUAL) {
-                perCriterionExplanations.add(String.format(
-                        "%s: observed=%.4f, Wilson-%.0f%% lower=%.4f vs threshold=%.4f "
-                                + "over %d samples → %s",
-                        counts.criterionId(), observed, confidence * 100.0,
-                        wilsonLowerByCriterion.getOrDefault(counts.criterionId(), Double.NaN),
-                        criterionThreshold, criterionTotal, v));
-            } else {
-                perCriterionExplanations.add(String.format(
-                        "%s: successes=%d vs cutoff=%d (threshold=%.4f, "
-                                + "Wilson-%.0f%% lower of baseline rate %.4f at n=%d) → %s",
-                        counts.criterionId(), counts.pass(),
-                        derived == null ? -1 : derived.cutoff().orElse(-1),
-                        criterionThreshold,
-                        confidence * 100.0, baselineRate, criterionTotal, v));
-            }
+            judged.add(j.get());
         }
 
-        Verdict composite = Verdict.aggregate(perCriterionVerdicts);
+        Verdict composite = Verdict.aggregate(judged.stream().map(Judged::verdict).toList());
+        Map<String, Object> detail = detailFor(judged, summary, ctx);
+        String explanation = isK1
+                ? judged.get(0).explanation()
+                : "composite verdict over " + judged.size() + " criteria: "
+                        + String.join("; ", judged.stream().map(Judged::explanation).toList());
+        return new CriterionResult(NAME, composite, explanation, detail);
+    }
 
-        // Build the result detail map. For K=1 the legacy flat shape
-        // (observed/threshold/successes/failures/total) is preserved
-        // so downstream renderers and tests that read it continue to
-        // work. For K>1 the same keys carry the lone criterion's
-        // values when applicable, and a perCriterion-keyed sub-map
-        // carries the K-row breakdown.
-        Map<String, Object> detail = new LinkedHashMap<>();
-        if (methodologyCriteria.size() == 1) {
-            CriterionSampleCounts only = methodologyCriteria.get(0);
-            int onlyTotal = only.pass() + only.fail();
-            double observed = observedByCriterion.get(only.criterionId());
-            double t = thresholdsByCriterion.get(only.criterionId());
-            detail.put("observed", observed);
-            detail.put("threshold", t);
-            detail.put("origin", resolvedOrigin.name());
-            detail.put("successes", only.pass());
-            detail.put("failures", only.fail());
-            detail.put("total", onlyTotal);
-            if (isEmpirical()) {
-                PassRateStatistics b = resolvedBaselineByCriterion.get(only.criterionId());
-                detail.put("confidence", confidence);
-                detail.put("baselineSampleCount", b == null ? null : b.sampleCount());
-                detail.put("baselineRate", b == null ? null : b.observedPassRate());
-                DerivedThreshold decision = decisionByCriterion.get(only.criterionId());
-                if (decision != null) {
-                    // Companion §3.4 report obligations: the integer cutoff
-                    // is the decision artefact; the displayed rate (c/n) and
-                    // achieved size accompany it.
-                    decision.cutoff().ifPresent(c -> detail.put("cutoff", c));
-                    decision.displayedRate().ifPresent(r -> detail.put("displayedRate", r));
-                    decision.achievedSize().ifPresent(a -> detail.put("achievedSize", a));
-                }
-            } else {
-                Double wilsonLower = wilsonLowerByCriterion.get(only.criterionId());
-                if (wilsonLower != null) {
-                    // Companion §3.2/§3.6: the declared-threshold decision
-                    // artefact is the test sample's Wilson lower bound.
-                    detail.put("wilsonLower", wilsonLower);
-                    detail.put("confidence", confidence);
-                }
+    /**
+     * The per-criterion counts to judge. A single criterion is judged on
+     * the run-level counts (every failure of the run is a failure of its
+     * only criterion); several are judged each on its own tally. A run
+     * that recorded no per-criterion counts (hand-built fixtures) is
+     * judged on the run-level counts under the baseline's lone entry, or
+     * this evaluator's name.
+     */
+    private List<CriterionSampleCounts> methodologyCriteria(
+            SampleSummary<OT> summary,
+            EvaluationContext<OT, PerCriterionPassRateStatistics> ctx) {
+        // A latency declaration rides in the criteria bundle under its own
+        // id with no postconditions; it is decided by the latency rules,
+        // never as a pass rate.
+        List<CriterionSampleCounts> recorded = summary.criterionSampleCounts().stream()
+                .filter(c -> !ctx.criterionPostures().getOrDefault(
+                        c.criterionId(), CriterionPosture.implicit()).isLatency())
+                .toList();
+        if (recorded.size() == 1) {
+            CriterionSampleCounts only = recorded.get(0);
+            // Zero apply failures on this synthetic row: run-level
+            // failures already include every apply failure, so restating
+            // them would count them twice in the denominator.
+            return List.of(new CriterionSampleCounts(
+                    only.criterionId(), summary.successes(), summary.failures(),
+                    only.transformFail(), 0));
+        }
+        if (!recorded.isEmpty()) {
+            return recorded;
+        }
+        String fallbackId = NAME;
+        if (isEmpirical()) {
+            PerCriterionPassRateStatistics b = ctx.baseline().orElse(null);
+            if (b != null && b.byCriterion().size() == 1) {
+                fallbackId = b.byCriterion().keySet().iterator().next();
             }
-            CriterionPosture onlyPosture = ctx.criterionPostures().getOrDefault(
-                    only.criterionId(), CriterionPosture.implicit());
-            onlyPosture.contractRef().ifPresent(ref -> detail.put("contractRef", ref));
-            publishSizingDeclaration(detail, onlyPosture);
+        }
+        return List.of(new CriterionSampleCounts(
+                fallbackId, summary.successes(), summary.failures(), 0, 0));
+    }
+
+    /**
+     * Judges one methodology criterion under its rule. Empty only for a
+     * single criterion with no baseline entry.
+     */
+    private Optional<Judged> judge(
+            CriterionSampleCounts counts,
+            CriterionPosture posture,
+            PerCriterionPassRateStatistics baselineMap,
+            boolean isK1) {
+        String id = counts.criterionId();
+        int successes = counts.pass();
+        int total = counts.pass() + counts.fail();
+        double observed = total == 0 ? 0.0 : (double) successes / total;
+        Kind kind = kindOf(posture);
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("observed", observed);
+        decision.put("successes", successes);
+        decision.put("total", total);
+        posture.contractRef().ifPresent(ref -> decision.put("contractRef", ref));
+
+        if (kind == Kind.ZERO_FAILURES) {
+            ThresholdOrigin zfOrigin = posture.origin().orElse(
+                    mode == Mode.ZERO_FAILURES ? origin : ThresholdOrigin.POLICY);
+            Verdict v = total == 0 ? Verdict.INCONCLUSIVE
+                    : counts.fail() == 0 ? Verdict.PASS : Verdict.FAIL;
+            decision.put("origin", zfOrigin.name());
+            return Optional.of(new Judged(id, v, 1.0, decision, String.format(
+                    "%s: zero-failures (origin=%s); failures=%d "
+                            + "(of which transform/no-value=%d) over %d samples → %s",
+                    id, zfOrigin, counts.fail(), counts.transformFail(), total, v)));
+        }
+
+        double criterionConfidence = confidenceFor(id, posture);
+        double alpha = Methodology.alphaFromConfidence(criterionConfidence);
+        decision.put("confidence", criterionConfidence);
+        decision.put("alpha", alpha);
+
+        if (kind == Kind.COMPLIANCE) {
+            return Optional.of(judgeCompliance(id, successes, total, posture, alpha, decision));
+        }
+        return judgeRegression(id, successes, total, posture, alpha, baselineMap, isK1, decision);
+    }
+
+    private Judged judgeCompliance(
+            String id, int successes, int total, CriterionPosture posture, double alpha,
+            Map<String, Object> decision) {
+        double requirement = requirementOf(posture);
+        ThresholdOrigin reqOrigin = posture.origin().orElse(origin);
+        decision.put("origin", reqOrigin.name());
+        if (total == 0) {
+            return new Judged(id, Verdict.INCONCLUSIVE, requirement, decision,
+                    id + ": INCONCLUSIVE (no samples)");
+        }
+        if (requirement <= 0.0) {
+            // A zero requirement is met by any evidence; the exact rule is
+            // defined for a requirement in (0, 1) only.
+            return new Judged(id, Verdict.PASS, requirement, decision,
+                    id + ": requirement 0 is met by any outcome → PASS");
+        }
+        ComplianceRule.Decision d = ComplianceRule.decide(successes, total, requirement, alpha);
+        Verdict v = verdictOf(d.verdict());
+        decision.put("decisionRule", d.rule().id());
+        d.minimumPassing().ifPresent(k -> decision.put("kMin", k));
+        decision.put("passPossible", d.passPossible());
+        decision.put("falseCompliance", d.falseCompliance());
+        decision.put("clopperPearsonLower", d.clopperPearsonLower());
+        String artefact = d.passPossible()
+                ? "k_min=" + d.minimumPassing().getAsInt()
+                : "no count of this size can pass";
+        return new Judged(id, v, requirement, decision, String.format(
+                "%s: successes=%d of %d vs %s (compliance/exact-binomial, requirement=%.4f, "
+                        + "alpha=%s, origin=%s) → %s",
+                id, successes, total, artefact, requirement, alpha, reqOrigin, v));
+    }
+
+    private Optional<Judged> judgeRegression(
+            String id, int successes, int total, CriterionPosture posture, double alpha,
+            PerCriterionPassRateStatistics baselineMap, boolean isK1,
+            Map<String, Object> decision) {
+        PassRateStatistics baseline = baselineMap == null ? null : baselineMap.byCriterion().get(id);
+        if (baseline == null && isK1 && baselineMap != null && baselineMap.byCriterion().size() == 1) {
+            // K=1 isomorphism: a single-entry baseline matches the single
+            // run-side criterion even when their ids differ (older
+            // baselines were written under the legacy id "contract").
+            baseline = baselineMap.byCriterion().values().iterator().next();
+        }
+        decision.put("origin", ThresholdOrigin.EMPIRICAL.name());
+        if (baseline == null) {
+            if (isK1) {
+                return Optional.empty();
+            }
+            return Optional.of(new Judged(id, Verdict.INCONCLUSIVE, Double.NaN, decision,
+                    id + ": INCONCLUSIVE (no baseline entry for this criterion)"));
+        }
+        int baselineTrials = baseline.sampleCount();
+        int baselineSuccesses = (int) Math.round(baseline.observedPassRate() * baselineTrials);
+        decision.put("baselineSampleCount", baselineTrials);
+        decision.put("baselineSuccesses", baselineSuccesses);
+        decision.put("baselineRate", baseline.observedPassRate());
+        if (total == 0 || baselineTrials == 0) {
+            return Optional.of(new Judged(id, Verdict.INCONCLUSIVE, Double.NaN, decision,
+                    id + ": INCONCLUSIVE (no samples to compare)"));
+        }
+        RegressionRule.Decision d = RegressionRule.decide(
+                successes, total, baselineSuccesses, baselineTrials, alpha);
+        RegressionRule.Derivation derivation = d.derivation();
+        Verdict v = verdictOf(d.verdict());
+        decision.put("decisionRule", d.rule().id());
+        decision.put("cutoff", derivation.cutoff());
+        decision.put("displayedRate", derivation.displayedRate());
+        derivation.sizeAtAssumedCommonRate()
+                .ifPresent(size -> decision.put("sizeAtAssumedCommonRate", size));
+        disclosePower(decision, posture, baselineSuccesses, baselineTrials, total, alpha);
+        return Optional.of(new Judged(id, v, derivation.thresholdReal(), decision, String.format(
+                "%s: successes=%d of %d vs cutoff=%d (regression/fisher against baseline "
+                        + "%d of %d, alpha=%s) → %s",
+                id, successes, total, derivation.cutoff(), baselineSuccesses, baselineTrials,
+                alpha, v)));
+    }
+
+    /**
+     * What the design can detect (companion §5.6): at a declared design
+     * alternative rate, the design power and the resolved-test power,
+     * named apart; with none declared, the minimum detectable degradation
+     * at 80% power, which inverts the design power.
+     */
+    private static void disclosePower(
+            Map<String, Object> decision, CriterionPosture posture,
+            int baselineSuccesses, int baselineTrials, int testSamples, double alpha) {
+        double baselineRate = (double) baselineSuccesses / baselineTrials;
+        if (baselineRate <= 0.0) {
+            return;
+        }
+        OptionalDouble designRate = designAlternativeRate(posture, baselineRate);
+        if (designRate.isPresent() && designRate.getAsDouble() < baselineRate) {
+            double rate = designRate.getAsDouble();
+            decision.put("designAlternativeRate", rate);
+            decision.put("designPower",
+                    RegressionRule.designPower(baselineTrials, testSamples, alpha, baselineRate, rate));
+            decision.put("resolvedTestPower",
+                    RegressionRule.resolvedPower(
+                            baselineSuccesses, baselineTrials, testSamples, alpha, rate));
+            return;
+        }
+        RegressionRule.minimumDetectableDegradation(
+                        baselineTrials, testSamples, alpha, baselineRate, RegressionRule.MDD_POWER)
+                .ifPresent(mdd -> decision.put("minimumDetectableDegradation", mdd));
+    }
+
+    /**
+     * The design alternative rate a criterion declares: its tolerated
+     * rate, or the baseline rate less its declared detectable effect.
+     */
+    private static OptionalDouble designAlternativeRate(CriterionPosture posture, double baselineRate) {
+        if (posture.toleratedRate().isPresent()) {
+            return posture.toleratedRate();
+        }
+        if (posture.mde().isPresent()) {
+            return OptionalDouble.of(baselineRate - posture.mde().getAsDouble());
+        }
+        return OptionalDouble.empty();
+    }
+
+    private Kind kindOf(CriterionPosture posture) {
+        return switch (posture.kind()) {
+            case STATISTICAL_CONTRACTUAL -> Kind.COMPLIANCE;
+            case STATISTICAL_EMPIRICAL -> Kind.REGRESSION;
+            case ZERO_FAILURES -> Kind.ZERO_FAILURES;
+            default -> switch (mode) {
+                case CONTRACTUAL -> Kind.COMPLIANCE;
+                case EMPIRICAL_DEFAULT, EMPIRICAL_PINNED -> Kind.REGRESSION;
+                case ZERO_FAILURES -> Kind.ZERO_FAILURES;
+            };
+        };
+    }
+
+    private double requirementOf(CriterionPosture posture) {
+        return posture.kind() == CriterionPosture.Kind.STATISTICAL_CONTRACTUAL
+                ? posture.threshold().getAsDouble()
+                : threshold;
+    }
+
+    /**
+     * The confidence a criterion is judged at: the contract criterion's
+     * own {@code .atConfidence(c)} where it declared one — a floor the
+     * test cannot loosen — else this evaluator's.
+     */
+    private double confidenceFor(String criterionId, CriterionPosture posture) {
+        if (posture.confidenceFloor().isEmpty()) {
+            return confidence;
+        }
+        double floor = posture.confidenceFloor().getAsDouble();
+        if (!confidenceDeclared) {
+            return floor;
+        }
+        if (confidence < floor) {
+            throw new IllegalStateException(String.format(
+                    "criterion '%s' declares a confidence floor of %.4f but the test runs at %.4f — "
+                            + "the contract's floor cannot be loosened by the test (raise the test's "
+                            + "confidence to %.4f or remove the floor on the criterion)",
+                    criterionId, floor, confidence, floor));
+        }
+        return confidence;
+    }
+
+    private static Verdict verdictOf(RuleVerdict verdict) {
+        return switch (verdict) {
+            case PASS -> Verdict.PASS;
+            case FAIL -> Verdict.FAIL;
+            case INCONCLUSIVE -> Verdict.INCONCLUSIVE;
+        };
+    }
+
+    // ── Result detail ───────────────────────────────────────────────
+
+    /**
+     * The result detail. A single criterion keeps the flat shape
+     * downstream renderers read (observed, threshold, origin, counts and
+     * the decision artefacts); several carry per-criterion maps. Every
+     * shape carries {@code verdictsByCriterion} — the criterion's own
+     * judgements, which the per-criterion aggregation reuses — and
+     * {@code decisionsByCriterion}, each criterion's decision artefacts.
+     */
+    private Map<String, Object> detailFor(
+            List<Judged> judged, SampleSummary<OT> summary,
+            EvaluationContext<OT, PerCriterionPassRateStatistics> ctx) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        Map<String, String> verdicts = new LinkedHashMap<>();
+        Map<String, Double> thresholds = new LinkedHashMap<>();
+        Map<String, Double> observed = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> decisions = new LinkedHashMap<>();
+        for (Judged j : judged) {
+            verdicts.put(j.id(), j.verdict().name());
+            thresholds.put(j.id(), j.threshold());
+            observed.put(j.id(), (Double) j.decision().get("observed"));
+            Map<String, Object> d = new LinkedHashMap<>(j.decision());
+            if (!Double.isNaN(j.threshold())) {
+                d.put("threshold", j.threshold());
+            }
+            decisions.put(j.id(), Map.copyOf(d));
+        }
+        if (judged.size() == 1) {
+            detail.putAll(judged.get(0).decision());
+            detail.put("threshold", judged.get(0).threshold());
+            detail.put("failures", summary.failures());
         } else {
-            detail.put("origin", resolvedOrigin.name());
-            detail.put("total", total);
+            detail.put("origin", (isEmpirical() ? ThresholdOrigin.EMPIRICAL : origin).name());
+            detail.put("total", summary.total());
             detail.put("successes", summary.successes());
             detail.put("failures", summary.failures());
-            if (isEmpirical()) {
-                detail.put("confidence", confidence);
-            }
-            detail.put("thresholdsByCriterion", Map.copyOf(thresholdsByCriterion));
-            detail.put("observedByCriterion", Map.copyOf(observedByCriterion));
-            // The run-level sizing declaration: the first criterion that
-            // declared one. Per-criterion claim disclosure is the family's
-            // later refinement; one declaring criterion is today's shape.
-            for (CriterionSampleCounts counts : methodologyCriteria) {
-                CriterionPosture p = ctx.criterionPostures().getOrDefault(
-                        counts.criterionId(), CriterionPosture.implicit());
-                if (p.isRiskDriven() || p.isConfidenceFirst()) {
-                    publishSizingDeclaration(detail, p);
-                    break;
-                }
-            }
-            if (!wilsonLowerByCriterion.isEmpty()) {
-                detail.put("wilsonLowerByCriterion", Map.copyOf(wilsonLowerByCriterion));
+            detail.put("confidence", confidence);
+            detail.put("thresholdsByCriterion", Map.copyOf(thresholds));
+            detail.put("observedByCriterion", Map.copyOf(observed));
+        }
+        publishSizingDeclaration(detail, ctx.criterionPostures());
+        detail.put("verdictsByCriterion", Map.copyOf(verdicts));
+        detail.put("decisionsByCriterion", Map.copyOf(decisions));
+        return detail;
+    }
+
+    /**
+     * Publishes the run's declared sizing — the tolerated (design
+     * alternative) rate, or the relative detectable effect, with the
+     * declared power — from the first criterion that declared one, so the
+     * verdict path can name the run's operational approach from its
+     * configuration.
+     */
+    private static void publishSizingDeclaration(
+            Map<String, Object> detail, Map<String, CriterionPosture> postures) {
+        for (CriterionPosture p : postures.values()) {
+            if (p.isRiskDriven() || p.isConfidenceFirst()) {
+                p.toleratedRate().ifPresent(rate -> detail.put("toleratedRate", rate));
+                p.mde().ifPresent(m -> detail.put("declaredMde", m));
+                p.power().ifPresent(pw -> detail.put("declaredPower", pw));
+                return;
             }
         }
-        // The criterion's own judged verdicts — consumed by the spec
-        // layer's per-criterion aggregation so the decision rule is
-        // applied exactly once, here.
-        detail.put("verdictsByCriterion", Map.copyOf(verdictsByCriterion));
-
-        String explanation;
-        if (methodologyCriteria.size() == 1) {
-            CriterionSampleCounts only = methodologyCriteria.get(0);
-            int onlyTotal = only.pass() + only.fail();
-            double observed = observedByCriterion.get(only.criterionId());
-            double t = thresholdsByCriterion.get(only.criterionId());
-            if (isEmpirical()) {
-                PassRateStatistics b = resolvedBaselineByCriterion.get(only.criterionId());
-                explanation = String.format(
-                        "observed=%.4f vs threshold=%.4f (Wilson-%.0f%% lower of "
-                                + "baseline rate %.4f at n_test=%d; origin=%s) over %d samples",
-                        observed, t, confidence * 100.0,
-                        b == null ? Double.NaN : b.observedPassRate(),
-                        onlyTotal, resolvedOrigin, onlyTotal);
-            } else {
-                explanation = perCriterionExplanations.isEmpty()
-                        ? String.format(
-                                "observed=%.4f, threshold=%.4f (origin=%s) over %d samples",
-                                observed, t, resolvedOrigin, onlyTotal)
-                        : perCriterionExplanations.get(0);
-            }
-        } else {
-            explanation = "composite verdict over " + methodologyCriteria.size()
-                    + " criteria: " + String.join("; ", perCriterionExplanations);
-        }
-
-        return new CriterionResult(NAME, composite, explanation, detail);
     }
 
     private CriterionResult inconclusive(String reason, Map<String, Object> detail) {
         return new CriterionResult(NAME, Verdict.INCONCLUSIVE, reason, detail);
     }
-    /**
-     * Publishes the criterion's declared sizing facts — the absolute
-     * tolerated rate, or the relative detectable effect, with the
-     * declared power — so the verdict path can name the run's
-     * operational approach from its configuration rather than
-     * inferring it from the threshold origin.
-     */
-    private static void publishSizingDeclaration(
-            Map<String, Object> detail, CriterionPosture posture) {
-        posture.toleratedRate().ifPresent(rate -> detail.put("toleratedRate", rate));
-        posture.mde().ifPresent(m -> detail.put("declaredMde", m));
-        posture.power().ifPresent(pw -> detail.put("declaredPower", pw));
-    }
 
+    /** One methodology criterion judged under its rule. */
+    private record Judged(
+            String id, Verdict verdict, double threshold,
+            Map<String, Object> decision, String explanation) {
+    }
 }

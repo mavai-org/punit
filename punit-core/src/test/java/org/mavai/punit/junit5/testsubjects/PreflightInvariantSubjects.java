@@ -86,24 +86,21 @@ public final class PreflightInvariantSubjects {
     public static final class DeclaredThresholdInfeasibleTest {
         @ProbabilisticTest
         void undersizedAgainstNormativeThreshold() {
-            // n=50 against 0.9999 at 95% confidence: Wilson upper-of-perfect
-            // ≈ 0.949, well below 0.9999 → infeasible.
+            // No count of 50 samples can demonstrate 0.9999 at alpha 0.05.
             PUnit.testing(contractualHighSampling(50))
                     .assertPasses();
         }
     }
 
     /**
-     * Declared (samples, confidence) pair against an empirical
-     * baseline. The baseline rate is too high relative to the
-     * configured sample size; the criterion would derive a threshold
-     * the test cannot underwrite. Pre-flight aborts before sampling.
+     * An empirical test of 10 samples; its paired test writes a baseline
+     * of 5, so the test is larger than its baseline and is refused before
+     * sampling.
      */
     public static final class DeclaredSampleSizeInfeasibleTest {
         @ProbabilisticTest
         void undersizedAgainstHighBaselineRate() {
-            // n=10 against baseline 0.95 at default 95% confidence:
-            // Wilson upper-of-perfect ≈ 0.787 < 0.95 → infeasible.
+            // Larger than the baseline it consumes → refused.
             PUnit.testing(empiricalSampling(10))
                     .assertPasses();
         }

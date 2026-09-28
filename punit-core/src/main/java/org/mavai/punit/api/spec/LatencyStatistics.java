@@ -10,21 +10,40 @@ import org.mavai.punit.api.LatencyResult;
  * {@code PercentileLatency}.
  *
  * <p>Carries the full sorted vector of passing-sample latencies in
- * milliseconds — required by Statistical Companion §12.4.2's exact
- * binomial order-statistic upper confidence bound. The percentile
- * point estimates remain for reporting.
+ * milliseconds — the successful latencies {@code latency/precedence}
+ * ranks (Statistical Companion §12.4.2) — and the size of the baseline
+ * run they came from, against which a test's planned size is judged
+ * ({@code TEST_LARGER_THAN_BASELINE}, §5.7.1) and from which the
+ * baseline's passing rate follows. The percentile point estimates remain
+ * for reporting.
  *
- * @param percentiles      the baseline's observed p50 / p90 / p95 / p99 — point estimates
+ * @param percentiles       the baseline's observed p50 / p90 / p95 / p99 — point estimates
  * @param sortedLatenciesMs sorted (ascending) passing-sample latencies in milliseconds;
  *                          length matches {@code sampleCount}
- * @param sampleCount      the baseline's total invocation count
+ * @param sampleCount       the number of successful latencies {@code n_b}
+ * @param runSamples        the baseline run's sample size {@code N_b}, at least
+ *                          {@code sampleCount}
  */
 public record LatencyStatistics(
         LatencyResult percentiles,
         long[] sortedLatenciesMs,
-        @Override int sampleCount) implements BaselineStatistics {
+        @Override int sampleCount,
+        int runSamples) implements BaselineStatistics {
+
+    /**
+     * A baseline whose run size is not recorded apart from its successful
+     * latencies: every sample of the run is taken to have succeeded.
+     */
+    public LatencyStatistics(LatencyResult percentiles, long[] sortedLatenciesMs, int sampleCount) {
+        this(percentiles, sortedLatenciesMs, sampleCount, sampleCount);
+    }
 
     public LatencyStatistics {
+        if (runSamples < sampleCount) {
+            throw new IllegalArgumentException(
+                    "runSamples (" + runSamples + ") must be at least sampleCount ("
+                            + sampleCount + ")");
+        }
         Objects.requireNonNull(percentiles, "percentiles");
         Objects.requireNonNull(sortedLatenciesMs, "sortedLatenciesMs");
         if (sampleCount < 0) {
@@ -92,6 +111,15 @@ public record LatencyStatistics(
     }
 
     /** Compact accessor returning a defensive copy. */
+    /**
+     * The baseline run's passing rate — the fraction of its samples that
+     * passed every functional criterion — from which a test's expected
+     * number of successful latencies is planned (§12.5.3).
+     */
+    public double passingRate() {
+        return runSamples == 0 ? 0.0 : (double) sampleCount / runSamples;
+    }
+
     @Override
     public long[] sortedLatenciesMs() {
         return sortedLatenciesMs.clone();

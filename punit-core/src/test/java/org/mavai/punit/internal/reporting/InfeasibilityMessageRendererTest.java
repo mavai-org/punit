@@ -1,11 +1,13 @@
 package org.mavai.punit.internal.reporting;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator.FeasibilityResult;
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mavai.punit.api.spec.ConfigurationRefusal;
+import org.mavai.punit.statistics.ConfigurationError;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for {@link InfeasibilityMessageRenderer}.
@@ -13,102 +15,52 @@ import org.junit.jupiter.api.Test;
 @DisplayName("InfeasibilityMessageRenderer")
 class InfeasibilityMessageRendererTest {
 
-    private final FeasibilityResult infeasibleResult =
-            VerificationFeasibilityEvaluator.evaluate(50, 0.9999, 0.95);
+    private static final ConfigurationRefusal LARGER = new ConfigurationRefusal(
+            ConfigurationError.TEST_LARGER_THAN_BASELINE,
+            "the test (200 samples) is larger than its baseline (100 samples)");
+    private static final ConfigurationRefusal INFEASIBLE = new ConfigurationRefusal(
+            ConfigurationError.COMPLIANCE_INFEASIBLE,
+            "criterion 'c': no count of 200 samples can demonstrate 0.999 at alpha 0.05 "
+                    + "(feasibility minimum 2995)");
 
-    @Nested
-    @DisplayName("summary (verbose=false)")
-    class SummaryMessage {
+    @Test
+    @DisplayName("names every configuration error, with its reason, in the order given")
+    void namesEveryCode() {
+        String message = InfeasibilityMessageRenderer.renderRefusal(
+                "offerExtraction", List.of(LARGER, INFEASIBLE));
 
-        @Test
-        @DisplayName("includes test name, sample count, target percentage, and minimum N")
-        void includesKeyFacts() {
-            String message = InfeasibilityMessageRenderer.render(
-                    "smokeTestQuick", infeasibleResult, false);
-
-            assertThat(message)
-                    .contains("smokeTestQuick")
-                    .contains("50")
-                    .contains("99.99%")
-                    .contains(String.valueOf(infeasibleResult.minimumSamples()));
-        }
-
-        @Test
-        @DisplayName("includes remediation options")
-        void includesRemediation() {
-            String message = InfeasibilityMessageRenderer.render(
-                    "smokeTestQuick", infeasibleResult, false);
-
-            assertThat(message)
-                    .contains("Increase samples")
-                    .contains("intent = SMOKE");
-        }
-
-        @Test
-        @DisplayName("omits statistical jargon")
-        void omitsStatisticalJargon() {
-            String message = InfeasibilityMessageRenderer.render(
-                    "smokeTestQuick", infeasibleResult, false);
-
-            assertThat(message)
-                    .doesNotContain("Wilson")
-                    .doesNotContain("α")
-                    .doesNotContain("p₀")
-                    .doesNotContain("Confidence")
-                    .doesNotContain("Bernoulli")
-                    .doesNotContain("Criterion")
-                    .doesNotContain("Assumption");
-        }
-    }
-
-    @Nested
-    @DisplayName("verbose (verbose=true)")
-    class VerboseMessage {
-
-        @Test
-        @DisplayName("includes full statistical context")
-        void includesStatisticalContext() {
-            String message = InfeasibilityMessageRenderer.render(
-                    "smokeTestQuick", infeasibleResult, true);
-
-            assertThat(message)
-                    .contains("Wilson score")
-                    .contains("α")
-                    .contains("p₀")
-                    .contains("Confidence")
-                    .contains("Bernoulli")
-                    .contains("Criterion")
-                    .contains("Assumption");
-        }
-
-        @Test
-        @DisplayName("includes test name and remediation")
-        void includesTestNameAndRemediation() {
-            String message = InfeasibilityMessageRenderer.render(
-                    "smokeTestQuick", infeasibleResult, true);
-
-            assertThat(message)
-                    .contains("smokeTestQuick")
-                    .contains("Increase samples")
-                    .contains("intent = SMOKE");
-        }
+        assertThat(message)
+                .contains("CONFIGURATION REFUSED")
+                .contains("offerExtraction")
+                .contains("TEST_LARGER_THAN_BASELINE — the test (200 samples)")
+                .contains("COMPLIANCE_INFEASIBLE — criterion 'c'");
+        assertThat(message.indexOf("TEST_LARGER_THAN_BASELINE"))
+                .isLessThan(message.indexOf("COMPLIANCE_INFEASIBLE"));
     }
 
     @Test
-    @DisplayName("formats whole-number target as integer percentage")
-    void formatsWholeNumberTarget() {
-        FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(1, 0.90, 0.95);
-        String message = InfeasibilityMessageRenderer.render("test", result, false);
-
-        assertThat(message).contains("90%");
+    @DisplayName("offers the remedy of each code present")
+    void offersRemedies() {
+        assertThat(InfeasibilityMessageRenderer.renderRefusal("t", List.of(LARGER)))
+                .contains("Measure a baseline at least as large as the test")
+                .doesNotContain("intent = SMOKE");
+        assertThat(InfeasibilityMessageRenderer.renderRefusal("t", List.of(INFEASIBLE)))
+                .contains("feasibility minimum")
+                .contains("intent = SMOKE")
+                .doesNotContain("Measure a baseline");
     }
 
     @Test
-    @DisplayName("formats fractional target without trailing zeros")
-    void formatsFractionalTarget() {
-        FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(1, 0.999, 0.95);
-        String message = InfeasibilityMessageRenderer.render("test", result, false);
+    @DisplayName("names the soundness floor and the configured confidence")
+    void soundnessFloorBreach() {
+        String message = InfeasibilityMessageRenderer.renderSoundnessFloorBreach("t", 0.7, 0.8);
+        assertThat(message).contains("70%").contains("80%");
+    }
 
-        assertThat(message).contains("99.9%");
+    @Test
+    @DisplayName("formats whole-number and fractional percentages without trailing zeros")
+    void formatsPercentages() {
+        assertThat(InfeasibilityMessageRenderer.formatTargetAsPercentage(0.90)).isEqualTo("90%");
+        assertThat(InfeasibilityMessageRenderer.formatTargetAsPercentage(0.999)).isEqualTo("99.9%");
     }
 }

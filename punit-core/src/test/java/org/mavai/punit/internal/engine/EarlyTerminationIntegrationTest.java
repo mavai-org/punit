@@ -117,9 +117,9 @@ class EarlyTerminationIntegrationTest {
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        // requiredSuccesses = the smallest K whose Wilson lower bound at
-        // 95% confidence clears 0.95 at n=100 → 99. After sample 2 the
-        // failure count is 2 → max-possible-successes = 98 < 99 → fire.
+        // requiredSuccesses = k_min of the exact binomial test of 0.95 at
+        // n=100, alpha 0.05 → 99. After sample 2 the failure count is 2 →
+        // max-possible-successes = 98 < 99 → fire.
         assertThat(result.engineSummary().samplesExecuted()).isEqualTo(2);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.IMPOSSIBILITY);
@@ -129,15 +129,15 @@ class EarlyTerminationIntegrationTest {
     @Test
     @DisplayName("failure-inevitable: mixed mid-run failures that remain recoverable do not terminate")
     void failureInevitableNoFireWhenRecoverable() {
-        // threshold 0.5, samples 20 → required = 14 (smallest K whose
-        // Wilson lower bound at 95% clears 0.5 at n=20). Six failures up
-        // front leave max-possible-successes at 14 ≥ 14, so the
-        // failure-inevitable shortcut never fires; the 14th success only
+        // threshold 0.5, samples 20 → required = k_min = 15 (the exact
+        // binomial test of 0.5 at n=20, alpha 0.05). Five failures up front
+        // leave max-possible-successes at 15 ≥ 15, so the
+        // failure-inevitable shortcut never fires; the 15th success only
         // lands on the final sample, so the success-guaranteed shortcut
         // (which needs remaining > 0) never fires either, and the run
-        // completes. Verdict is PASS (Wilson lower of 14/20 ≈ 0.52 ≥ 0.5).
+        // completes. Verdict is PASS (15 of 20 reaches k_min).
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(f -> new FailsThenPasses(6), 20), new Factors())
+                .testing(sampling(f -> new FailsThenPasses(5), 20), new Factors())
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
@@ -151,13 +151,11 @@ class EarlyTerminationIntegrationTest {
     // ── Success-guaranteed short-circuit ─────────────────────────────
 
     @Test
-    @DisplayName("success-guaranteed: all-pass at 0.5 threshold with floor met terminates early")
+    @DisplayName("success-guaranteed: all-pass at 0.5 threshold terminates at k_min")
     void successGuaranteedTerminatesAtThresholdCross() {
-        // threshold 0.5, samples 100 → required = 59 (smallest K whose
-        // Wilson lower bound at 95% clears 0.5 at n=100), validity floor
-        // = ceil(5 / min(0.5, 0.5)) = 10. With all-pass, both conditions
-        // (successes >= required AND total >= floor) become true at
-        // sample 59 → fire.
+        // threshold 0.5, samples 100 → required = k_min = 59 (the exact
+        // binomial test of 0.5 at n=100, alpha 0.05). With all-pass,
+        // successes reach it at sample 59 → fire.
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(f -> new AlwaysPass(), 100), new Factors())
                 .build();
@@ -171,20 +169,18 @@ class EarlyTerminationIntegrationTest {
     }
 
     @Test
-    @DisplayName("success-guaranteed: validity floor delays termination past threshold-cross")
-    void successGuaranteedFloorDelaysTermination() {
-        // threshold 0.05, samples 200 → required = 16 (smallest K whose
-        // Wilson lower bound at 95% clears 0.05 at n=200), validity floor
-        // = ceil(5 / min(0.05, 0.95)) = 100. With all-pass, successes >=
-        // required at sample 16 but total < floor; the run continues to
-        // sample 100 where the floor is met and the short-circuit fires.
+    @DisplayName("success-guaranteed: fires as soon as k_min is reached — the exact rule needs no validity floor")
+    void successGuaranteedFiresAtKMin() {
+        // threshold 0.05, samples 200 → required = k_min = 16 (the exact
+        // binomial test of 0.05 at n=200, alpha 0.05). The exact rule is
+        // valid at every size, so with all-pass the run stops at sample 16.
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(f -> new AlwaysPassLowThreshold(), 200), new Factors())
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(100);
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(16);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.SUCCESS_GUARANTEED);
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
@@ -230,14 +226,16 @@ class EarlyTerminationIntegrationTest {
     @Test
     @DisplayName("disableEarlyTermination(): a near-impossible run reaches the planned sample count")
     void disableEarlyTerminationDefeatsFailureInevitable() {
+        // 59 samples: the fewest from which the declared 0.95 can be
+        // demonstrated, so the configuration is not refused.
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(f -> new AlwaysFail(), 20), new Factors())
+                .testing(sampling(f -> new AlwaysFail(), 59), new Factors())
                 .disableEarlyTermination()
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);
 
-        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(20);
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(59);
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.COMPLETED);
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);

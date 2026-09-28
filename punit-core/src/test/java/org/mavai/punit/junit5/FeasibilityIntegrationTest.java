@@ -28,7 +28,7 @@ import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.testkit.engine.EngineTestKit;
 import org.junit.platform.testkit.engine.Events;
 
-@DisplayName("Feasibility — VERIFICATION fails fast, SMOKE proceeds silently")
+@DisplayName("Configuration refusal — invalid designs are refused before any sample, SMOKE proceeds")
 class FeasibilityIntegrationTest {
 
     private static final String JUNIT_ENGINE_ID = "junit-jupiter";
@@ -54,7 +54,7 @@ class FeasibilityIntegrationTest {
     @Test
     @DisplayName("VERIFICATION + adequate sample size — feasibility passes; engine runs; verdict PASS")
     void verificationFeasible() throws IOException {
-        // n=50 against rate 0.50 is feasible (Wilson at observed=1.0, n=50 ≈ 0.949 > 0.50).
+        // n=50 against a baseline of 100 samples: not larger than its baseline.
         writeBaselineAt(0.50, 100);
 
         Events events = run(FeasibilitySubjects.VerificationFeasible.class);
@@ -62,10 +62,11 @@ class FeasibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("VERIFICATION + undersized sample — feasibility fails fast with IllegalStateException")
+    @DisplayName("a test larger than its baseline is refused before any sample (TEST_LARGER_THAN_BASELINE)")
     void verificationInfeasibleFailsFast() throws IOException {
-        // n=10 against rate 0.95 is infeasible (Wilson at observed=1.0, n=10 ≈ 0.787 < 0.95).
-        writeBaselineAt(0.95, 1000);
+        // n=10 against a baseline of 5 samples: the test is larger than
+        // the baseline it consumes, which mavai's design policy refuses.
+        writeBaselineAt(0.95, 5);
 
         Events events = run(FeasibilitySubjects.VerificationInfeasible.class);
         events.assertStatistics(stats -> stats.started(1).failed(1));
@@ -75,30 +76,28 @@ class FeasibilityIntegrationTest {
                     var throwable = event.getRequiredPayload(
                             org.junit.platform.engine.TestExecutionResult.class)
                             .getThrowable().orElseThrow();
-                    assertThat(throwable).isInstanceOf(IllegalStateException.class);
+                    assertThat(throwable).isInstanceOf(
+                            org.mavai.punit.api.spec.ConfigurationRefusedException.class);
                     assertThat(throwable.getMessage())
-                            .contains("INFEASIBLE VERIFICATION")
+                            .contains("CONFIGURATION REFUSED")
                             .contains(FeasibilitySubjects.USE_CASE_ID)
-                            .contains("(10)")
-                            .contains("At least")
-                            .contains("Increase samples")
-                            .contains("intent = SMOKE");
+                            .contains("TEST_LARGER_THAN_BASELINE")
+                            .contains("(10 samples)")
+                            .contains("(5 samples)");
                 });
     }
 
     @Test
     @DisplayName("SMOKE + undersized sample — engine runs silently; verdict produced")
     void smokeInfeasibleAllowed() throws IOException {
-        // Same config as VerificationInfeasible but intent=SMOKE. The
-        // developer has declared "I know this is undersized; treat as
-        // a sentinel" — the gate produces no warning and the run
-        // proceeds.
+        // An empirical test of 10 against a baseline of 1000 is a valid
+        // design under either intent: the regression rule has no
+        // feasibility minimum. The run proceeds to a verdict.
         writeBaselineAt(0.95, 1000);
 
         Events events = run(FeasibilitySubjects.SmokeInfeasible.class);
-        // The verdict at observed=1.0, n=10 is FAIL (Wilson lower bound 0.787
-        // < baseline 0.95). The point of this test is the run wasn't
-        // *aborted* — it executed and produced a real verdict (here: FAIL).
+        // The point of this test is the run wasn't *aborted* — it
+        // executed and produced a real verdict.
         events.assertStatistics(stats -> stats.started(1));
         // It's either succeeded or failed; not aborted (which would mean
         // INCONCLUSIVE), and not skipped (which would mean discovery filter).
@@ -109,7 +108,7 @@ class FeasibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("VERIFICATION + contractual SLA threshold + undersized sample — feasibility fails fast")
+    @DisplayName("VERIFICATION + contractual SLA threshold + undersized sample — refused (COMPLIANCE_INFEASIBLE)")
     void contractualVerificationInfeasibleFailsFast() {
         // No baseline written — contractual targets do not consult one.
         // n=50 against a contractual 99.99% target at default 95%
@@ -124,13 +123,14 @@ class FeasibilityIntegrationTest {
                     var throwable = event.getRequiredPayload(
                             org.junit.platform.engine.TestExecutionResult.class)
                             .getThrowable().orElseThrow();
-                    assertThat(throwable).isInstanceOf(IllegalStateException.class);
+                    assertThat(throwable).isInstanceOf(
+                            org.mavai.punit.api.spec.ConfigurationRefusedException.class);
                     assertThat(throwable.getMessage())
-                            .contains("INFEASIBLE VERIFICATION")
+                            .contains("CONFIGURATION REFUSED")
                             .contains(FeasibilitySubjects.USE_CASE_ID)
-                            .contains("(50)")
-                            .contains("99.99%")
-                            .contains("At least")
+                            .contains("COMPLIANCE_INFEASIBLE")
+                            .contains("no count of 50 samples")
+                            .contains("feasibility minimum 29956")
                             .contains("Increase samples")
                             .contains("intent = SMOKE");
                 });

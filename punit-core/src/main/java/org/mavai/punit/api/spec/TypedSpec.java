@@ -67,4 +67,18 @@ public interface TypedSpec<FT, IT, OT> {
     default Optional<EarlyTerminationContext> earlyTermination() {
         return Optional.empty();
     }
+
+    /**
+     * The result of a configuration refused before any sample runs
+     * (Statistical Companion §5.7.1), or empty when the configuration is
+     * valid. The engine asks once, after sizing and before sampling; a
+     * refused test runs no sample and still yields a result, so its
+     * refusal is recorded like any verdict.
+     *
+     * @param provider       baseline statistics for empirical criteria
+     * @param plannedSamples the sample size the configuration will run
+     */
+    default Optional<EngineResult> refusal(BaselineProvider provider, int plannedSamples) {
+        return Optional.empty();
+    }
 }

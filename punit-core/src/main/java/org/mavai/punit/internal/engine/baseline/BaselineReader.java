@@ -147,7 +147,8 @@ public final class BaselineReader {
             entries.put("percentile-latency", new LatencyStatistics(
                     latencyIndicator.passingPercentiles(),
                     latencyIndicator.sortedPassingLatenciesMs(),
-                    latencyIndicator.contributingSamples()));
+                    latencyIndicator.contributingSamples(),
+                    Math.max(sampleCount, latencyIndicator.contributingSamples())));
         }
 
         CovariateProfile profile = parseCovariates(root);

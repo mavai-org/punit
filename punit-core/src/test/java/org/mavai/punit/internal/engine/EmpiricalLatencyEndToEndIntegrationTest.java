@@ -73,6 +73,27 @@ class EmpiricalLatencyEndToEndIntegrationTest {
         @Override public Criteria<Integer> criteria() { return empirical().passRate(); }
     }
 
+    /** Takes a few milliseconds per call: latencies are compared in whole
+     *  milliseconds, so a sub-millisecond service observes 0 ms. */
+    static class SlowServiceContract extends FastServiceContract {
+        @Override public Outcome<Integer> invoke(Integer input, TokenTracker tracker) {
+            try {
+                Thread.sleep(3);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return Outcome.ok(input);
+        }
+    }
+
+    private static Sampling<Factors, Integer, Integer> slowSampling(int samples) {
+        return Sampling.<Factors, Integer, Integer>builder()
+                .serviceContractFactory(f -> new SlowServiceContract())
+                .inputs(1, 2, 3, 4, 5)
+                .samples(samples)
+                .build();
+    }
+
     private static Sampling<Factors, Integer, Integer> sampling(int samples) {
         return Sampling.<Factors, Integer, Integer>builder()
                 .serviceContractFactory(f -> new FastServiceContract())
@@ -121,7 +142,7 @@ class EmpiricalLatencyEndToEndIntegrationTest {
             writeLatencyBaseline(baselineDir, Duration.ZERO, 1000);
 
             ProbabilisticTest spec = ProbabilisticTest
-                    .testing(sampling(20), FACTORS)
+                    .testing(slowSampling(20), FACTORS)
                     .criterion(PercentileLatency.<Integer>empirical(PercentileKey.P95))
                     .build();
 

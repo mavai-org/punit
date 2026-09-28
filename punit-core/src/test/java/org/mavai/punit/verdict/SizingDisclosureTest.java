@@ -3,7 +3,7 @@ package org.mavai.punit.verdict;
 import java.util.Map;
 
 import org.mavai.punit.api.ThresholdOrigin;
-import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
+import org.mavai.punit.statistics.RegressionSizing;
 import org.mavai.punit.statistics.StatisticalDefaults;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -123,13 +123,13 @@ class SizingDisclosureTest {
         }
 
         @Test
-        void detectableRateComesFromTheSizingCalculator() {
+        void detectableRateIsTheDesignDetectableRateAtTheRunsSize() {
             Map<String, String> entries =
                     entries(ThresholdOrigin.EMPIRICAL, 100, 1000, 0.96, 0);
 
             double disclosed = Double.parseDouble(entries.get("sizing-detectable-rate"));
-            double expected = new RiskDrivenSizingCalculator().detectableRate(
-                    100, 0.96, 0.95, StatisticalDefaults.DEFAULT_TARGET_POWER);
+            double expected = RegressionSizing.designDetectableRate(
+                    100, 0.96, 1000, 0.05, StatisticalDefaults.DEFAULT_TARGET_POWER).getAsDouble();
             assertThat(disclosed).isEqualTo(expected);
             assertThat(entries).containsEntry("sizing-detectable-power", "0.8");
         }
@@ -163,8 +163,8 @@ class SizingDisclosureTest {
                     ThresholdOrigin.EMPIRICAL, 0.85, null, 0.9, 100, 1000, 0.96, 0);
 
             double disclosed = Double.parseDouble(entries.get("sizing-detectable-rate"));
-            double expected = new RiskDrivenSizingCalculator().detectableRate(
-                    100, 0.96, 0.95, 0.9);
+            double expected = RegressionSizing.designDetectableRate(
+                    100, 0.96, 1000, 0.05, 0.9).getAsDouble();
             assertThat(disclosed).isEqualTo(expected);
             assertThat(entries).containsEntry("sizing-detectable-power", "0.9");
         }

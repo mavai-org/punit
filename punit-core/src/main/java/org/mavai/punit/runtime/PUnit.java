@@ -51,6 +51,8 @@ import org.mavai.punit.internal.engine.baseline.ProfileBoundBaselineProvider;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
 import org.mavai.punit.internal.engine.criteria.Feasibility;
 import org.mavai.punit.internal.engine.criteria.PassRate;
+import org.mavai.punit.api.spec.ConfigurationRefusedException;
+import org.mavai.punit.internal.reporting.InfeasibilityMessageRenderer;
 import org.mavai.punit.internal.reporting.TransparentStatsRenderer;
 import org.mavai.punit.statistics.NormativeJudgementEvaluator;
 import org.mavai.punit.statistics.transparent.TransparentStatsConfig;
@@ -477,6 +479,15 @@ public final class PUnit {
     }
 
     static void translate(ProbabilisticTestResult result, String serviceContractId) {
+        if (result.refused()) {
+            // A refused configuration is a configuration problem, not a
+            // service failure: its verdict record is already written
+            // (with the configuration errors and no verdict value), and
+            // the test fails as misconfigured, naming every code.
+            throw new ConfigurationRefusedException(
+                    result.configurationErrors(),
+                    InfeasibilityMessageRenderer.renderRefusal(serviceContractId, result.refusals()));
+        }
         Verdict verdict = result.verdict();
         if (verdict == Verdict.PASS) {
             return;
@@ -1021,9 +1032,10 @@ public final class PUnit {
             if (requiredCriteria.isEmpty()) {
                 org.mavai.punit.api.spec.SpecCriterionDeriver deriver =
                         org.mavai.punit.api.spec.SpecCriterionDeriver.lookup();
-                for (org.mavai.punit.api.criterion.Criterion<OT> c : serviceContract.effectiveCriteria()) {
-                    deriver.<OT>derive(c.posture()).ifPresent(requiredCriteria::add);
-                }
+                requiredCriteria.addAll(deriver.<OT>deriveAll(serviceContract.effectiveCriteria()
+                        .stream()
+                        .map(org.mavai.punit.api.criterion.Criterion::posture)
+                        .toList()));
             }
             String serviceContractId = serviceContract.id();
             CovariateProfile observed = resolveCovariates(serviceContract);

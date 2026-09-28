@@ -74,33 +74,29 @@ public final class FeasibilitySubjects {
     public static final class VerificationFeasible {
         @ProbabilisticTest
         void shouldPass() {
-            // Baseline rate 0.50; n=50 against rate 0.50 has min Wilson
-            // lower bound at observed=1.0 ≈ 0.949 — well above 0.50 → feasible.
+            // n=50 against a baseline of 100: a valid design.
             PUnit.testing(empiricalSampling(50))
                     .assertPasses();
         }
     }
 
     /**
-     * VERIFICATION + undersized sample: feasibility check throws
-     * IllegalStateException before the engine runs.
+     * A test of 10 samples; its paired test writes a baseline of 5, so
+     * the configuration is refused before the engine runs
+     * (TEST_LARGER_THAN_BASELINE).
      */
     public static final class VerificationInfeasible {
         @ProbabilisticTest
         void shouldFailFast() {
-            // Baseline rate 0.95; n=10 against rate 0.95 has max Wilson
-            // lower bound at observed=1.0 ≈ 0.787 — below 0.95 → infeasible.
-            // Default intent is VERIFICATION → throw IllegalStateException.
+            // Refused whatever the intent: the baseline is smaller than the test.
             PUnit.testing(empiricalSampling(10))
                     .assertPasses();
         }
     }
 
     /**
-     * SMOKE + undersized sample: feasibility check is silent; the
-     * engine runs; the test passes (or whatever verdict). The
-     * developer has declared SMOKE — "I know it's undersized" — so
-     * no warning is emitted.
+     * SMOKE, a small empirical test: the engine runs and produces a
+     * verdict.
      */
     public static final class SmokeInfeasible {
         @ProbabilisticTest
@@ -114,10 +110,10 @@ public final class FeasibilitySubjects {
     /**
      * VERIFICATION + contractual threshold + undersized sample:
      * a declared SLA / SLO / POLICY threshold is no less in need
-     * of statistical underwriting than an empirical one. n=50
-     * against a 99.99% target at 95% confidence has Wilson lower
-     * bound at observed=1.0 ≈ 0.949, well below 0.9999 → infeasible.
-     * Default intent is VERIFICATION → must throw IllegalStateException
+     * of statistical underwriting than an empirical one. No count of 50
+     * samples can demonstrate 99.99% at alpha 0.05 (the minimum is
+     * 29,956); under the default VERIFICATION intent the configuration is
+     * refused (COMPLIANCE_INFEASIBLE)
      * before the engine runs any samples.
      */
     public static final class ContractualVerificationInfeasible {

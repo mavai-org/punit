@@ -26,11 +26,11 @@ final class ConformanceFixtures {
     static final String CONFORMANCE_DIR = "/conformance/";
 
     /**
-     * The oracle release that introduced {@code manifest.json} and
-     * {@code regression_decision.json}. Named in the missing-fixture
-     * diagnostic so the corrective action is obvious.
+     * The oracle release whose fixtures this suite reads (methodology
+     * 1.5.0). Named in the missing-fixture diagnostic so the corrective
+     * action is obvious.
      */
-    static final String MINIMUM_RELEASE = "v0.8.4";
+    static final String MINIMUM_RELEASE = "v0.11.1";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -59,7 +59,7 @@ final class ConformanceFixtures {
     static String missingMessage(String filename) {
         return "Conformance fixture " + CONFORMANCE_DIR + filename + " is absent from the fetched "
                 + "mavai-R release. This suite requires mavai-R " + MINIMUM_RELEASE + " or later; "
-                + "the fetchConformanceData task pulls the latest tagged release. Until that release "
+                + "the fetchConformanceData task pulls the release named by mavaiRTag. Until that release "
                 + "is tagged, run against a local checkout: "
                 + "./gradlew test -PconformanceCasesDir=/path/to/mavai-R/inst/cases";
     }

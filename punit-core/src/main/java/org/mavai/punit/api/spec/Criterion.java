@@ -1,5 +1,6 @@
 package org.mavai.punit.api.spec;
 
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
 
@@ -111,8 +112,8 @@ public interface Criterion<OT, S extends BaselineStatistics> {
      * {@link #earlyTerminationPassRate()}, if any. The engine's
      * guaranteed-success short-circuit derives its required success
      * count from the same statistical rule the criterion will apply at
-     * evaluate time — the Wilson lower bound at this confidence
-     * clearing the threshold — so a short-circuited run can never lock
+     * evaluate time — the smallest passing count of the exact binomial
+     * test at this confidence — so a short-circuited run can never lock
      * in a verdict the full run would have refused.
      *
      * @return the comparison confidence in (0, 1), or empty when the
@@ -120,5 +121,17 @@ public interface Criterion<OT, S extends BaselineStatistics> {
      */
     default OptionalDouble earlyTerminationConfidence() {
         return OptionalDouble.empty();
+    }
+
+    /**
+     * This criterion's part in refusing a configuration before any sample
+     * runs (Statistical Companion §5.7.1): every configuration error its
+     * part of the configuration carries, each with its reason. A
+     * configuration with any refusal is refused whole.
+     *
+     * @return the refusals; empty when the criterion's part is valid
+     */
+    default List<ConfigurationRefusal> configurationRefusals(ConfigurationCheck<S> check) {
+        return List.of();
     }
 }

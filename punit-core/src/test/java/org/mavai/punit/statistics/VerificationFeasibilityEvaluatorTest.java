@@ -17,141 +17,59 @@ import org.junit.jupiter.api.Test;
 class VerificationFeasibilityEvaluatorTest {
 
     @Nested
-    @DisplayName("Feasibility at default confidence (0.95, α = 0.05, z ≈ 1.645)")
-    class DefaultConfidence {
+    @DisplayName("Feasibility under compliance/exact-binomial: a pass is possible iff p₀^N ≤ α")
+    class ExactFeasibility {
 
-        // z = Φ⁻¹(0.95) ≈ 1.6449
-        // z² ≈ 2.706
-        // N_min = ⌈p₀ · z² / (1 - p₀)⌉
+        // N_min = ⌈log α / log p₀⌉ (Statistical Companion §5.7.1).
 
         @Test
-        @DisplayName("p₀=0.50, N=5: feasible (N_min ≈ 3)")
-        void lowTarget_smallN_feasible() {
-            // N_min = ⌈0.50 × 2.706 / 0.50⌉ = ⌈2.706⌉ = 3
+        @DisplayName("p₀=0.50, α=0.05: N_min = 5, and N=5 is feasible")
+        void fairCoin() {
             FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(5, 0.50, 0.95);
 
             assertThat(result.feasible()).isTrue();
-            assertThat(result.minimumSamples()).isEqualTo(3);
+            assertThat(result.minimumSamples()).isEqualTo(5);
             assertThat(result.configuredSamples()).isEqualTo(5);
             assertThat(result.target()).isEqualTo(0.50);
-            assertThat(result.configuredAlpha()).isCloseTo(0.05, org.assertj.core.data.Offset.offset(0.001));
-            assertThat(result.criterion()).isEqualTo(FeasibilityResult.CRITERION);
+            assertThat(result.configuredAlpha()).isEqualTo(0.05);
+            assertThat(result.criterion()).isEqualTo("exact_binomial_pass_possible");
         }
 
         @Test
-        @DisplayName("p₀=0.90, N=30: feasible (N_min ≈ 25)")
-        void moderateTarget_sufficientN_feasible() {
-            // N_min = ⌈0.90 × 2.706 / 0.10⌉ = ⌈24.35⌉ = 25
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(30, 0.90, 0.95);
-
-            assertThat(result.feasible()).isTrue();
-            assertThat(result.minimumSamples()).isEqualTo(25);
+        @DisplayName("the companion's table at α=0.05: 0.90 → 29, 0.95 → 59, 0.99 → 299, 0.995 → 598, 0.999 → 2995, 0.9999 → 29956")
+        void companionTable() {
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.90, 0.95).minimumSamples()).isEqualTo(29);
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.95, 0.95).minimumSamples()).isEqualTo(59);
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.99, 0.95).minimumSamples()).isEqualTo(299);
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.995, 0.95).minimumSamples()).isEqualTo(598);
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.999, 0.95).minimumSamples()).isEqualTo(2995);
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.9999, 0.95).minimumSamples()).isEqualTo(29956);
         }
 
         @Test
-        @DisplayName("p₀=0.90, N=20: NOT feasible (N_min ≈ 25)")
-        void moderateTarget_insufficientN_notFeasible() {
-            // N_min = ⌈0.90 × 2.706 / 0.10⌉ = ⌈24.35⌉ = 25
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(20, 0.90, 0.95);
+        @DisplayName("p₀=0.995, N=477: not feasible — no outcome of 477 can demonstrate 99.5%")
+        void headlineCaseIsInfeasible() {
+            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(477, 0.995, 0.95);
 
             assertThat(result.feasible()).isFalse();
-            assertThat(result.minimumSamples()).isEqualTo(25);
-            assertThat(result.configuredSamples()).isEqualTo(20);
+            assertThat(result.minimumSamples()).isEqualTo(598);
         }
 
         @Test
-        @DisplayName("p₀=0.95, N=55: feasible (N_min ≈ 52)")
-        void highTarget_sufficientN_feasible() {
-            // N_min = ⌈0.95 × 2.706 / 0.05⌉ = ⌈51.42⌉ = 52
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(55, 0.95, 0.95);
-
-            assertThat(result.feasible()).isTrue();
-            assertThat(result.minimumSamples()).isEqualTo(52);
-        }
-
-        @Test
-        @DisplayName("p₀=0.95, N=40: NOT feasible (N_min ≈ 52)")
-        void highTarget_insufficientN_notFeasible() {
-            // N_min = ⌈0.95 × 2.706 / 0.05⌉ = ⌈51.42⌉ = 52
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(40, 0.95, 0.95);
+        @DisplayName("a stricter α raises N_min: p₀=0.90 at α=0.01 needs 44")
+        void stricterAlpha() {
+            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(43, 0.90, 0.99);
 
             assertThat(result.feasible()).isFalse();
-            assertThat(result.minimumSamples()).isEqualTo(52);
+            assertThat(result.minimumSamples()).isEqualTo(44);
+            assertThat(result.configuredAlpha()).isEqualTo(0.01);
         }
 
         @Test
-        @DisplayName("p₀=0.9999, N=100: NOT feasible (N_min ≈ 27,055)")
-        void extremeTarget_smallN_notFeasible() {
-            // N_min = ⌈0.9999 × 2.706 / 0.0001⌉ = ⌈27,057⌉ ≈ 27,055 (exact varies with z precision)
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(100, 0.9999, 0.95);
-
-            assertThat(result.feasible()).isFalse();
-            assertThat(result.minimumSamples()).isGreaterThan(25000);
-        }
-    }
-
-    @Nested
-    @DisplayName("Feasibility at stricter confidence (0.99, α = 0.01, z ≈ 2.326)")
-    class StricterConfidence {
-
-        // z = Φ⁻¹(0.99) ≈ 2.3263
-        // z² ≈ 5.412
-        // N_min = ⌈p₀ · z² / (1 - p₀)⌉
-
-        @Test
-        @DisplayName("p₀=0.90, N=50: feasible (N_min ≈ 49)")
-        void moderateTarget_sufficientN_feasible() {
-            // N_min = ⌈0.90 × 5.412 / 0.10⌉ = ⌈48.71⌉ = 49
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(50, 0.90, 0.99);
-
-            assertThat(result.feasible()).isTrue();
-            assertThat(result.minimumSamples()).isEqualTo(49);
-        }
-
-        @Test
-        @DisplayName("p₀=0.90, N=45: NOT feasible (N_min ≈ 49)")
-        void moderateTarget_insufficientN_notFeasible() {
-            // N_min = ⌈0.90 × 5.412 / 0.10⌉ = ⌈48.71⌉ = 49
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(45, 0.90, 0.99);
-
-            assertThat(result.feasible()).isFalse();
-            assertThat(result.minimumSamples()).isEqualTo(49);
-        }
-    }
-
-    @Nested
-    @DisplayName("Edge cases")
-    class EdgeCases {
-
-        @Test
-        @DisplayName("Very low target (p₀=0.01): very small N_min")
-        void veryLowTarget() {
-            // N_min = ⌈0.01 × 2.706 / 0.99⌉ = ⌈0.027⌉ = 1
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(1, 0.01, 0.95);
-
-            assertThat(result.feasible()).isTrue();
-            assertThat(result.minimumSamples()).isEqualTo(1);
-        }
-
-        @Test
-        @DisplayName("Very high target (p₀=0.999): large N_min")
-        void veryHighTarget() {
-            // N_min = ⌈0.999 × 2.706 / 0.001⌉ = ⌈2703.3⌉ = 2704
-            FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(100, 0.999, 0.95);
-
-            assertThat(result.feasible()).isFalse();
-            assertThat(result.minimumSamples()).isGreaterThan(2700);
-        }
-
-        @Test
-        @DisplayName("samples=1 is feasible only for very low targets")
-        void singleSample_lowTarget() {
-            // With N=1 and confidence=0.95, Wilson lower bound for k=1 is quite low
-            FeasibilityResult lowTarget = VerificationFeasibilityEvaluator.evaluate(1, 0.01, 0.95);
-            assertThat(lowTarget.feasible()).isTrue();
-
-            FeasibilityResult highTarget = VerificationFeasibilityEvaluator.evaluate(1, 0.50, 0.95);
-            assertThat(highTarget.feasible()).isFalse();
+        @DisplayName("a very low requirement is feasible at one sample; p₀=0.50 is not")
+        void singleSample() {
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.01, 0.95).feasible()).isTrue();
+            assertThat(VerificationFeasibilityEvaluator.evaluate(1, 0.50, 0.95).feasible()).isFalse();
         }
     }
 
@@ -264,10 +182,10 @@ class VerificationFeasibilityEvaluatorTest {
     class ResultProperties {
 
         @Test
-        @DisplayName("criterion is always the Wilson score description")
+        @DisplayName("criterion names the exact binomial pass-possible check")
         void criterionIsConsistent() {
             FeasibilityResult result = VerificationFeasibilityEvaluator.evaluate(100, 0.90, 0.95);
-            assertThat(result.criterion()).isEqualTo("Wilson score one-sided lower bound");
+            assertThat(result.criterion()).isEqualTo("exact_binomial_pass_possible");
         }
 
         @Test

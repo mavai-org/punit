@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.mavai.punit.api.LatencyResult;
 import org.mavai.punit.api.spec.SampleSummary;
+import org.mavai.punit.statistics.LatencyRules;
 
 /**
  * Produces the normative {@code latency:} YAML block emitted by
@@ -34,17 +35,6 @@ public final class LatencySection {
     public static final String BASIS_PASSING_SAMPLES = "passing-samples";
 
     /**
-     * Minimum contributing samples required to emit each percentile —
-     * the non-degeneracy gate of Statistical Companion §12.5.2,
-     * conformance-locked to the mavai-R
-     * {@code latency_percentile_minimums} fixture.
-     */
-    public static final int MIN_SAMPLES_P50 = 5;
-    public static final int MIN_SAMPLES_P90 = 10;
-    public static final int MIN_SAMPLES_P95 = 20;
-    public static final int MIN_SAMPLES_P99 = 100;
-
-    /**
      * Sentinel value carried in latency-percentile fields (e.g.
      * {@code p50Ms}, {@code p95Ms}, {@code p99Ms}, {@code maxMs}) to
      * mean "not reliably estimated" — the contributing-sample count
@@ -67,20 +57,24 @@ public final class LatencySection {
      *                            available for the percentile
      *                            computation.
      * @return {@code true} if the count meets or exceeds the
-     *         minimum for that percentile per the
-     *         {@code n ≥ 1 / (1 − p)} rule.
+     *         percentile's non-degeneracy minimum (Statistical
+     *         Companion §12.5.2).
      */
     public static boolean isPercentileEmittable(String percentileLabel, int contributingSamples) {
         return contributingSamples >= minimumSamplesFor(percentileLabel);
     }
 
-    /** The minimum-contributing-samples threshold for a percentile label. */
+    /**
+     * The minimum contributing samples required to emit a percentile —
+     * the non-degeneracy minimum of Statistical Companion §12.5.2, which
+     * the statistics package defines once.
+     */
     public static int minimumSamplesFor(String percentileLabel) {
         return switch (percentileLabel) {
-            case "p50" -> MIN_SAMPLES_P50;
-            case "p90" -> MIN_SAMPLES_P90;
-            case "p95" -> MIN_SAMPLES_P95;
-            case "p99" -> MIN_SAMPLES_P99;
+            case "p50" -> LatencyRules.minimumContributingSamples(0.50);
+            case "p90" -> LatencyRules.minimumContributingSamples(0.90);
+            case "p95" -> LatencyRules.minimumContributingSamples(0.95);
+            case "p99" -> LatencyRules.minimumContributingSamples(0.99);
             default -> throw new IllegalArgumentException(
                     "unknown percentile label: " + percentileLabel
                             + " (expected one of p50, p90, p95, p99)");

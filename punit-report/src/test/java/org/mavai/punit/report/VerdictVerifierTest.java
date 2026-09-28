@@ -120,7 +120,6 @@ class VerdictVerifierTest {
                 Optional.empty(),
                 Optional.empty(),
                 new StatisticalAnalysis(0.95, 0.02, 0.85,
-                        Optional.empty(), Optional.empty(),
                         Optional.empty(), Optional.empty(), List.of()),
                 CovariateStatus.allAligned(),
                 new CostSummary(0, 0, 0, TokenMode.NONE, Optional.empty(), Optional.empty()),

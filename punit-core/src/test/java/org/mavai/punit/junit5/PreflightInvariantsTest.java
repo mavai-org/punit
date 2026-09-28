@@ -86,26 +86,23 @@ class PreflightInvariantsTest {
         Events events = run(
                 PreflightInvariantSubjects.DeclaredThresholdInfeasibleTest.class);
         events.assertStatistics(stats -> stats.started(1).failed(1));
-        assertInfeasibilityException(events);
+        assertRefusal(events, "COMPLIANCE_INFEASIBLE");
         assertThat(PreflightInvariantSubjects.INVOKE_COUNT.get())
                 .as("declared-threshold abort must precede sampling — engine never runs")
                 .isZero();
     }
 
     @Test
-    @DisplayName("declared (samples, confidence) + empirical baseline rate too high → abort, no samples")
+    @DisplayName("a test larger than its baseline → refused, no samples (TEST_LARGER_THAN_BASELINE)")
     void declaredSampleSizeInfeasibleAbortsBeforeSampling() throws IOException {
-        // Hand-write a baseline at rate 0.95: the always-passing use
-        // case would have produced rate 1.0, which Feasibility skips
-        // as degenerate. The invariant fires when an empirical-derived
-        // threshold sits above what the configured sample size can
-        // underwrite.
-        writeBaselineAt(0.95, 1000);
+        // A baseline of 5 samples cannot ground a test of 10: mavai's
+        // design policy refuses it before any sample runs.
+        writeBaselineAt(0.95, 5);
 
         Events events = run(
                 PreflightInvariantSubjects.DeclaredSampleSizeInfeasibleTest.class);
         events.assertStatistics(stats -> stats.started(1).failed(1));
-        assertInfeasibilityException(events);
+        assertRefusal(events, "TEST_LARGER_THAN_BASELINE");
         assertThat(PreflightInvariantSubjects.INVOKE_COUNT.get())
                 .as("declared-sample-size abort must precede sampling — engine never runs")
                 .isZero();
@@ -148,18 +145,18 @@ class PreflightInvariantsTest {
         new BaselineWriter().write(record, baselineDir);
     }
 
-    private static void assertInfeasibilityException(Events events) {
+    private static void assertRefusal(Events events, String code) {
         events.failed()
                 .assertThatEvents()
                 .anySatisfy(event -> {
                     Throwable t = event.getRequiredPayload(TestExecutionResult.class)
                             .getThrowable().orElseThrow();
-                    assertThat(t).isInstanceOf(IllegalStateException.class);
+                    assertThat(t).isInstanceOf(
+                            org.mavai.punit.api.spec.ConfigurationRefusedException.class);
                     assertThat(t.getMessage())
-                            .contains("INFEASIBLE VERIFICATION")
+                            .contains("CONFIGURATION REFUSED")
                             .contains(PreflightInvariantSubjects.USE_CASE_ID)
-                            .contains("Increase samples")
-                            .contains("intent = SMOKE");
+                            .contains(code);
                 });
     }
 

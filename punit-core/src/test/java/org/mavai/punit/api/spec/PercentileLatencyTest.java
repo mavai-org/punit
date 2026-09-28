@@ -52,6 +52,45 @@ class PercentileLatencyTest {
                 java.util.Map.of(), LatencyResult.empty(), List.of());
     }
 
+    /** A run whose passing samples took the given latencies, in milliseconds. */
+    private static SampleSummary<String> latencies(long... ms) {
+        var outcomes = new java.util.ArrayList<ServiceContractOutcome<?, String>>(ms.length);
+        for (long m : ms) {
+            outcomes.add(new ServiceContractOutcome<>(
+                    Outcome.ok("ok"), STUB_CONTRACT, List.of(), 0L, Duration.ofMillis(m)));
+        }
+        return new SampleSummary<>(
+                outcomes, Duration.ofMillis(1), ms.length, 0, 0L, 0,
+                LatencyResult.empty(), TerminationReason.COMPLETED, List.of(),
+                java.util.Map.of(), LatencyResult.empty(), List.of());
+    }
+
+    /** {@code count} latencies of {@code ms} each. */
+    private static long[] repeat(int count, long ms) {
+        long[] out = new long[count];
+        java.util.Arrays.fill(out, ms);
+        return out;
+    }
+
+    /** The latencies 1, 2, ..., n milliseconds. */
+    private static long[] ascending(int n) {
+        long[] out = new long[n];
+        for (int i = 0; i < n; i++) {
+            out[i] = i + 1;
+        }
+        return out;
+    }
+
+    private static long[] concat(long[] a, long[] b) {
+        long[] out = java.util.Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    private static LatencyStatistics baselineOf(long[] ms) {
+        return LatencyStatistics.of(LatencyResult.empty(), ms, ms.length);
+    }
+
     private static ServiceContractOutcome<Object, String> stubOutcome(Outcome<String> result) {
         return new ServiceContractOutcome<>(
                 result, STUB_CONTRACT,
@@ -103,37 +142,57 @@ class PercentileLatencyTest {
     // ── meeting() — contractual ────────────────────────────────────
 
     @Test
-    @DisplayName("meeting() returns PASS when every asserted percentile is under the ceiling")
+    @DisplayName("meeting() passes when enough latencies are within each ceiling (latency/compliance-exact-binomial)")
     void contractualPass() {
         LatencySpec spec = LatencySpec.builder().p95Millis(500).p99Millis(1000).build();
         PercentileLatency<String> criterion = PercentileLatency.meeting(spec, ThresholdOrigin.SLA);
 
         CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(100, 200, 450, 900, 1000), 1000, 0), Optional.empty()));
+                ctx(latencies(repeat(1000, 100)), Optional.empty()));
 
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
         assertThat(result.detail()).containsEntry("assertedPercentiles", "p95,p99");
         assertThat(result.detail()).containsEntry("origin", "SLA");
+        assertThat(result.detail()).containsEntry("source", "explicit");
         assertThat(result.detail()).containsEntry("threshold.p95", 500L);
         assertThat(result.detail()).containsEntry("threshold.p99", 1000L);
-        assertThat(result.detail()).containsEntry("observed.p95", 450L);
-        assertThat(result.detail()).containsEntry("observed.p99", 900L);
+        assertThat(result.detail()).containsEntry("withinThreshold.p95", 1000);
+        assertThat(result.detail()).containsEntry("decisionRule.p95", "latency/compliance-exact-binomial");
+        assertThat(result.detail()).containsEntry("verdict.p95", "PASS");
+        assertThat(result.detail()).containsEntry("observed.p95", 100L);
     }
 
     @Test
-    @DisplayName("meeting() returns FAIL with breach entries for exceeded percentiles")
+    @DisplayName("meeting() fails a ceiling whose within-threshold count falls short of y_min, naming it")
     void contractualFailWithBreaches() {
         LatencySpec spec = LatencySpec.builder().p95Millis(500).p99Millis(1000).build();
         PercentileLatency<String> criterion = PercentileLatency.meeting(spec, ThresholdOrigin.SLA);
 
+        // 900 of 1000 within 500 ms: far below y_min at p95; all within 1000 ms.
         CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(100, 200, 600, 1200, 1000), 1000, 0), Optional.empty()));
+                ctx(latencies(concat(repeat(900, 100), repeat(100, 600))), Optional.empty()));
 
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(result.detail()).containsEntry("verdict.p95", "FAIL");
+        assertThat(result.detail()).containsEntry("verdict.p99", "PASS");
         assertThat(result.detail()).containsEntry("breach.p95", 600L);
-        assertThat(result.detail()).containsEntry("breach.p99", 1200L);
+        assertThat(result.detail()).doesNotContainKey("breach.p99");
         assertThat(result.explanation()).contains("p95");
-        assertThat(result.explanation()).contains("p99");
+    }
+
+    @Test
+    @DisplayName("meeting() passes the advisory comparison but fails the rule when compliance is not demonstrated")
+    void contractualRawComparisonIsAdvisoryOnly() {
+        LatencySpec spec = LatencySpec.builder().p95Millis(500).build();
+        PercentileLatency<String> criterion = PercentileLatency.meeting(spec, ThresholdOrigin.SLA);
+
+        // 96 of 100 within 500 ms: the observed p95 is within, y_min is 99.
+        CriterionResult result = criterion.evaluate(
+                ctx(latencies(concat(repeat(96, 400), repeat(4, 700))), Optional.empty()));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(result.detail()).containsEntry("advisoryPercentilePass.p95", true);
+        assertThat(result.detail()).containsEntry("requiredWithin.p95", 99);
     }
 
     @Test
@@ -175,95 +234,125 @@ class PercentileLatencyTest {
     }
 
     @Test
-    @DisplayName("empirical() with baseline produces PASS / FAIL per observed vs baseline")
+    @DisplayName("empirical() decides each percentile by latency/precedence against the baseline")
     void empiricalWithBaseline() {
         PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95, PercentileKey.P99);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(observed(100, 200, 500, 1000, 2000), 2000);
+        LatencyStatistics baseline = baselineOf(ascending(2000));
 
         CriterionResult pass = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 950, 1000), 1000, 0), Optional.of(baseline)));
+                ctx(latencies(ascending(1000)), Optional.of(baseline)));
         CriterionResult fail = criterion.evaluate(
-                ctx(summary(observed(80, 180, 1500, 3000, 1000), 1000, 0), Optional.of(baseline)));
+                ctx(latencies(repeat(1000, 3000)), Optional.of(baseline)));
 
         assertThat(pass.verdict()).isEqualTo(Verdict.PASS);
         assertThat(fail.verdict()).isEqualTo(Verdict.FAIL);
         assertThat(pass.detail()).containsEntry("origin", "EMPIRICAL");
+        assertThat(pass.detail()).containsEntry("source", "baseline-derived");
         assertThat(pass.detail()).containsEntry("baselineSampleCount", 2000);
-        // Threshold derived via the binomial order-statistic bound
-        // sits above the baseline point estimate, so the FAIL test
-        // needs observed values clearly above the upper bound, not
-        // merely above the baseline percentile.
-        assertThat(fail.detail()).containsEntry("breach.p95", 1500L);
+        assertThat(pass.detail()).containsEntry("decisionRule.p95", "latency/precedence");
+        assertThat(pass.detail()).containsKey("threshold.p95.rank");
+        assertThat(fail.detail()).containsEntry("breach.p95", 3000L);
         assertThat(fail.detail()).containsEntry("breach.p99", 3000L);
     }
 
     // ── saturation (companion §12.4.2 / §12.5.2.1) ─────────────────
 
     @Test
-    @DisplayName("VERIFICATION + saturated baseline → INCONCLUSIVE with saturated.<p>=true detail")
+    @DisplayName("no baseline rank achieves alpha → INCONCLUSIVE with saturated.<p>=true and no threshold")
     void verificationOnSaturationIsInconclusive() {
-        // P99 with baseline n=100 at α=0.05 saturates: qbinom(0.95, 100, 0.99) = 100, k_raw = 101 > 100.
-        PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P99);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(
-                observed(100, 200, 500, 1000, 100), 100);
+        // p95 against a baseline of 100 latencies for a test of 15: the
+        // test's p95 is its maximum, and breach(100) = 15/115 > 0.05.
+        PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95);
 
         CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 900, 50), 50, 0), Optional.of(baseline),
+                ctx(latencies(ascending(15)), Optional.of(baselineOf(ascending(100))),
                         DEFAULT_IDENTITY, Optional.of(DEFAULT_IDENTITY), TestIntent.VERIFICATION));
 
         assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
-        assertThat(result.detail()).containsEntry("saturated.p99", true);
-        assertThat(result.explanation()).contains("no finite-sample upper bound")
-                .contains("§12.5.2.1");
+        assertThat(result.detail()).containsEntry("saturated.p95", true);
+        assertThat(result.detail()).doesNotContainKey("threshold.p95");
+        assertThat(result.explanation()).contains("p95").contains("undecided");
     }
 
     @Test
-    @DisplayName("SMOKE + saturated baseline → advisory PASS/FAIL with saturated.<p>=true detail")
-    void smokeOnSaturationIsAdvisory() {
-        PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P99);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(
-                observed(100, 200, 500, 1000, 100), 100);
+    @DisplayName("saturation is INCONCLUSIVE under SMOKE too — no rank is clamped to manufacture a threshold")
+    void smokeOnSaturationIsInconclusive() {
+        PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95);
 
-        // Under SMOKE, the advisory threshold t_{(n)} is used; observed under it -> PASS.
         CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 900, 50), 50, 0), Optional.of(baseline),
+                ctx(latencies(ascending(15)), Optional.of(baselineOf(ascending(100))),
                         DEFAULT_IDENTITY, Optional.of(DEFAULT_IDENTITY), TestIntent.SMOKE));
 
-        assertThat(result.verdict()).isEqualTo(Verdict.PASS);
-        assertThat(result.detail()).containsEntry("saturated.p99", true);
+        assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
+        assertThat(result.detail()).containsEntry("saturated.p95", true);
+        assertThat(result.detail()).containsEntry("indicative.p95", true);
+    }
+
+    @Test
+    @DisplayName("below the non-degeneracy minimum under VERIFICATION → INCONCLUSIVE; the latencies are those passing")
+    void belowNonDegeneracyMinimumIsInconclusive() {
+        PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P99);
+
+        CriterionResult result = criterion.evaluate(
+                ctx(latencies(ascending(99)), Optional.of(baselineOf(ascending(2000)))));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
+        assertThat(result.detail()).containsEntry("successfulSamples", 99);
     }
 
     // ── sample-size constraint (test_N ≤ baseline_N) ───────────────
 
     @Test
-    @DisplayName("empirical() with test sample count > baseline returns INCONCLUSIVE")
-    void empiricalRejectsTestLargerThanBaseline() {
+    @DisplayName("a test planned larger than its latency baseline run is refused before the run")
+    void empiricalRefusesTestLargerThanBaseline() {
         PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(observed(100, 200, 500, 1000, 2000), 100);
+        LatencyStatistics baseline = new LatencyStatistics(
+                LatencyResult.empty(), ascending(90), 90, 100);
 
-        // 1000 test samples > 100 baseline samples
-        CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 950, 1000), 1000, 0), Optional.of(baseline)));
-
-        assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
-        assertThat(result.explanation())
-                .contains("test sample size (1000)")
-                .contains("baseline sample size (100)")
-                .contains("at least as rigorous");
-        assertThat(result.detail()).containsEntry("testSampleCount", 1000);
-        assertThat(result.detail()).containsEntry("baselineSampleCount", 100);
+        assertThat(criterion.configurationRefusals(check(101, TestIntent.SMOKE, Optional.of(baseline))))
+                .extracting(ConfigurationRefusal::code)
+                .containsExactly(org.mavai.punit.statistics.ConfigurationError.TEST_LARGER_THAN_BASELINE);
+        // The successful-latency counts are never compared: 100 ≤ N_b.
+        assertThat(criterion.configurationRefusals(check(100, TestIntent.VERIFICATION, Optional.of(baseline))))
+                .isEmpty();
     }
 
     @Test
-    @DisplayName("empirical() with test sample count ≤ baseline proceeds to verdict")
+    @DisplayName("an explicit ceiling no planned sample count can demonstrate is refused under VERIFICATION only")
+    void explicitCeilingInfeasibleUnderVerification() {
+        PercentileLatency<String> criterion = PercentileLatency.meeting(
+                LatencySpec.builder().p95Millis(500).build(), ThresholdOrigin.SLA);
+
+        assertThat(criterion.configurationRefusals(check(58, TestIntent.VERIFICATION, Optional.empty())))
+                .extracting(ConfigurationRefusal::code)
+                .containsExactly(org.mavai.punit.statistics.ConfigurationError.COMPLIANCE_INFEASIBLE);
+        assertThat(criterion.configurationRefusals(check(59, TestIntent.VERIFICATION, Optional.empty())))
+                .isEmpty();
+        assertThat(criterion.configurationRefusals(check(58, TestIntent.SMOKE, Optional.empty())))
+                .isEmpty();
+    }
+
+    private static ConfigurationCheck<LatencyStatistics> check(
+            int planned, TestIntent intent, Optional<LatencyStatistics> baseline) {
+        return new ConfigurationCheck<>() {
+            @Override public int plannedSamples() { return planned; }
+            @Override public TestIntent intent() { return intent; }
+            @Override public java.util.Map<String, org.mavai.punit.api.criterion.CriterionPosture>
+                    criterionPostures() { return java.util.Map.of(); }
+            @Override public Optional<LatencyStatistics> baseline() { return baseline; }
+        };
+    }
+
+    @Test
+    @DisplayName("empirical() with a test as large as the baseline proceeds to a verdict")
     void empiricalAcceptsSmallerOrEqualTestSampleCount() {
         PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(observed(100, 200, 500, 1000, 2000), 1000);
+        LatencyStatistics baseline = baselineOf(ascending(1000));
 
         CriterionResult equal = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 950, 1000), 1000, 0), Optional.of(baseline)));
+                ctx(latencies(ascending(1000)), Optional.of(baseline)));
         CriterionResult smaller = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 950, 500), 500, 0), Optional.of(baseline)));
+                ctx(latencies(ascending(500)), Optional.of(baseline)));
 
         assertThat(equal.verdict()).isEqualTo(Verdict.PASS);
         assertThat(smaller.verdict()).isEqualTo(Verdict.PASS);
@@ -293,24 +382,22 @@ class PercentileLatencyTest {
     @DisplayName("empirical() with matching test/baseline identity proceeds to verdict")
     void empiricalAcceptsMatchingIdentity() {
         PercentileLatency<String> criterion = PercentileLatency.empirical(PercentileKey.P95);
-        LatencyStatistics baseline = LatencyStatistics.fromPercentiles(observed(100, 200, 500, 1000, 1000), 1000);
 
         CriterionResult result = criterion.evaluate(ctx(
-                summary(observed(80, 180, 480, 950, 200), 200, 0), Optional.of(baseline),
+                latencies(ascending(200)), Optional.of(baselineOf(ascending(1000))),
                 "sha256:matching", Optional.of("sha256:matching")));
 
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
     }
 
     @Test
-    @DisplayName("contractual meeting() does not impose sample-size constraint — no baseline involved")
+    @DisplayName("contractual meeting() has no baseline and no upper test size")
     void contractualLatencyIgnoresSampleSize() {
         PercentileLatency<String> criterion = PercentileLatency.meeting(
                 LatencySpec.builder().p95Millis(500).build(), ThresholdOrigin.SLA);
 
-        // Test has 10000 samples; no baseline, so the constraint doesn't apply.
         CriterionResult result = criterion.evaluate(
-                ctx(summary(observed(80, 180, 480, 950, 10000), 10000, 0), Optional.empty()));
+                ctx(latencies(repeat(10000, 100)), Optional.empty()));
 
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
     }
