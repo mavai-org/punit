@@ -386,12 +386,14 @@ empirical().<O>passRate().satisfies("...", ...);
 ```
 
 - **`meeting().passRate(τ)`** — declared threshold, NORMATIVE origin
-  (SLA / SLO / Policy). With VERIFICATION intent the Feasibility
-  Gate enforces sample-size adequacy.
+  (SLA / SLO / Policy), decided by `compliance/exact-binomial`. With
+  VERIFICATION intent a requirement no count of the planned size can
+  demonstrate is refused (`COMPLIANCE_INFEASIBLE`).
 - **`empirical().passRate()`** — closest-match baseline lookup;
-  threshold derived at evaluation time from the resolved baseline's
-  pass rate, via the one-sided Wilson lower bound at the test sample
-  size (Statistical Companion §3.4 / §4.3.2). The baseline is
+  decided at evaluation time against the resolved baseline's counts
+  by Fisher's exact test, `regression/fisher` (Statistical Companion
+  1.5.0); a test larger than its baseline is refused
+  (`TEST_LARGER_THAN_BASELINE`). The baseline is
   supplied at the test call site via
   `PUnit.testing(baselineSupplier)` (see
   [The empirical pair pattern](#the-empirical-pair-pattern)).
@@ -544,7 +546,7 @@ prefix and the ArchUnit regression rules.
 | `org.mavai.punit.api.covariate`                                                       | Covariate (interface) and built-in covariate categories                                                                                       | yes                                                           |
 | `org.mavai.punit.runtime`                                                                      | `PUnit` entry point only — emitters live under `internal.runtime`                                                                             | yes — for `PUnit` only                                        |
 | `org.mavai.punit.verdict`                                                                      | Verdict types, sinks, RunMetadata, `TokenMode` enum                                                                                            | yes — for sink registration                                   |
-| `org.mavai.punit.statistics`                                                                   | Wilson, percentile, threshold derivation, feasibility evaluation                                                                              | yes — but rarely needed; the criteria already wrap statistics |
+| `org.mavai.punit.statistics`                                                                   | Decision rules (compliance, regression, latency), sizing, exact boundary, Wilson (descriptive), feasibility evaluation                        | yes — but rarely needed; the criteria already wrap statistics |
 | `org.mavai.punit.internal.engine.*` (criteria, baseline, explore, optimize, covariate, spec, …) | Engine internals and concrete criterion impls                                                                                                 | **no** — internal                                             |
 | `org.mavai.punit.internal.reporting`                                                           | Internal rendering helpers                                                                                                                    | **no** — internal                                             |
 | `org.mavai.punit.internal.runtime`                                                             | Emitters (`BaselineEmitter`, `ExploreEmitter`, `OptimizeEmitter`), resolvers, composer — driven by `PUnit`                                    | **no** — internal                                             |
@@ -643,8 +645,8 @@ This rule is the *enforcement* (in punit) of the family ontology's
 same Service Contract as the test suite, but against a live system,
 on a schedule, without a JUnit / cargo-test harness.
 
-The architectural consequence is that **Verdict construction, Wilson
-statistics, and Verdict XML emission must be core concerns, free of
+The architectural consequence is that **Verdict construction, the
+decision rules, and Verdict XML emission must be core concerns, free of
 test-harness dependencies**. The Sentinel reaches the engine through
 `PUnit` / `runtime`, not through any JUnit extension. Enforced by:
 
@@ -710,7 +712,9 @@ punit serialises every Verdict to XML using the mavai.org family's
 feotest, mavai.org sentinels and dashboards all read and write this
 format):
 
-- **XSD schema:** `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.0.xsd`.
+- **XSD schema:** punit writes verdict-1.7 records;
+  `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.7.xsd`
+  (earlier revisions are bundled beside it).
 - **Namespace:** `http://mavai.org/verdict/1.0`.
 - **Root element:** `<verdict-record>`.
 
@@ -725,10 +729,12 @@ When modifying the XML format:
 - Schema semantics are shared across the mavai.org framework
   family — coordinate cross-framework before changing punit's
   copy in isolation.
-- `<statistics>` carries `wilson-lower` only — the one-sided Wilson
-  lower bound at the verdict's `confidence-level`. The upper bound
-  carries no operational meaning under a left-tailed test and is
-  not emitted. Round-trip and schema-validation tests live in
+- The verdict and every criterion row carry the versioned
+  `decision-rule`; the root carries `methodology-version`.
+  `<statistics>` carries `wilson-lower` as a descriptive figure (it
+  decides nothing) and, for a regression decision, the size at the
+  assumed common rate, design alternative rate, design power and
+  resolved power. Round-trip and schema-validation tests live in
   `punit-report`.
 
 ---

@@ -291,8 +291,8 @@ ArchUnit-style architecture test).
     - **Family invariant — Statistical isolation.** A criterion
       may *call* statistical machinery; it must not contain
       statistical *arithmetic*. PassRate delegates to
-      `BinomialProportionEstimator` and `ThresholdDeriver`. If
-      ever tempted to inline a Wilson here, stop — the calculation
+      `ComplianceRule` and `RegressionRule`. If ever tempted to
+      inline a tail probability here, stop — the calculation
       belongs in `org.mavai.punit.statistics`.
 
 - concept: Threshold (latency)
@@ -337,10 +337,10 @@ ArchUnit-style architecture test).
   java_type: BinomialProportionEstimator (two-sided + one-sided)
   package: org.mavai.punit.statistics
   role_notes: |
-    Both bounds live in the estimator. The verdict path uses
-    only the one-sided lower bound (cross-framework invariant —
-    one-sided Wilson in the verdict path). The two-sided form
-    is preserved for SC01 (catalog) + diagnostics.
+    Descriptive only since methodology 1.5.0: the Wilson interval
+    is reported beside a verdict and decides nothing. Decisions
+    belong to the decision rules (`ComplianceRule`,
+    `RegressionRule`, `LatencyRules`).
   gotchas:
     - Verdict XML emits `wilson-lower` only; the legacy
       `ci-lower`/`ci-upper` pair was retired with the 0.7.x cleanup.
@@ -358,8 +358,10 @@ ArchUnit-style architecture test).
   java_type: nearest-rank computation in LatencyDistribution
   package: org.mavai.punit.statistics
   role_notes: |
-    Non-parametric, distribution-free. Latency thresholds derive
-    from the binomial order-statistic upper confidence bound.
+    Non-parametric, distribution-free. Baseline-derived latency
+    constraints are decided by the precedence rule
+    (`latency/precedence`); explicit ceilings by counting
+    (`latency/compliance-exact-binomial`).
 ```
 
 ---
@@ -482,7 +484,8 @@ ArchUnit-style architecture test).
   package: org.mavai.punit.report
   role_notes: |
     `punit-report` module. XSD shipped at
-    `punit-report/src/main/resources/.../verdict-1.0.xsd`. Must
+    `punit-report/src/main/resources/.../verdict-1.7.xsd` (earlier
+    revisions bundled beside it). Must
     diff clean against the cross-framework canonical XSD shared
     with feotest and mavai.org sentinels / dashboards.
   gotchas:
@@ -656,11 +659,14 @@ names the test for each.
     test-class and test-method names, string literals. Enforced by
     `RequirementCodeIsolationTest`.
 
-- invariant: One-sided Wilson in the verdict path
+- invariant: Exact decision rules in the verdict path
   punit_enforcement: |
-    `BinomialProportionEstimator.lowerBound(...)` is the verdict
-    path's entry. Two-sided remains for diagnostic uses. The XSD
-    emits `wilson-lower` only on `<statistics>`.
+    Every criterion is decided by a versioned rule from
+    `org.mavai.punit.statistics` (`compliance/exact-binomial`,
+    `regression/fisher`, `latency/precedence`,
+    `latency/compliance-exact-binomial`) under the exact-boundary
+    convention. The Wilson interval is descriptive; the XSD emits
+    `wilson-lower` only on `<statistics>`.
 
 - cross_framework_invariant: Latency Population purity
   punit_enforcement: |

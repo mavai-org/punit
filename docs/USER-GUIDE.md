@@ -91,9 +91,10 @@ It provides:
 3. **Experiments** — measure a baseline, explore configurations, or
    optimize toward a target. The same service contract definition powers
    all four.
-4. **Statistical rigour** — Wilson-score confidence intervals,
-   binomial order-statistic upper bounds for latency thresholds,
-   power analysis for sample sizing, qualified verdicts.
+4. **Statistical rigour** — exact decision rules (an exact binomial
+   test against a declared requirement, Fisher's exact test against a
+   baseline, a distribution-free precedence rule for latency), exact
+   sizing and power, qualified verdicts.
 
 The mathematical foundations live in the
 [Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf);
@@ -157,8 +158,9 @@ void apiReturnsJson() {
 ```
 
 That is a complete probabilistic test. It runs the call 100 times over
-`PROMPTS`, counts how many parse as JSON, and applies the Wilson-95%
-lower bound to the observed rate; it passes if the bound clears 0.95.
+`PROMPTS`, counts how many parse as JSON, and applies an exact one-sided
+binomial test at alpha 0.05: it passes if the count reaches `k_min`, the
+smallest count that demonstrates a true rate above 0.95.
 One artefact, no separate class, none of the "contract" vocabulary yet —
 just **the call, the bar, and the sample size**. `Contract.inline()`
 reads top-to-bottom: the service call (`invoking`), the target
@@ -228,13 +230,25 @@ public class JsonResponseTest {
 ```
 
 This test runs the service contract 100 times, counts how many return valid
-JSON, and applies the Wilson-95% lower bound to the observed pass
-rate. It passes if the bound clears the 0.95 threshold. The
+JSON, and passes if the count reaches `k_min` — the smallest count that
+demonstrates the 0.95 requirement at the default confidence (99 of 100
+here). The
 `contractRef` declared on the contract surfaces in the verdict for
 audit traceability. This factor-less `testing(sampling)` form is for
 service contracts whose behaviour does not vary with configuration
 factors; when factors are in play, pass the factor instance explicitly
 via `testing(sampling, factors)`.
+
+> **Inputs: keep them in their natural order.** Whether passed to
+> `Sampling.of(...)` or to the builder's `.inputs(...)`, the inputs are
+> cycled through in the order given, and the same list serves every run
+> of the contract — a measurement and each test alike. Do not sort the
+> inputs by difficulty, length, topic or any other characteristic. A run
+> that samples fewer times than there are inputs, or that stops early,
+> sees only a leading slice of the list; a sorted list makes that slice
+> systematically easier or harder than the whole, and a test's verdict
+> then reflects the ordering rather than the service. Shuffle once, or
+> keep the order the inputs were collected in.
 
 That is the whole pattern. The rest of this guide unpacks it.
 
@@ -292,8 +306,8 @@ class MavaiBindings {
 
 That is the whole newcomer path: the run sizes itself to the smallest
 sample count the declared threshold can support, samples the binding
-over the inputs, and judges the criterion with the same Wilson
-machinery as every other punit test.
+over the inputs, and judges the criterion with the same exact decision
+rule as every other punit test.
 
 **Richer contracts.** The same file grows with the claim: named
 transforms (`transforms: {basket: json}`) and per-check subjects
@@ -642,19 +656,26 @@ factory that opens its declaration on the contract:
 
 - **Contractual** (`meeting().passRate(...)`, `meeting().atMost(...)`)
   — a fixed value declared by an SLA, SLO, or policy. No baseline is
-  consulted; PUnit passes the run iff its own Wilson-95% lower bound
-  clears the declared threshold — the sample must provide
-  confidence-grade evidence for the commitment, not merely a point
-  estimate that grazes it.
+  consulted; the criterion is decided by the exact one-sided binomial
+  test (`compliance/exact-binomial`): it passes iff the success count
+  reaches `k_min`, the smallest count whose probability under a true
+  rate at the requirement is at most alpha. The sample must provide
+  evidence for the commitment, not merely a point estimate that grazes
+  it; the Clopper–Pearson lower bound is reported beside the verdict
+  and decides nothing.
   ```java
   return meeting().passRate(0.99).contractRef(SLA, "Acme SLA v3 §2.1")
           .satisfies(...);
   ```
 - **Empirical** (`empirical().passRate()`, `empirical().atMost(...)`)
-  — derived at runtime from a recorded baseline file. PUnit derives
-  the threshold as the Wilson-95% lower bound of the baseline rate at
-  the test's sample size, and passes iff the raw observed success
-  count meets the derivation's integer cutoff `c = ⌈n·p*⌉`.
+  — derived at runtime from a recorded baseline file. The criterion
+  is decided by Fisher's exact test of the test's count against the
+  baseline's (`regression/fisher`): it passes iff the success count
+  reaches the cutoff `c`, the smallest count the one-sided test does
+  not reject at alpha. The rate `c / n` is displayed, for reading
+  only. A test may not be larger than its baseline: a test planned
+  with more samples than the baseline run is refused
+  (`TEST_LARGER_THAN_BASELINE`) before any sample runs.
   ```java
   return empirical().<O>passRate().satisfies(...);
   ```
@@ -672,22 +693,38 @@ for *compliance* testing (does the system meet its mandate?).
 > rate below 0.935 about half the time even when nothing has
 > changed. Result: a coin-flip false-fail rate. Use
 > `empirical().passRate()` — it resolves the baseline at runtime,
-> applies the Wilson lower bound at the configured confidence,
-> and gives the test the statistical buffer the hardcoded approach
-> lacks.
+> compares the test with it by Fisher's exact test, and accounts
+> for the uncertainty on both sides, which the hardcoded approach
+> ignores.
 
 ### Test intent
 
 Two intents shape the framework's tolerance for marginal sample sizes:
 
-- **`TestIntent.VERIFICATION`** (default) — an evidential claim. PUnit
-  requires the sample size to be large enough to verify the threshold
-  at 95% confidence. If too small, PUnit *rejects the configuration*
-  before any samples run, with a diagnostic that points at the
-  feasibility gate.
-- **`TestIntent.SMOKE`** — a lightweight early-warning check. PUnit
-  warns about an undersized sample but proceeds. The verdict is
-  labelled SMOKE, making clear it is not a full verification.
+- **`TestIntent.VERIFICATION`** (default) — an evidential claim. A
+  declared requirement must be demonstrable at the planned size: if no
+  count of that many samples could pass (0.95 at alpha 0.05 needs at
+  least 59), the configuration is *refused* before any sample runs
+  (`COMPLIANCE_INFEASIBLE`).
+- **`TestIntent.SMOKE`** — a lightweight early-warning check. An
+  undersized sample is allowed; the verdict is labelled SMOKE, and a
+  test too small to demonstrate its requirement cannot pass.
+
+A configuration with any invalid part is refused whole: every
+configuration error is reported together, in a fixed order
+(`TEST_LARGER_THAN_BASELINE`, then `COMPLIANCE_INFEASIBLE`), and a run
+never proceeds half-valid. `assertPasses()` throws
+`ConfigurationRefusedException`, which lists the codes, and the refused
+test still leaves a verdict record carrying the codes and no verdict
+value:
+
+```
+CONFIGURATION REFUSED
+
+The test was refused before any sample ran:
+  • COMPLIANCE_INFEASIBLE — criterion 'pass-rate': no count of 30 samples can
+    demonstrate 0.95 at alpha 0.05 (feasibility minimum 59)
+```
 
 ```java
 PUnit.testing(sampling, factors)
@@ -830,17 +867,24 @@ override what the fixture carries.
 - **FAIL** — throws `AssertionFailedError`. The service contract degraded or
   the SLA was breached.
 - **INCONCLUSIVE** — throws `TestAbortedException` (skipped) when
-  the configuration cannot be evaluated (no baseline yet, baseline
-  has been rejected as misaligned). FAIL is the right outcome only
-  when the data shows degradation; INCONCLUSIVE is used when the
-  framework cannot draw any conclusion at all.
+  the data cannot decide (no baseline yet, baseline rejected as
+  misaligned, too few successful latencies for a latency constraint,
+  or no baseline rank for the test's size — a *saturated* latency
+  constraint). FAIL is the right outcome only when the data shows
+  degradation or non-compliance.
+
+The test verdict composes the functional dimension (the pass-rate
+criteria) and the latency dimension by one structural rule: FAIL if
+either fails, otherwise INCONCLUSIVE if either is inconclusive,
+otherwise PASS. The verdict names the criteria and latency constraints
+that decided a FAIL or an INCONCLUSIVE.
 
 A typical FAIL message:
 
 ```
 FAIL
-  [REQUIRED] pass-rate → FAIL: observed=0.7800 (Wilson-95% lower=0.6640)
-                              vs threshold=0.9500 (origin=SLA) over 50 samples
+  [REQUIRED] bernoulli-pass-rate → FAIL: pass-rate: successes=78 of 80 vs k_min=80
+      (compliance/exact-binomial, requirement=0.9500, alpha=0.05, origin=SLA) → FAIL
 
   Postcondition failures:
     - "All actions valid" → 7 failures
@@ -851,8 +895,8 @@ FAIL
 ```
 
 The verdict carries everything a developer needs to triage: the
-criterion that failed, the observed rate, the Wilson bound, the
-threshold and its provenance, the most-frequent postcondition
+criterion that failed, the count against the rule's cutoff, the
+decision rule and its alpha, the requirement and its provenance, the most-frequent postcondition
 failures with two example inputs each, and the contract reference.
 
 ### Early termination
@@ -867,11 +911,12 @@ already decided:
 - **Failure inevitable** — even if every remaining sample passes,
   the observed rate cannot reach the threshold. The run stops and
   the verdict is FAIL.
-- **Success guaranteed** — enough samples have already passed that
-  the threshold holds regardless of remaining outcomes, *and* the
-  run has cleared a statistical-validity floor (the minimum sample
-  count for the normal approximation to be meaningful at the
-  threshold). The run stops and the verdict is PASS.
+- **Success guaranteed** — `k_min` samples have already passed, so
+  the criterion passes regardless of the remaining outcomes. The run
+  stops and the verdict is PASS. When the contract also declares a
+  latency constraint, the run does not stop on a guaranteed success:
+  latency is decided after the run on the successful latencies it
+  produced, and stopping early would starve that decision.
 
 The verdict matches what would have come back from running every
 declared sample — early termination is lossless. The
@@ -886,17 +931,10 @@ declared sample. Measure / explore / optimize specs likewise run to
 completion — they have no threshold to short-circuit on.
 
 To opt a contractual test out of early termination (e.g. when the
-full sample count is wanted for a follow-on baseline emission, a
-complete latency distribution, or exhaustive failure exemplars):
-
-```java
-PUnit.testing(sampling, factors)
-        .disableEarlyTermination()
-        .assertPasses();
-```
-
-The verdict is unchanged — it depends only on the final pass
-count. The `terminationReason` becomes `COMPLETED`.
+full sample count is wanted for exhaustive failure exemplars), call
+`disableEarlyTermination()` on the spec builder
+(`ProbabilisticTest.testing(...)`). The verdict is unchanged; the
+`terminationReason` becomes `COMPLETED`.
 
 This builder method is unrelated to the optimize loop's
 `OptimizeBuilder.disableEarlyTermination()`, which controls a
@@ -918,27 +956,41 @@ Or via system property (`-Dpunit.stats.transparent=true`) or env var
 the JUnit message:
 
 ```
-═ STATISTICAL ANALYSIS FOR: shopping-basket ═════════════════════ PUnit ═
+STATISTICAL ANALYSIS — test verdict: FAIL
 
-  HYPOTHESIS TEST
-    H₀ (null):             True success rate π ≤ 0.8500
-    H₁ (alternative):      True success rate π > 0.8500
-    Test type:             One-sided binomial proportion test
+  shopping-basket
 
-  OBSERVED DATA
-    Sample size (n):       100
-    Successes (k):         87
-    Observed rate (p̂):     0.8700
+  Test verdict (methodology 1.5.0)
+      Functional:           PASS
+      Latency:              FAIL
+      Test:                 FAIL
+      Decided by:           latency p95
+      False degradation:    at most 0.1000 (sum of alpha, regression decisions)
 
-  STATISTICAL INFERENCE
-    Confidence interval:   Wilson 95% [0.788, 0.929]
-    Lower bound:           0.788 ≥ 0.8500? No
+  [REQUIRED] bernoulli-pass-rate → PASS
+    pass-rate
+      H₀ (null):            baseline and test share one success probability
+      H₁ (alternative):     the test's success probability is lower
+      Decision rule:        regression/fisher v1, alpha 0.05
+      Observed:             K = 190 of n = 200 (0.9500)
+      Baseline:             K_b = 380 of n_b = 400
+      Cutoff:               PASS iff K ≥ c = 183 (displayed rate 0.9150)
+      Size at p̂_b:         0.0336 (at the assumed common rate; not a property of the run)
+      Detectable drop:      0.0610 with 80% power (inverts the design power)
 
-  VERDICT
-    Result:                PASS (lower bound clears threshold)
-
-═════════════════════════════════════════════════════════════════════════
+  [REQUIRED] percentile-latency → FAIL
+      Successful:           190 latencies
+    p95 → FAIL
+      Decision rule:        latency/precedence v1, alpha 0.05
+      Threshold:            12 ms (baseline rank 372)
+      Observed:             13 ms
 ```
+
+Each criterion names its decision rule and alpha, the hypotheses, the
+count against the rule's cutoff, and the calibration statement that
+says what alpha bounds. The envelope lines sum the alphas by direction:
+the chance of declaring compliance falsely (compliance decisions) and
+of signalling a degradation that is not there (regression decisions).
 
 Use this when the statistical reasoning behind a passing verdict has
 to be *shown*, not just inferred from the absence of a failure.
@@ -997,7 +1049,7 @@ in the project's `gradle.properties` for a Gradle-driven run.
 
 ### Normative judgement at experiment time
 
-When the measured contract declares normative criteria (`meeting().passRate(...)`), the measure experiment judges each one against its stipulated threshold using the run's own samples: the criterion is **met** when the Wilson one-sided lower confidence bound of its observed rate — at the run's sample count, at the criterion's confidence — clears the stipulation, **failed** when it does not, and **unsupportable** when the run's sample count cannot support the stipulated threshold at that confidence even with a perfect observation (the output states the feasible minimum sample count). Empirical criteria are never judged at experiment time — their bar does not exist until a baseline supplies it.
+When the measured contract declares normative criteria (`meeting().passRate(...)`), the measure experiment judges each one against its stipulated threshold using the run's own samples: the criterion is **met** when the run's count reaches `k_min` of the exact one-sided binomial test at the criterion's confidence (the Clopper–Pearson lower bound is reported beside it), **failed** when it does not, and **unsupportable** when the run's sample count cannot support the stipulated threshold at that confidence even with a perfect observation (the output states the feasible minimum sample count). Empirical criteria are never judged at experiment time — their bar does not exist until a baseline supplies it.
 
 The judgement is rendered in the experiment's console output alongside the measured characterisation, and recorded per criterion in the baseline file as an additive `normativeJudgement` marker (state, stipulated threshold, confidence) inside the criterion's statistics row. Baseline resolution and threshold derivation ignore the marker entirely — it is a durable record for later readers of the file. The judgement states a relation to the stipulation, nothing more: a failed judgement at measure time can be entirely expected — an aspirational bar measured mid-development, a fresh configuration characterised before tuning.
 
@@ -1014,12 +1066,11 @@ void measurePaymentGatewayGated() {
 
 ### Asymmetric sampling
 
-The standard pattern measures with high statistical power and tests
-with lower:
+The standard pattern measures with many samples and tests with fewer:
 
 ```java
-private static final int BASELINE_SAMPLES     = 1000;
-private static final int VERIFICATION_SAMPLES = 50;
+private static final int BASELINE_SAMPLES = 1000;
+private static final int TEST_SAMPLES     = 200;
 
 @Experiment
 void baseline() {
@@ -1030,7 +1081,7 @@ void baseline() {
 
 @ProbabilisticTest
 void shouldNotRegress() {
-    PUnit.testing(ShoppingBasketServiceContract.sampling(INSTRUCTIONS, VERIFICATION_SAMPLES),
+    PUnit.testing(ShoppingBasketServiceContract.sampling(INSTRUCTIONS, TEST_SAMPLES),
                   LlmTuning.DEFAULT)
             .assertPasses();
 }
@@ -1039,14 +1090,23 @@ void shouldNotRegress() {
 (The empirical pass-rate criterion lives on
 `ShoppingBasketServiceContract.criteria()` as
 `empirical().<BasketTranslation>passRate().satisfies(...)`. The
-verification test simply runs the contract and asserts.)
+test simply runs the contract and asserts.)
 
-The asymmetry is intentional and pedagogic. The baseline is captured
-once — paying the cost of high precision so the recorded rate is a
-tight estimate of the true rate. The verification test then runs
-cheaply and frequently against that baseline. Equal sample counts on
-both sides would flatten this distinction and burn budget that
-calibration deserves more than routine verification does.
+The asymmetry is intentional. The baseline is captured once, and its
+size bounds every test that consumes it: a test may be as large as its
+baseline, never larger (`TEST_LARGER_THAN_BASELINE`). The test then
+runs more cheaply and more often against it. Fisher's exact test
+accounts for the uncertainty of both counts, so a larger baseline buys
+a sharper comparison at every test size.
+
+To size an empirical test from the risk you accept, declare it on the
+criterion: `.tolerating(rate)` (the worst true rate you accept, as an
+absolute bound) or `.detectingMde(drop)` (a drop off the baseline
+rate), each with `.atPower(power)`. The design alternative rate is the
+tolerated rate, or the baseline rate minus the drop; the framework
+computes the smallest test size, up to the baseline's, whose power
+against that alternative reaches and holds the target, and refuses
+the configuration when none does.
 
 ### Baseline expiration
 
@@ -1262,10 +1322,13 @@ Minimum sample sizes for non-degenerate percentile estimates:
 | p95        | 20                         |
 | p99        | 100                        |
 
-Below these, the percentile collapses to the maximum and the
-framework will not report a number — it raises a feasibility error
-under VERIFICATION intent and marks the result as **indicative**
-under SMOKE intent.
+These minimums, and the existence of a baseline rank for the test's
+size (below), are checked before the run as **planning warnings**,
+from the expected number of successful samples. After the run, a
+baseline-derived constraint with too few successful latencies is
+INCONCLUSIVE under VERIFICATION intent and **indicative** under SMOKE
+intent; the population is always the samples that passed every
+functional criterion.
 
 ### Asserting latency: contractual thresholds
 
@@ -1288,8 +1351,15 @@ The test site simply runs the contract:
 PUnit.testing(sampling, factors).assertPasses();
 ```
 
-A constraint passes when `Q(p_j) ≤ τ_j` for every declared percentile;
-the overall latency assertion passes when every constraint passes.
+An explicit ceiling is a requirement, decided by counting
+(`latency/compliance-exact-binomial`): with `Y` the number of
+successful latencies at or below `τ_j`, the constraint passes iff `Y`
+reaches the exact binomial test's `y_min` at `p_j` — the evidence that
+more than a fraction `p_j` of latencies meet the ceiling. With too few
+latencies for any count to pass (59 for p95 at alpha 0.05), the
+constraint is INCONCLUSIVE. The raw comparison `Q(p_j) ≤ τ_j` is still
+shown, labelled advisory; it decides nothing. The overall latency
+assertion passes when every constraint passes.
 Declare only the percentiles you care about — others are not asserted.
 Explicitly supplied durations must be monotonically non-decreasing
 across `P50 → P90 → P95 → P99`; the framework rejects misconfigured
@@ -1297,52 +1367,44 @@ contracts up front.
 
 ### Asserting latency: baseline-derived thresholds
 
-When the threshold should track the service contract's measured behaviour,
-PUnit derives it from a recorded baseline using the **binomial
-order-statistic upper confidence bound** on the baseline quantile:
+When the threshold should track the service contract's measured
+behaviour, PUnit decides the constraint by the **precedence rule**
+(`latency/precedence`), after the run, for the test's own count. With
+`n_t` successful test latencies, the test's rank is the nearest rank
+`r = ⌈p_j · n_t⌉`. The threshold is the baseline latency at rank `k`,
+the smallest rank for which an undegraded service's `r`-th test latency
+would exceed the `k`-th baseline latency with probability at most
+alpha. The constraint passes iff the test's `r`-th latency is at or
+below that threshold.
 
-```
-τ_j = t_(k_j)   where   k_j = qbinom(1 − α, n_s, p_j) + 1
-```
-
-clamped to `[⌈p_j · n_s⌉, n_s]`. `t_(k)` is the `k`-th order statistic
-of the baseline's sorted successful-sample latencies; the threshold
-is therefore an *observed baseline latency*, in integer milliseconds,
-by construction.
-
-Three properties matter:
-
-- **Exact and distribution-free** for i.i.d. samples from any
-  continuous latency distribution. The rank of the population
-  quantile follows `Bin(n_s, p_j)` regardless of the underlying
-  density; no normal approximation, no density estimate, no
-  second moment.
-- **Symmetric with the pass-rate side** — Wilson-score lower bound
-  for pass rate; binomial order-statistic upper bound for latency.
-  Both are non-parametric finite-sample constructions.
-- **Integer-millisecond** — the threshold is an observed value,
-  aligning with how SLA targets are written and compared.
+- **Exact and distribution-free** for i.i.d. latencies from any
+  continuous distribution: the breach probability depends only on the
+  ranks and the two counts, not on the latency density.
+- **Integer-millisecond** — the threshold is an observed baseline
+  latency, and the test's latencies are compared on the same
+  whole-millisecond scale the baseline records.
+- **Saturated when no rank exists** — a baseline too small for the
+  test's size and percentile has no rank that keeps the breach
+  probability within alpha (p95 over 20 test latencies against 20
+  baseline latencies, for example). The constraint is then
+  INCONCLUSIVE and its record carries the status `SATURATED` with no
+  threshold. A pre-run warning names the baseline size that would
+  resolve it.
 
 [Statistical companion §12.4](https://r.mavai.org/statistical-companion.pdf)
-develops the construction with proofs; the implementation lives in
-`org.mavai.punit.statistics.LatencyThresholdDeriver`.
+develops the construction; the implementation lives in
+`org.mavai.punit.statistics.LatencyRules`.
 
-### Advisory vs enforced
+### Declared latency is enforced
 
-Latency profiles are environment-dependent. A baseline recorded on CI
-hardware may legitimately differ from a developer-laptop run, even
-when the system has not regressed. PUnit therefore offers two
-enforcement modes:
-
-| Mode      | Breach behaviour              | Default | When to use                                              |
-|-----------|-------------------------------|---------|----------------------------------------------------------|
-| Advisory  | Warning in output; test passes| Yes     | Mixed-hardware environments; latency is informational.   |
-| Enforced  | Test fails                    | No      | Controlled environments (dedicated CI, staging); SLA gating. |
-
-Advisory is the default because failing tests on environmental
-differences erodes trust in the framework. Switch to enforced when
-hardware consistency is controlled and latency is a first-class SLA
-dimension.
+A latency constraint declared on the contract is enforced: its
+decision is part of the test verdict. Latency profiles are
+environment-dependent — a baseline recorded on CI hardware may
+legitimately differ from a developer-laptop run — so measure the
+baseline on the hardware the test runs on, or leave latency
+undeclared where the environment is not controlled. The observed
+percentiles are reported for every run whether or not latency is
+declared.
 
 ---
 
@@ -1918,10 +1980,14 @@ to the published **mavai verdict schema**:
 
 - Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`
-- Schema: the `verdict-1.x.xsd` revisions bundled in `punit-report`,
-  vendored from the published mavai schema releases.
+- Schema: punit writes verdict-1.7 records; the `verdict-1.x.xsd`
+  revisions bundled in `punit-report` are vendored from the published
+  mavai schema releases.
 
-The schema covers identity, verdict, criterion results, postcondition
+The schema covers identity, verdict, criterion results with their
+versioned decision rules, the methodology version, the latency
+dimension's verdict and per-constraint evaluations, the
+configuration-error list of a refused test, postcondition
 standings, sample counts, latency percentiles, baseline expiration,
 environment metadata, contract reference, and correlation id. Because
 the format is versioned and schema-checked, tools downstream of your
@@ -1943,106 +2009,84 @@ the implementation lives in the ArchUnit-isolated
 any other punit package so the statistical core can be audited
 against published formulae in isolation.
 
-### Pass rate: Wilson score lower bound
+### Pass rate against a requirement: `compliance/exact-binomial`
 
-A service contract's `n_test` invocations are modelled as Bernoulli trials
-under a working approximation of independence and stationarity. The
-total number of successes is binomial, and the sample proportion
-`p̂ = k / n` is an unbiased estimator of the true success
-probability `p`.
-
-For a one-sided `(1-α)` confidence claim, PUnit applies the **Wilson
-score lower bound**:
+A service contract's `n` invocations are modelled as Bernoulli trials
+under a working approximation of independence and stationarity. A
+declared requirement `p_req` is tested one-sided, `H₀: p ≤ p_req`
+against `H₁: p > p_req`, by the exact binomial test. The criterion
+passes iff the success count `K` reaches
 
 ```
-              p̂ + z²/(2n)  − z · √( p̂(1−p̂)/n  + z²/(4n²) )
-p_lower  =  ────────────────────────────────────────────────
-                          1 + z²/n
+k_min = min { k : P(Bin(n, p_req) ≥ k) ≤ α }
 ```
 
-Wilson is used everywhere — small samples, extreme proportions, the
-boundary case `p̂ = 1`. There is no method-switching: the same
-formula handles every case correctly. Conformance against the
-R-generated reference data (`mavai-R/inst/cases/wilson_*.json`) is
-verified on every build.
+When no `k ≤ n` qualifies, no count can pass; the smallest feasible
+size is `⌈log α / log p_req⌉` (59 for 0.95 at alpha 0.05, 2995 for
+0.999). The false-compliance probability `P(K ≥ k_min)` at the
+requirement and the Clopper–Pearson lower bound are reported beside
+the verdict; they decide nothing.
 
-For empirical thresholds: the test passes iff the run's Wilson lower
-bound clears the recorded baseline rate. For contractual thresholds:
-the test passes iff `p̂ ≥ threshold` directly — no margin, since the
-threshold is given, not estimated.
+### Pass rate against a baseline: `regression/fisher`
 
-### Latency: binomial order-statistic upper bound
+An empirical criterion compares the test's count `K_t` of `n_t` with
+the baseline's `K_b` of `n_b` by the one-sided Fisher exact test: the
+p-value is `P(X ≤ K_t)` for `X` hypergeometric over the pooled counts.
+The cutoff `c` is the smallest count whose p-value exceeds alpha, and
+the criterion passes iff `K_t ≥ c`. PUnit reports the size at the
+assumed common rate (the rejection probability were both drawn at the
+baseline's observed rate), the design power against the design
+alternative rate, the resolved power at the actual cutoff, and the
+minimum detectable degradation at 80% power.
 
-For latency thresholds derived from a baseline, PUnit uses the
-**exact binomial order-statistic upper confidence bound** on the
-baseline quantile:
+### The exact-boundary convention
 
-```
-τ_j = t_(k_j)   where   k_j = qbinom(1 − α, n_s, p_j) + 1
-```
+A p-value or tail probability within `10⁻⁹ · α` of alpha is recomputed
+in exact rational arithmetic, with alpha taken from its declared
+decimal, before the comparison is made. A result that sits exactly on
+alpha (2 of 4 against 12 of 12 gives a Fisher p-value of exactly 1/20)
+is decided the same way on every platform.
 
-clamped to `[⌈p_j · n_s⌉, n_s]`. `t_(k)` is the `k`-th order
-statistic of the baseline's sorted successful-sample latencies; the
-threshold is an observed baseline latency, in integer milliseconds,
-by construction.
+### Latency
 
-This is exact and distribution-free for i.i.d. samples from any
-continuous latency distribution — the rank of the population
-quantile follows `Bin(n_s, p_j)` regardless of the underlying density.
-No density estimate, no normal approximation, no second moment.
+Explicit ceilings are decided by `latency/compliance-exact-binomial`,
+baseline-derived constraints by `latency/precedence`; see
+[Part 7](#part-7-latency).
 
-It is the non-parametric counterpart of the Wilson lower bound used
-on the pass-rate side, restoring the statistical symmetry between
-the two halves of the contract.
+### The Wilson interval
 
-### Power and sample sizing
+The Wilson score interval is still reported, as a descriptive interval
+on the observed rate. It decides nothing.
 
-For sample-size planning under the empirical (baseline-driven)
-pathway, PUnit uses normal-asymptotic approximations (epistemic
-status: planning approximation, not theorem). To detect a shift
-from `p_0` to `p_1` at significance `α` and power `1-β`:
+### Sizing and power
 
-```
-            ⎛ z_α · √(p₀(1-p₀))  +  z_β · √(p₁(1-p₁)) ⎞²
-  n   =    ⎜ ─────────────────────────────────────── ⎟
-            ⎝                  p₀ - p₁                 ⎠
-```
+Two sizes are named apart. The **design** size is computed before any
+baseline count is fixed, from the design alternative rate
+(`.tolerating(rate)`, or the baseline rate minus `.detectingMde(drop)`)
+and the target power (`.atPower(power)`, default 0.80). The
+**resolved** size is computed against the actual baseline: the
+smallest test size, no larger than the baseline, whose exact power
+against the design alternative reaches the target and holds it at
+every larger size. When none does, the configuration is refused and
+the message says why.
 
-This computation is **internal**. Authors do not call it directly;
-no `power(...)` or `minDetectableEffect(...)` setter is exposed on
-the authoring builders. The framework applies the formula on the
-empirical pathway when sizing a derived baseline against a
-configured confidence — the result feeds the feasibility check
-below. Power calculations are *budgeting* aids — adequate for "is
-this test worth running?" — not exact calibration claims. Companion
-§5 develops the distinction.
+### Configuration checks
 
-### Feasibility gates
+Before a probabilistic test runs, the framework checks:
 
-Before a probabilistic test runs, the framework checks two
-invariants. The check fires for `PassRate` criteria (contractual
-and empirical alike); `PercentileLatency` is skipped pending its
-own feasibility model.
+- **Soundness floor (cross-intent).** A configured confidence below
+  the framework's floor (currently **80%**) aborts the run,
+  regardless of intent.
+- **Configuration errors.** `TEST_LARGER_THAN_BASELINE` (any intent;
+  pass rate and latency alike) and `COMPLIANCE_INFEASIBLE`
+  (VERIFICATION only). A configuration with any error is refused
+  whole, with every error listed in that order.
+- **Planning warnings.** Latency non-degeneracy minimums and the
+  existence of a precedence rank for the expected number of
+  successful samples. These warn; they never refuse.
 
-- **Soundness floor (cross-intent).** A configured confidence
-  below the framework's floor (currently **80%**) aborts the run
-  with `IllegalStateException`, **regardless of intent**. A test
-  that cannot make a claim at the floor's confidence level cannot
-  underwrite a verdict, and SMOKE intent does not buy past that.
-- **Sample-size adequacy (intent-gated).** Given the resolved
-  target rate (contractual threshold or baseline-derived rate)
-  and the configured confidence, is the declared sample size
-  large enough to underwrite a verification claim?
-  - Under **VERIFICATION** intent (the default), the run aborts
-    with `IllegalStateException` before any samples execute.
-  - Under **SMOKE** intent the gate is silent — the developer
-    has explicitly declared "I know this is undersized; treat it
-    as a sentinel." No warning, no abort. (The soundness floor
-    above is the one exception.)
-
-The diagnostic on abort names the configuration's shortfall and
-the smallest sample count that would underwrite the claim, so the
-author can either bump samples or rethink the threshold.
+The methodology version (1.5.0) and each decision rule's identity and
+version are written into every verdict record.
 
 ### Further reading
 
@@ -2050,8 +2094,9 @@ Mathematical foundations:
 [Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf).
 
 Cross-language conformance: every mavai framework (punit, feotest,
-baseltest) reproduces the R-generated reference data within stated
-tolerances. The conformance machinery is documented in the
+baseltest) reproduces the R-generated reference data (mavai-R
+v0.11.1) within stated tolerances, the exact-boundary cases
+included. The conformance machinery is documented in the
 `mavai-R` project README.
 
 ---
@@ -2207,18 +2252,18 @@ shared definition of the service-under-test that all tests,
 experiments, and sentinels reference.
 
 **Verdict.** `PASS`, `FAIL`, or `INCONCLUSIVE`. INCONCLUSIVE is
-reserved for "the framework cannot draw a conclusion" (no baseline
-yet, baseline rejected as misaligned), distinct from FAIL ("the
-data shows degradation").
+reserved for outcomes where the data cannot decide (no baseline
+yet, baseline rejected as misaligned, a saturated latency
+constraint), distinct from FAIL ("the data shows degradation or
+non-compliance"). A refused configuration has no verdict at all.
 
-**Wilson lower bound.** The one-sided lower confidence bound on a
-proportion, used universally by PUnit for pass-rate inference.
-Proper coverage at every sample size and proportion, including the
-boundary `p̂ = 1`.
+**Wilson lower bound.** The one-sided lower bound of the Wilson
+score interval on a proportion. Reported as a descriptive figure;
+it decides nothing.
 
 ---
 
-*Last reviewed: 2026-05-03. The mathematical foundations are
+*Last reviewed: 2026-09-29. The mathematical foundations are
 maintained separately as the
 [Statistical Companion Document](https://r.mavai.org/statistical-companion.pdf);
 this guide stays at the engineering level.*

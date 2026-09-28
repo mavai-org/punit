@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+**Methodology 1.5.0 (Statistical Companion 1.5.0), conformant with the
+mavai-R v0.11.1 reference data.** This release changes how every
+verdict is decided. It is a breaking release: decisions, thresholds,
+feasibility and the verdict record all move, and the statistics API is
+replaced rather than extended.
+
+### Changed
+
+- **Every criterion is decided by an exact, versioned decision rule,
+  and the engine owns the decision.** A declared requirement
+  (`meeting().passRate(p)`) is decided by the exact one-sided binomial
+  test, `compliance/exact-binomial`: PASS iff the count reaches `k_min`,
+  the smallest count whose probability under a true rate at the
+  requirement is at most alpha. A baseline-derived criterion
+  (`empirical().passRate()`) is decided by Fisher's exact test of the
+  test's count against the baseline's, `regression/fisher`: PASS iff
+  the count reaches the cutoff `c`, the smallest count the one-sided
+  test does not reject. Both replace the Wilson lower-bound comparisons
+  and the `⌈n·p*⌉` cutoff. The Clopper–Pearson lower bound (compliance)
+  and the size at the assumed common rate, design and resolved power
+  and minimum detectable degradation (regression) are reported beside
+  the verdict and decide nothing. The measure-time normative judgement
+  moves to the same exact rule.
+
+- **The exact-boundary convention.** A p-value or tail probability
+  within `10⁻⁹·α` of alpha is recomputed in exact rational arithmetic
+  (alpha from its declared decimal) before it is compared, so a result
+  sitting exactly on alpha is decided the same way everywhere. punit-core
+  gains `commons-numbers-gamma` and `commons-numbers-fraction`.
+
+- **A configuration with any invalid part is refused whole.** Two
+  configuration errors exist, reported together in a fixed order:
+  `TEST_LARGER_THAN_BASELINE` — a test planned with more samples than
+  the baseline run it consumes, for pass rate and latency alike,
+  whatever the intent — and `COMPLIANCE_INFEASIBLE` — under
+  VERIFICATION, a requirement no count of the planned size can
+  demonstrate (0.95 at alpha 0.05 needs 59). No sample runs;
+  `assertPasses()` throws `ConfigurationRefusedException`
+  (`org.mavai.punit.api.spec`, listing the codes), and the refused test
+  still writes a verdict record with the codes, no verdict value and
+  termination reason `CONFIGURATION_REFUSED`. A declared requirement has
+  no upper limit on test size. The feasibility gate's
+  `IllegalStateException` for an undersized verification test is gone;
+  the confidence soundness floor is unchanged.
+
+- **Latency is decided after the run, on the latencies of the samples
+  that passed.** An explicit ceiling is a requirement decided by
+  counting the successful latencies within it,
+  `latency/compliance-exact-binomial`; the raw percentile comparison is
+  still shown, labelled advisory, and decides nothing. A
+  baseline-derived constraint is decided by `latency/precedence`: the
+  threshold is the baseline rank an undegraded service's test rank
+  would exceed with probability at most alpha, for the test's own
+  count, replacing the order-statistic upper confidence bound. When no
+  rank exists the constraint is *saturated*: INCONCLUSIVE, recorded with
+  status `SATURATED` and no threshold. The non-degeneracy minimums and
+  the rank's existence are pre-run planning warnings, not refusals; a
+  run with too few successful latencies is INCONCLUSIVE (indicative
+  under SMOKE). Test latencies are compared in whole milliseconds, as
+  the baseline records them. The latency population is now the samples
+  that passed every criterion; it previously included failed samples.
+
+- **The test verdict composes the functional and latency dimensions by
+  one structural rule** — FAIL if either fails, otherwise INCONCLUSIVE
+  if either is inconclusive, otherwise PASS — names the criteria and
+  constraints that decided a FAIL or an INCONCLUSIVE, and states the
+  Type-I envelopes by direction (false compliance, false degradation
+  signal). A latency declaration is no longer counted as a pass-rate
+  criterion of its own.
+
+- **Design and resolved sizing are named apart.** `.tolerating(rate)`
+  or `.detectingMde(drop)` with `.atPower(power)` sizes an empirical
+  test by the exact resolved power against the actual baseline — the
+  smallest size, no larger than the baseline, that reaches and holds the
+  target — replacing the normal-approximation formula. A sizing that
+  cannot be met is refused with the reason (`ZERO_BASELINE`,
+  `ALTERNATIVE_NOT_BELOW_BASELINE`, `BASELINE_TOO_SMALL`).
+
+- **Early termination stops at `k_min`.** Success is guaranteed once
+  `k_min` samples have passed; the normal-approximation validity floor
+  is gone (`EarlyTerminationContext` loses `minSamplesForValidity` and
+  gains `successStopAllowed`). A contract that declares a latency
+  constraint no longer stops on a guaranteed success, so the latency
+  decision has its samples.
+
+- **Verdict records move to verdict-1.7.** Every record states
+  `version="1.7"` and the `methodology-version`, the versioned decision
+  rule on the verdict and on every criterion row, the latency
+  dimension's verdict and per-constraint evaluations (statuses `PASS`,
+  `STRICT_FAIL`, `INFEASIBLE`, `SATURATED`), the regression disclosure
+  (size at the assumed common rate, design alternative rate, design and
+  resolved power), and the configuration-error list of a refused test.
+  The normal-approximation `test-statistic` and `p-value` are no longer
+  written. `verdict-1.7.xsd` is bundled with `punit-report`, and
+  `VerdictXmlReader` reads refused and latency-bearing records.
+
+- **Transparent statistics** show the composed test verdict, each
+  criterion's rule, hypotheses, cutoff and calibration statement, and a
+  block per latency constraint. The z-test lines are gone.
+
+- **`.atConfidence(c)`** is accepted on every statistical criterion,
+  including `meeting()` requirements and contractual latency.
+
+- **The User Guide** documents the rules, the configuration errors, the
+  composition, and the precedence rule; advises keeping inputs
+  unsorted; and no longer describes an advisory latency mode, which
+  punit does not have — a declared latency constraint is enforced.
+
+### Removed
+
+- The Wilson- and normal-approximation-based statistics API in
+  `org.mavai.punit.statistics`: `ThresholdDeriver`,
+  `DerivationContext`, `DerivedThreshold`, `OperationalApproach`,
+  `TestVerdictEvaluator`, `VerdictInterpreter`,
+  `VerdictWithConfidence`, `SampleSizeCalculator`,
+  `SampleSizeRequirement`, `RiskDrivenSizingCalculator`,
+  `SizingRefusedException` and `LatencyThresholdDeriver`; and from
+  `BinomialProportionEstimator`, `zTestStatistic`, `oneSidedPValue`,
+  `minSamplesForNormalApproximation`, `binomialCdf`,
+  `minimumSuccessesToClear` and `lowerBoundFromRate`. In their place: `ComplianceRule`,
+  `RegressionRule`, `RegressionSizing`, `LatencyRules`,
+  `DecisionRule`, `ConfigurationError` and `Methodology`. The Wilson
+  interval stays, as a descriptive interval.
+- `ProbabilisticTestVerdict.StatisticalAnalysis.testStatistic()` and
+  `pValue()`.
+
 ## [0.11.0] - 2026-09-20
 
 ### Added
