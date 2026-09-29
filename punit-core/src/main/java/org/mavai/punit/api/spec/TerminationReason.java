@@ -32,5 +32,10 @@ public enum TerminationReason {
      * and the run has cleared the statistical-validity floor. Verdict is
      * PASS.
      */
-    SUCCESS_GUARANTEED
+    SUCCESS_GUARANTEED,
+    /**
+     * The configuration was refused before any sample ran
+     * (Statistical Companion §5.7.1).
+     */
+    CONFIGURATION_REFUSED
 }

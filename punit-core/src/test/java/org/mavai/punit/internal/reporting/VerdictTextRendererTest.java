@@ -97,22 +97,14 @@ class VerdictTextRendererTest {
         }
 
         @Test
-        @DisplayName("includes Z test statistic with formula")
-        void includesZTestStatistic() {
+        @DisplayName("names the exact test as the test type, and no z statistic")
+        void namesTheExactTest() {
             var result = renderer.renderForReporter(passingVerdict());
 
-            assertThat(result.body()).contains("Z:");
-            assertThat(result.body()).contains("z = (p̂ - π₀) / √(π₀(1-π₀)/n)");
+            assertThat(result.body()).contains("Exact one-sided binomial test (compliance/exact-binomial)");
+            assertThat(result.body()).doesNotContain("Z:");
         }
 
-        @Test
-        @DisplayName("includes p-value with left-tailed notation")
-        void includesPValueLeftTailed() {
-            var result = renderer.renderForReporter(passingVerdict());
-
-            assertThat(result.body()).contains("p-value:");
-            assertThat(result.body()).contains("P(Z ≤");
-        }
 
         @Test
         @DisplayName("includes verdict section with PASS")
@@ -132,7 +124,7 @@ class VerdictTextRendererTest {
 
             assertThat(result.body()).contains("Result:");
             assertThat(result.body()).contains("FAIL");
-            assertThat(result.body()).contains("falls below");
+            assertThat(result.body().replaceAll("\\s+", " ")).contains("was not demonstrated");
         }
 
         @Test
@@ -333,7 +325,7 @@ class VerdictTextRendererTest {
 
             var result = renderer.renderForReporter(verdict);
 
-            assertThat(result.body()).contains("system meets SLA requirement");
+            assertThat(result.body()).contains("the SLA requirement is not met");
         }
 
         @Test
@@ -347,13 +339,15 @@ class VerdictTextRendererTest {
         }
 
         @Test
-        @DisplayName("uses softened framing for SMOKE intent")
+        @DisplayName("SMOKE keeps the hypotheses and softens the verdict's wording")
         void usesSoftenedFramingForSmoke() {
             ProbabilisticTestVerdict verdict = verdictWithSmokeIntent("SLA");
 
             var result = renderer.renderForReporter(verdict);
 
-            assertThat(result.body()).contains("observed rate consistent with target");
+            assertThat(result.body()).contains("the SLA requirement is not met");
+            assertThat(result.body()).containsAnyOf(
+                    "consistent with the target", "inconsistent with the target");
         }
     }
 
@@ -391,23 +385,7 @@ class VerdictTextRendererTest {
             assertThat(html).contains("\">Wilson lower bound:</span>");
         }
 
-        @Test
-        @DisplayName("wraps Z label in span with tooltip")
-        void wrapsZWithTooltip() {
-            String html = VerdictTextRenderer.renderStatisticalAnalysisHtml(passingVerdict());
 
-            assertThat(html).contains("data-tip=\"How many standard errors");
-            assertThat(html).contains("\">Z:</span>");
-        }
-
-        @Test
-        @DisplayName("wraps p-value label in span with tooltip")
-        void wrapsPValueWithTooltip() {
-            String html = VerdictTextRenderer.renderStatisticalAnalysisHtml(passingVerdict());
-
-            assertThat(html).contains("data-tip=\"Probability of seeing a rate this low");
-            assertThat(html).contains("\">p-value:</span>");
-        }
 
         @Test
         @DisplayName("wraps baseline labels in spans with tooltips")
@@ -473,7 +451,6 @@ class VerdictTextRendererTest {
                         Optional.empty(), TestIntent.VERIFICATION, 0.95, ServiceContractAttributes.DEFAULT),
                 Optional.empty(), Optional.empty(),
                 new StatisticalAnalysis(0.95, 0.0218, 0.8948,
-                        Optional.of(2.29), Optional.of(0.011),
                         Optional.empty(), Optional.empty(), List.of()),
                 CovariateStatus.allAligned(),
                 new CostSummary(0, 0, 0, TokenMode.NONE, Optional.empty(), Optional.empty()),
@@ -490,7 +467,6 @@ class VerdictTextRendererTest {
         ProbabilisticTestVerdict base = passingVerdict();
         StatisticalAnalysis stats = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8948,
-                Optional.of(2.29), Optional.of(0.011),
                 Optional.of("Wilson score lower bound"),
                 Optional.of(new BaselineSummary(
                         "my-spec.yaml", Instant.parse("2026-02-15T00:00:00Z"),

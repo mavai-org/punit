@@ -48,6 +48,8 @@ module org.mavai.punit.core {
     requires static org.junit.jupiter.api;
     requires java.xml;
     requires org.apache.commons.statistics.distribution;
+    requires org.apache.commons.numbers.gamma;
+    requires org.apache.commons.numbers.fraction;
     requires org.yaml.snakeyaml;
     requires com.fasterxml.jackson.databind;
     requires com.fasterxml.jackson.dataformat.csv;

@@ -51,9 +51,7 @@ final class ScenarioFixtures {
                         0.95,
                         0.0196,    // SE(p̂) = √(0.96 × 0.04 / 100)
                         0.9016,    // Wilson one-sided lower
-                        Optional.of(0.9331),   // Z = (0.96 - 0.9374) / SE₀
-                        Optional.of(0.8246),   // p = Φ(0.9331)
-                        Optional.of("Wilson"),
+                        Optional.of("regression/fisher"),
                         Optional.of(new BaselineSummary(
                                 "PaymentGateway.yaml", BASELINE_GENERATED,
                                 1000, 950, 0.9500, 0.9374)),
@@ -88,9 +86,7 @@ final class ScenarioFixtures {
                         0.95,
                         0.0357,    // SE(p̂) = √(0.85 × 0.15 / 100)
                         0.7672,    // Wilson one-sided lower
-                        Optional.of(-3.6080),  // Z
-                        Optional.of(0.0002),   // p
-                        Optional.of("Wilson"),
+                        Optional.of("regression/fisher"),
                         Optional.of(new BaselineSummary(
                                 "PaymentGateway.yaml", BASELINE_GENERATED,
                                 1000, 950, 0.9500, 0.9374)),
@@ -125,8 +121,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0566,    // SE(p̂) = √(0.80 × 0.20 / 50)
                         0.6696,    // Wilson one-sided lower
-                        Optional.of(-2.3570),  // Z
-                        Optional.of(0.0092),   // p
                         Optional.empty(),      // no threshold derivation (inline)
                         Optional.empty(),      // no baseline
                         List.of()
@@ -158,8 +152,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0212,    // SE(p̂) = √(0.90 × 0.10 / 200)
                         0.8506,    // Wilson one-sided lower
-                        Optional.of(1.9802),   // Z
-                        Optional.of(0.9762),   // p
                         Optional.empty(),      // no threshold derivation
                         Optional.empty(),      // no baseline
                         List.of()
@@ -195,8 +187,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0218,    // SE(p̂) = √(0.95 × 0.05 / 100)
                         0.8883,    // Wilson one-sided lower
-                        Optional.of(1.6667),   // Z
-                        Optional.of(0.9522),   // p
                         Optional.empty(),
                         Optional.empty(),
                         List.of()
@@ -230,8 +220,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0255,    // SE(p̂) = √(0.93 × 0.07 / 100)
                         0.8625,    // Wilson one-sided lower
-                        Optional.of(1.0000),   // Z
-                        Optional.of(0.8413),   // p
                         Optional.empty(),
                         Optional.empty(),
                         List.of()
@@ -270,8 +258,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0861,    // SE(p̂) = √(0.6667 × 0.3333 / 30)
                         0.4880,    // Wilson one-sided lower
-                        Optional.of(-4.2597),  // Z
-                        Optional.of(0.0000),   // p ≈ 0.0000
                         Optional.empty(),
                         Optional.empty(),
                         List.of()
@@ -308,8 +294,6 @@ final class ScenarioFixtures {
                         0.95,
                         0.0459,    // SE(p̂) = √(0.8333 × 0.1667 / 66)
                         0.7264,    // Wilson one-sided lower
-                        Optional.of(-1.7638),  // Z
-                        Optional.of(0.0389),   // p
                         Optional.empty(),
                         Optional.empty(),
                         List.of()

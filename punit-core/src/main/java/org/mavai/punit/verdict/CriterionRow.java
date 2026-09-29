@@ -29,7 +29,10 @@ import java.util.Objects;
  * @param threshold     the contract-inherited threshold the verdict
  *                      was judged against or {@link Double#NaN} when
  *                      no threshold was resolved (e.g. the run gated
- *                      INCONCLUSIVE before threshold derivation)
+ *                      INCONCLUSIVE before threshold derivation);
+ *                      for a regression criterion the cutoff as a rate,
+ *                      {@code c / n_t}
+ * @param decisionRule  the rule that decided the criterion, when one did
  */
 // mavai-ref: JVI-8E4WNW5 — do not remove (resolves in mavai-orchestrator)
 public record CriterionRow(
@@ -39,11 +42,26 @@ public record CriterionRow(
         int fail,
         int inconclusive,
         double observedRate,
-        double threshold) {
+        double threshold,
+        java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule) {
+
+    /** A row no rule decided (zero-failures, or a gate that fired first). */
+    public CriterionRow(
+            String criterionId,
+            org.mavai.punit.api.spec.Verdict verdict,
+            int pass,
+            int fail,
+            int inconclusive,
+            double observedRate,
+            double threshold) {
+        this(criterionId, verdict, pass, fail, inconclusive, observedRate, threshold,
+                java.util.Optional.empty());
+    }
 
     public CriterionRow {
         Objects.requireNonNull(criterionId, "criterionId");
         Objects.requireNonNull(verdict, "verdict");
+        Objects.requireNonNull(decisionRule, "decisionRule");
         if (pass < 0 || fail < 0 || inconclusive < 0) {
             throw new IllegalArgumentException(
                     "counts must be non-negative; got pass=" + pass

@@ -151,12 +151,12 @@ class VerdictTextRendererTest {
         }
 
         @Test
-        @DisplayName("includes Z and p-value with proper notation")
-        void includesZAndPValue() {
+        @DisplayName("carries no normal-approximation z statistic or p-value")
+        void omitsZAndPValue() {
             String text = VerdictTextRenderer.renderStatisticalAnalysis(passingVerdict());
 
-            assertThat(text).contains("Z:");
-            assertThat(text).contains("p-value:");
+            assertThat(text).doesNotContain("Z:");
+            assertThat(text).doesNotContain("p-value:");
         }
 
         @Test
@@ -202,7 +202,6 @@ class VerdictTextRendererTest {
                         Optional.empty(), TestIntent.VERIFICATION, 0.95, ServiceContractAttributes.DEFAULT),
                 Optional.empty(), Optional.empty(),
                 new StatisticalAnalysis(0.95, 0.0218, 0.8948,
-                        Optional.of(2.29), Optional.of(0.011),
                         Optional.empty(), Optional.empty(), List.of()),
                 CovariateStatus.allAligned(),
                 new CostSummary(0, 0, 0, TokenMode.NONE, Optional.empty(), Optional.empty()),
@@ -271,7 +270,6 @@ class VerdictTextRendererTest {
         ProbabilisticTestVerdict base = passingVerdict();
         StatisticalAnalysis stats = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8948,
-                Optional.of(2.29), Optional.of(0.011),
                 Optional.of("Wilson score lower bound"),
                 Optional.of(new BaselineSummary(
                         "my-spec.yaml", Instant.parse("2026-02-15T00:00:00Z"),

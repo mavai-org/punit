@@ -115,6 +115,14 @@ public final class Engine {
                         resolution.effective(),
                         resolution.declared()));
             }
+            // Configuration refusal (Statistical Companion §5.7.1): judged
+            // once, after sizing and before any sample, on the size the
+            // configuration will actually run. A refused configuration
+            // runs nothing and concludes with its refusal.
+            Optional<EngineResult> refused = spec.refusal(baselineProvider, resolution.effective());
+            if (refused.isPresent()) {
+                return refused.get();
+            }
             SampleSummary<OT> summary = runConfig(spec, uc, cfg, 0, resolution.effective());
             spec.consume(cfg, summary);
         }
@@ -168,7 +176,6 @@ public final class Engine {
         private final int plannedSamples;
         private final Optional<EarlyTerminationContext> earlyTermination;
         private final int requiredSuccesses;
-        private final int minSamplesForValidity;
         // retained is exposed via the summary; failure detail beyond
         // maxExampleFailures is elided. allForLatency holds durations
         // from every sample so the all-samples latency stats never
@@ -215,30 +222,28 @@ public final class Engine {
             this.tracker = tracker;
             this.plannedSamples = plannedSamples;
             this.earlyTermination = earlyTermination;
-            // Cached once: required-successes = the smallest success count
-            // whose Wilson lower bound at the context's confidence clears
-            // the declared threshold — the same rule the criterion applies
-            // at evaluate time (companion §3.2/§3.6), so neither
-            // short-circuit can disagree with the eventual verdict:
-            // success-guaranteed fires only on a count the criterion will
-            // pass; failure-inevitable fires when even all-remaining-pass
-            // stays below it. plannedSamples + 1 (never guaranteed;
-            // failure inevitable from the outset) when a perfect run
-            // cannot clear the threshold at this sample count. Also cached:
-            // the statistical-validity floor below which a guaranteed-
-            // success short-circuit must not fire. Both zero when no
-            // context is supplied (measure / explore / optimize /
-            // empirical / opt-out paths).
+            // Cached once: required-successes = k_min, the smallest success
+            // count the criterion's exact binomial test accepts at the
+            // planned size (companion §3.6) — the same rule the criterion
+            // applies at evaluate time, so neither short-circuit can
+            // disagree with the eventual verdict: success-guaranteed fires
+            // only on a count the criterion will pass; failure-inevitable
+            // fires when even all-remaining-pass stays below it.
+            // plannedSamples + 1 (never guaranteed; failure inevitable from
+            // the outset) when no count of this size can pass. Zero when no
+            // context is supplied (measure / explore / optimize / empirical
+            // / opt-out paths).
             if (earlyTermination.isPresent()) {
                 EarlyTerminationContext ctx = earlyTermination.get();
-                this.requiredSuccesses =
-                        new org.mavai.punit.statistics.BinomialProportionEstimator()
-                                .minimumSuccessesToClear(
-                                        ctx.minPassRate(), plannedSamples, ctx.confidence());
-                this.minSamplesForValidity = ctx.minSamplesForValidity();
+                this.requiredSuccesses = ctx.minPassRate() <= 0.0
+                        ? 0
+                        : org.mavai.punit.statistics.ComplianceRule
+                                .minimumPassingCount(ctx.minPassRate(), plannedSamples,
+                                        org.mavai.punit.statistics.Methodology
+                                                .alphaFromConfidence(ctx.confidence()))
+                                .orElse(plannedSamples + 1);
             } else {
                 this.requiredSuccesses = 0;
-                this.minSamplesForValidity = 0;
             }
         }
 
@@ -314,8 +319,7 @@ public final class Engine {
          * After each recorded sample, check whether the spec's
          * contractual pass-rate threshold is now mathematically
          * unreachable (failure inevitable) or already met and locked
-         * in (success guaranteed, subject to the
-         * statistical-validity floor). On a hit, signals the
+         * in (success guaranteed). On a hit, signals the
          * {@link BudgetTracker} so the executor halts before the next
          * sample.
          *
@@ -341,9 +345,8 @@ public final class Engine {
                 tracker.recordEarlyTermination(TerminationReason.IMPOSSIBILITY);
                 return;
             }
-            if (successes >= requiredSuccesses
-                    && observed >= minSamplesForValidity
-                    && remaining > 0) {
+            if (earlyTermination.get().successStopAllowed()
+                    && successes >= requiredSuccesses && remaining > 0) {
                 tracker.recordEarlyTermination(TerminationReason.SUCCESS_GUARANTEED);
             }
         }

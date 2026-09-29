@@ -200,8 +200,8 @@ public final class CriterionPosture {
     /**
      * Latency, empirical: lowered from {@code empirical().atMost(P95).atMost(P99)...}.
      * Per-percentile thresholds are derived from the resolved baseline
-     * at evaluate time via Statistical Companion §12.4.2's exact
-     * binomial order-statistic upper confidence bound. The
+     * after the run by {@code latency/precedence} (Statistical Companion
+     * §12.4.2), for the test's actual number of successful latencies. The
      * {@link #confidenceFloor()} carries the operative confidence
      * level (defaults to {@code StatisticalDefaults.DEFAULT_CONFIDENCE}
      * when not set explicitly).
@@ -263,12 +263,14 @@ public final class CriterionPosture {
      * Returns a copy of this posture with the given confidence floor.
      * Rejects composition with zero-failures (explicit or implicit)
      * — the statistical math is undefined at the threshold boundary.
-     * Rejects composition with {@code .meeting(...)} — a declared
-     * threshold is judged at the framework's default confidence and
-     * accepts no per-criterion rigour adjuncts.
+     * Composes with every statistical kind: a declared requirement is
+     * demonstrated at {@code 1 − confidence}, a baseline-derived bar
+     * decided at it (Statistical Companion §3.4, §3.6, §12.3.4).
      */
     public CriterionPosture withConfidenceFloor(double confidence) {
-        rejectRigourAdjunct("atConfidence");
+        if (kind == Kind.ZERO_FAILURES || kind == Kind.IMPLICIT_ZERO_FAILURES) {
+            rejectRigourAdjunct("atConfidence");
+        }
         if (Double.isNaN(confidence) || confidence <= 0.0 || confidence >= 1.0) {
             throw new IllegalArgumentException(
                     ".atConfidence(c) requires c in (0, 1), got " + confidence);
@@ -416,12 +418,12 @@ public final class CriterionPosture {
                             + "statistical math is undefined at the threshold boundary");
             case STATISTICAL_CONTRACTUAL -> throw new IllegalStateException(
                     "." + methodName + "(...) cannot compose with .meeting(...) — "
-                            + "a declared threshold is judged at the framework's default "
-                            + "confidence and accepts no per-criterion rigour adjuncts; "
-                            + "switch to .empirical() if you want a baseline-derived comparison");
+                            + "a declared requirement is sized by its sample count and "
+                            + "confidence; switch to .empirical() if you want a "
+                            + "baseline-derived comparison");
             case LATENCY_CONTRACTUAL -> throw new IllegalStateException(
                     "." + methodName + "(...) does not apply to contractual latency — "
-                            + "the ceiling is the threshold; nothing to estimate");
+                            + "only .atConfidence(...) is supported");
             case LATENCY_EMPIRICAL -> {
                 if (!methodName.equals("atConfidence")) {
                     throw new IllegalStateException(

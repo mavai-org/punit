@@ -23,7 +23,9 @@ dependencies {
 // fetches the set published in the release pinned by `mavaiRTag` (same pin and
 // cache as punit-core's conformance-data fetch) onto the test classpath so the
 // snapshot-sync test can assert the embedded copies are byte-identical to the
-// published ones — a drifted snapshot fails the build instead of shipping.
+// published ones — a drifted snapshot fails the build instead of shipping. The
+// published example records travel with them, so the reader and writer are
+// exercised against the family's own worked examples.
 
 val publishedInterchangeDir = layout.buildDirectory.dir("generated/interchange")
 val mavaiRTag = providers.gradleProperty("mavaiRTag")
@@ -51,7 +53,7 @@ val fetchPublishedInterchangeSchemas by tasks.registering {
             if (destDir.exists()) destDir.deleteRecursively()
             destDir.mkdirs()
             copy {
-                from(srcDir) { include("verdict-*.xsd") }
+                from(srcDir) { include("verdict-*.xsd", "verdict-*.xml") }
                 into(destDir)
             }
             logger.lifecycle("Using local published interchange schemas: $srcDir")
@@ -77,7 +79,7 @@ val fetchPublishedInterchangeSchemas by tasks.registering {
         if (destDir.exists()) destDir.deleteRecursively()
         destDir.mkdirs()
         copy {
-            from(zipTree(cacheZip)) { include("verdict-*.xsd") }
+            from(zipTree(cacheZip)) { include("verdict-*.xsd", "verdict-*.xml") }
             into(destDir)
         }
         logger.lifecycle("Fetched published interchange schemas: $tag")

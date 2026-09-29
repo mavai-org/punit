@@ -155,8 +155,9 @@ class RunDesignDisclosurePipelineTest {
 
         String xml = java.nio.file.Files.readString(
                 DEMO_DIR.resolve("xml/demo-risk.demo-risk.xml"));
-        int expected = new org.mavai.punit.statistics.RiskDrivenSizingCalculator()
-                .requiredSamples(0.96, 0.93, 0.95, 0.80);
+        int expected = org.mavai.punit.statistics.RegressionSizing
+                .resolvedSizing(960, 1000, 0.93, 0.05, 0.80)
+                .orElseThrow().requiredSamples();
         assertThat(xml)
                 .contains("key=\"sizing-approach\" value=\"confidence-first (risk-driven)\"")
                 .contains("key=\"sizing-tolerated-rate\" value=\"0.93\"")

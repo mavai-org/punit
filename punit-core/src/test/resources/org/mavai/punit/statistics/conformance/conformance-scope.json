@@ -1,10 +1,10 @@
 {
-  "description": "punit's conformance scope beyond the oracle's family-mandatory tier. Extend-only: suites listed here are additional obligations; nothing here can subtract from the manifest's familyMandatory roster. A suite absent from both tiers is reported as unaddressed by every conformance run, never silently skipped.",
+  "description": "punit's conformance scope beyond the oracle's family-mandatory tier. Extend-only: suites listed here are additional obligations; nothing here can subtract from the manifest's familyMandatory roster. These are the optional suites of features punit implements: the regression cutoff without a verdict and the threshold-first inversion, risk-driven sizing, the nearest-rank percentile and its emission minimums, and explicit latency requirements. A suite absent from both tiers is reported as unaddressed by every conformance run, never silently skipped.",
   "suites": [
-    "feasibility",
-    "power_analysis",
+    "threshold_derivation",
+    "risk_driven_sizing",
+    "latency_percentile",
     "latency_percentile_minimums",
-    "latency_threshold_bootstrap",
-    "risk_driven_sizing"
+    "latency_compliance_decision"
   ]
 }

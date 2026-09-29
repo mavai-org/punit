@@ -49,109 +49,107 @@ class TransparentStatsRendererTest {
                 CriterionRole.REQUIRED);
     }
 
+    /** A pass-rate result carrying one criterion's decision artefacts, as PassRate publishes them. */
+    private static EvaluatedCriterion passRate(Verdict verdict, Map<String, Object> decision) {
+        Map<String, Object> detail = new LinkedHashMap<>(decision);
+        detail.put("decisionsByCriterion", Map.of("c", decision));
+        detail.put("verdictsByCriterion", Map.of("c", verdict.name()));
+        return criterion("bernoulli-pass-rate", verdict, "...", detail);
+    }
+
     @Nested
-    @DisplayName("PassRate empirical path")
+    @DisplayName("PassRate regression path (regression/fisher)")
     class BernoulliEmpirical {
 
         @Test
-        @DisplayName("renders the hypothesis, observed, and inference sections with Wilson lower bound")
-        void rendersFullEmpiricalReport() {
-            Map<String, Object> detail = new LinkedHashMap<>();
-            detail.put("observed", 1.0);
-            detail.put("threshold", 0.94);
-            detail.put("origin", "EMPIRICAL");
-            detail.put("successes", 50);
-            detail.put("failures", 0);
-            detail.put("total", 50);
-            detail.put("confidence", 0.95);
-            detail.put("wilsonLowerBound", 0.929);
-            detail.put("baselineSampleCount", 1000);
+        @DisplayName("renders the hypotheses, the rule and alpha, the counts, the cutoff and the calibration statement")
+        void rendersFullRegressionReport() {
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("observed", 0.93);
+            decision.put("successes", 93);
+            decision.put("total", 100);
+            decision.put("origin", "EMPIRICAL");
+            decision.put("confidence", 0.95);
+            decision.put("alpha", 0.05);
+            decision.put("baselineSampleCount", 1000);
+            decision.put("baselineSuccesses", 951);
+            decision.put("decisionRule", "regression/fisher");
+            decision.put("cutoff", 91);
+            decision.put("displayedRate", 0.91);
+            decision.put("sizeAtAssumedCommonRate", 0.0340);
+            decision.put("minimumDetectableDegradation", 0.0756);
 
             String rendered = TransparentStatsRenderer.render(
                     "shopping-basket.testInstructionTranslation",
-                    result(Verdict.FAIL, criterion(
-                            "bernoulli-pass-rate", Verdict.FAIL,
-                            "observed=1.0000 (Wilson-95% lower=0.9290) vs threshold=0.9400 (origin=EMPIRICAL) over 50 samples",
-                            detail)));
+                    result(Verdict.PASS, passRate(Verdict.PASS, decision)));
 
             assertThat(rendered)
-                    .contains("STATISTICAL ANALYSIS — verdict: FAIL")
+                    .contains("STATISTICAL ANALYSIS — test verdict: PASS")
                     .contains("shopping-basket.testInstructionTranslation")
-                    .contains("[REQUIRED] bernoulli-pass-rate → FAIL")
-                    .contains("Hypothesis test")
-                    .contains("H₀ (null):")
-                    .contains("True pass rate π ≥ 0.9400")
-                    .contains("H₁ (alternative):")
-                    .contains("True pass rate π < 0.9400")
-                    .contains("Test type:")
-                    .contains("One-sided Wilson-score lower bound")
-                    .contains("Observed data")
-                    .contains("Sample size (n):")
-                    .contains("50")
-                    .contains("Successes (k):")
-                    .contains("Observed rate (p̂):")
-                    .contains("1.0000")
-                    .contains("Inference")
-                    .contains("Wilson 95% lower:")
-                    .contains("0.9290")
-                    .contains("Threshold:")
-                    .contains("0.9400 (origin: EMPIRICAL)")
-                    .contains("Baseline samples:")
-                    .contains("1000")
-                    .contains("Reasoning:")
-                    .contains("0.9290 < 0.9400 ✗");
-        }
-
-        @Test
-        @DisplayName("PASS verdict shows ✓ in the reasoning line")
-        void passShowsCheckMark() {
-            Map<String, Object> detail = Map.of(
-                    "observed", 0.94,
-                    "threshold", 0.85,
-                    "origin", "EMPIRICAL",
-                    "successes", 94,
-                    "failures", 6,
-                    "total", 100,
-                    "confidence", 0.95,
-                    "wilsonLowerBound", 0.873);
-
-            String rendered = TransparentStatsRenderer.render(
-                    "test", result(Verdict.PASS, criterion(
-                            "bernoulli-pass-rate", Verdict.PASS, "...", detail)));
-
-            assertThat(rendered)
-                    .contains("STATISTICAL ANALYSIS — verdict: PASS")
-                    .contains("0.8730 ≥ 0.8500 ✓");
+                    .contains("[REQUIRED] bernoulli-pass-rate → PASS")
+                    .contains("baseline and test share one success probability")
+                    .contains("regression/fisher v1, alpha 0.05")
+                    .contains("K = 93 of n = 100")
+                    .contains("K_b = 951 of n_b = 1000")
+                    .contains("PASS iff K ≥ c = 91")
+                    .contains("both drawn afresh from an unchanged service")
+                    .contains("at the assumed common rate")
+                    .contains("inverts the design power");
         }
     }
 
     @Nested
-    @DisplayName("PassRate contractual path")
+    @DisplayName("PassRate compliance path (compliance/exact-binomial)")
     class BernoulliContractual {
 
         @Test
-        @DisplayName("renders deterministic-comparison test type, no Wilson section")
+        @DisplayName("renders the requirement, k_min, the calibration statement and the Clopper–Pearson bound")
         void rendersContractual() {
-            Map<String, Object> detail = Map.of(
-                    "observed", 0.94,
-                    "threshold", 0.90,
-                    "origin", ThresholdOrigin.SLA.name(),
-                    "successes", 94,
-                    "failures", 6,
-                    "total", 100);
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("observed", 0.96);
+            decision.put("successes", 96);
+            decision.put("total", 100);
+            decision.put("origin", ThresholdOrigin.SLA.name());
+            decision.put("threshold", 0.90);
+            decision.put("alpha", 0.05);
+            decision.put("decisionRule", "compliance/exact-binomial");
+            decision.put("kMin", 96);
+            decision.put("passPossible", true);
+            decision.put("falseCompliance", 0.0237);
+            decision.put("clopperPearsonLower", 0.9109);
 
             String rendered = TransparentStatsRenderer.render(
-                    "test", result(Verdict.PASS, criterion(
-                            "bernoulli-pass-rate", Verdict.PASS, "...", detail)));
+                    "test", result(Verdict.PASS, passRate(Verdict.PASS, decision)));
 
             assertThat(rendered)
-                    .contains("Test type:")
-                    .contains("Deterministic comparison (observed ≥ threshold)")
-                    .contains("Threshold:")
+                    .contains("p ≤ 0.9000 (the requirement is not met)")
+                    .contains("compliance/exact-binomial v1, alpha 0.05")
                     .contains("0.9000 (origin: SLA)")
-                    .contains("0.9400 ≥ 0.9000 ✓")
-                    .doesNotContain("Wilson")
-                    .doesNotContain("Baseline samples");
+                    .contains("PASS iff K ≥ k_min = 96")
+                    .contains("falsely declare compliance")
+                    .contains("decides nothing")
+                    .doesNotContain("Wilson");
+        }
+
+        @Test
+        @DisplayName("a design no outcome of which could pass says so")
+        void rendersPassNotPossible() {
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("observed", 1.0);
+            decision.put("successes", 10);
+            decision.put("total", 10);
+            decision.put("origin", ThresholdOrigin.SLA.name());
+            decision.put("threshold", 0.99);
+            decision.put("alpha", 0.05);
+            decision.put("decisionRule", "compliance/exact-binomial");
+            decision.put("passPossible", false);
+            decision.put("falseCompliance", 0.0);
+            decision.put("clopperPearsonLower", 0.74);
+
+            String rendered = TransparentStatsRenderer.render(
+                    "test", result(Verdict.FAIL, passRate(Verdict.FAIL, decision)));
+
+            assertThat(rendered).contains("no count of this size can pass");
         }
     }
 

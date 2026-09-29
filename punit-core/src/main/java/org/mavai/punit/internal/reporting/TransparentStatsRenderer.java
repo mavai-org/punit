@@ -15,12 +15,18 @@ import org.mavai.punit.api.spec.FailureExemplar;
 import org.mavai.punit.api.spec.PerCriterionEvaluation;
 import org.mavai.punit.api.spec.PerCriterionVerdict;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
-import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.api.PercentileKey;
+import org.mavai.punit.api.spec.ConfigurationRefusal;
+import org.mavai.punit.api.spec.PercentileLatency;
+import org.mavai.punit.api.spec.VerdictComposition;
+import org.mavai.punit.statistics.DecisionRule;
+import org.mavai.punit.statistics.Methodology;
 
 /**
  * Verbose statistical breakdown of a {@link ProbabilisticTestResult}
  * for the audit / compliance service contract where the reasoning behind a
- * verdict — including a passing one — has to be visible.
+ * verdict — including a passing one — has to be visible (Statistical
+ * Companion §7.1, §10.2).
  *
  * <p>Authors opt in via
  * {@code PUnit.testing(...).transparentStats()}; this class is the
@@ -28,35 +34,14 @@ import org.mavai.punit.api.spec.Verdict;
  *
  * <h2>What gets rendered</h2>
  *
- * <p>For every evaluated criterion, the renderer pulls the
- * structured detail map and formats it into a labelled block:
- *
- * <pre>
- * STATISTICAL ANALYSIS — verdict: PASS
- *
- *   testInstructionTranslation
- *
- *   [REQUIRED] bernoulli-pass-rate → PASS
- *     Hypothesis test
- *       H₀ (null):           True pass rate π ≥ 0.85
- *       H₁ (alternative):    True pass rate π < 0.85
- *       Test type:           One-sided Wilson-score lower bound
- *     Observed data
- *       Sample size (n):     100
- *       Successes (k):       94
- *       Observed rate (p̂):  0.9400
- *     Inference
- *       Wilson 95% lower:    0.8730
- *       Threshold:           0.8500 (origin: SLA)
- *       Reasoning:           0.8730 ≥ 0.8500  ✓
- * </pre>
- *
- * <p>Empirical {@code PassRate} runs get the full
- * hypothesis + Wilson-bound rendering; contractual runs get the
- * simpler {@code observed ≥ threshold} comparison; criteria the
- * renderer doesn't yet know about (latency, future kinds) fall
- * back to the criterion's explanation string plus its raw detail
- * map.
+ * <p>The test verdict {@code V_test} at the top, with the functional and
+ * latency dimensions beside it, what triggered a FAIL or an INCONCLUSIVE,
+ * and the Type-I envelopes by direction; then one analysis block per
+ * criterion — hypotheses, the versioned decision rule and its alpha, the
+ * observed data, the integer decision artefact, the calibration statement
+ * naming its random experiment, and what the design can detect; then one
+ * block per enforced latency constraint. A configuration refused before
+ * any sample ran renders its configuration errors instead.
  *
  * <p>Output is plain text — readable in IDE test consoles,
  * surefire reports, and CI logs without further processing.
@@ -80,9 +65,23 @@ public final class TransparentStatsRenderer {
      */
     public static String render(String testIdentity, ProbabilisticTestResult result) {
         StringBuilder sb = new StringBuilder();
-        sb.append("STATISTICAL ANALYSIS — verdict: ")
+        if (result.refused()) {
+            sb.append("STATISTICAL ANALYSIS — configuration refused\n\n");
+            sb.append("  ").append(testIdentity).append("\n\n");
+            sb.append("  Refused before any sample ran (methodology ")
+                    .append(Methodology.VERSION).append(")\n");
+            for (ConfigurationRefusal refusal : result.refusals()) {
+                sb.append("    ").append(refusal.code()).append(" — ")
+                        .append(refusal.reason()).append('\n');
+            }
+            sb.append('\n');
+            sb.append("  Test intent: ").append(result.intent()).append('\n');
+            return sb.toString();
+        }
+        sb.append("STATISTICAL ANALYSIS — test verdict: ")
                 .append(result.verdict()).append("\n\n");
         sb.append("  ").append(testIdentity).append("\n\n");
+        result.composition().ifPresent(c -> renderComposition(sb, c));
 
         renderCovariates(sb, result.covariates());
 
@@ -106,6 +105,28 @@ public final class TransparentStatsRenderer {
         result.contractRef().ifPresent(ref ->
                 sb.append("  Contract: ").append(ref).append('\n'));
         return sb.toString();
+    }
+
+    /**
+     * The test verdict's header: the two dimensions, what decided a FAIL
+     * or an INCONCLUSIVE, and the union-bound envelopes by direction.
+     */
+    private static void renderComposition(StringBuilder sb, VerdictComposition c) {
+        sb.append("  Test verdict (methodology ").append(Methodology.VERSION).append(")\n");
+        c.rateVerdict().ifPresent(v -> sb.append(label("Functional:", v.name())));
+        c.latencyVerdict().ifPresent(v -> sb.append(label("Latency:", v.name())));
+        sb.append(label("Test:", c.testVerdict().name()));
+        if (!c.triggering().isEmpty()) {
+            sb.append(label("Decided by:", c.triggering().stream()
+                    .map(t -> (t.kind() == VerdictComposition.Trigger.Kind.LATENCY
+                            ? "latency " : "criterion ") + t.id())
+                    .collect(java.util.stream.Collectors.joining(", "))));
+        }
+        c.falseComplianceEnvelope().ifPresent(e -> sb.append(label("False compliance:",
+                String.format(Locale.ROOT, "at most %.4f (sum of alpha, compliance decisions)", e))));
+        c.falseDegradationSignalEnvelope().ifPresent(e -> sb.append(label("False degradation:",
+                String.format(Locale.ROOT, "at most %.4f (sum of alpha, regression decisions)", e))));
+        sb.append('\n');
     }
 
     private static void renderCovariates(StringBuilder sb, CovariateAlignment alignment) {
@@ -156,61 +177,112 @@ public final class TransparentStatsRenderer {
                 .append(cr.verdict()).append('\n');
 
         Map<String, Object> detail = cr.detail();
-        switch (cr.criterionName()) {
-            case "bernoulli-pass-rate" -> renderBernoulli(sb, cr, detail);
-            default -> renderGeneric(sb, cr, detail);
+        if (detail.get("decisionsByCriterion") instanceof Map<?, ?> decisions) {
+            decisions.forEach((id, decision) -> {
+                if (decision instanceof Map<?, ?> d) {
+                    renderDecision(sb, String.valueOf(id), d);
+                }
+            });
+        } else if (PercentileLatency.NAME.equals(cr.criterionName())
+                && detail.containsKey("successfulSamples")) {
+            renderLatency(sb, detail);
+        } else {
+            renderGeneric(sb, cr, detail);
         }
         sb.append('\n');
     }
 
-    private static void renderBernoulli(StringBuilder sb, CriterionResult cr, Map<String, Object> detail) {
-        Object origin = detail.get("origin");
-        Object threshold = detail.get("threshold");
-        Object observed = detail.get("observed");
-        Object successes = detail.get("successes");
-        Object failures = detail.get("failures");
-        Object total = detail.get("total");
-        Object confidence = detail.get("confidence");
-        Object wilsonLower = detail.get("wilsonLowerBound");
-        Object baselineSampleCount = detail.get("baselineSampleCount");
-
-        boolean isEmpirical = "EMPIRICAL".equals(String.valueOf(origin));
-
-        sb.append("    Hypothesis test\n");
-        sb.append(label("H₀ (null):",
-                "True pass rate π ≥ " + formatRate(threshold)));
-        sb.append(label("H₁ (alternative):",
-                "True pass rate π < " + formatRate(threshold)));
-        sb.append(label("Test type:",
-                isEmpirical
-                        ? "One-sided Wilson-score lower bound"
-                        : "Deterministic comparison (observed ≥ threshold)"));
-
-        sb.append("    Observed data\n");
-        sb.append(label("Sample size (n):", String.valueOf(total)));
-        sb.append(label("Successes (k):", String.valueOf(successes)));
-        sb.append(label("Failures:", String.valueOf(failures)));
-        sb.append(label("Observed rate (p̂):", formatRate(observed)));
-
-        sb.append("    Inference\n");
-        if (isEmpirical) {
-            String confidencePct = confidence == null
-                    ? "?"
-                    : String.format(Locale.ROOT, "%.0f%%",
-                            ((Number) confidence).doubleValue() * 100.0);
-            sb.append(label("Wilson " + confidencePct + " lower:", formatRate(wilsonLower)));
-            sb.append(label("Threshold:",
-                    formatRate(threshold) + " (origin: " + origin + ")"));
-            if (baselineSampleCount != null) {
-                sb.append(label("Baseline samples:", String.valueOf(baselineSampleCount)));
+    /** One methodology criterion's analysis block (§10.2). */
+    private static void renderDecision(StringBuilder sb, String id, Map<?, ?> d) {
+        Object rule = d.get("decisionRule");
+        Object alpha = d.get("alpha");
+        sb.append("    ").append(id).append('\n');
+        if (DecisionRule.REGRESSION_FISHER.id().equals(rule)) {
+            sb.append(label("H₀ (null):", "baseline and test share one success probability"));
+            sb.append(label("H₁ (alternative):", "the test's success probability is lower"));
+            sb.append(label("Decision rule:", rule + " v1, alpha " + alpha));
+            sb.append(label("Observed:", String.format(Locale.ROOT, "K = %s of n = %s (%s)",
+                    d.get("successes"), d.get("total"), formatRate(d.get("observed")))));
+            sb.append(label("Baseline:", String.format(Locale.ROOT, "K_b = %s of n_b = %s",
+                    d.get("baselineSuccesses"), d.get("baselineSampleCount"))));
+            sb.append(label("Cutoff:", String.format(Locale.ROOT,
+                    "PASS iff K ≥ c = %s (displayed rate %s)",
+                    d.get("cutoff"), formatRate(d.get("displayedRate")))));
+            sb.append(label("Calibration:", String.format(Locale.ROOT,
+                    "were the baseline and the test both drawn afresh from an unchanged "
+                            + "service, the rule would signal degradation with probability "
+                            + "at most %s", alpha)));
+            if (d.get("sizeAtAssumedCommonRate") instanceof Number size) {
+                sb.append(label("Size at p̂_b:", String.format(Locale.ROOT,
+                        "%.4f (at the assumed common rate; not a property of the run)",
+                        size.doubleValue())));
             }
-            sb.append(label("Reasoning:", formatBernoulliReasoning(
-                    wilsonLower, threshold, cr.verdict())));
+            if (d.get("designAlternativeRate") instanceof Number rate) {
+                sb.append(label("Design power:", String.format(Locale.ROOT, "%.4f at rate %s",
+                        ((Number) d.get("designPower")).doubleValue(), rate)));
+                sb.append(label("Resolved power:", String.format(Locale.ROOT, "%.4f at rate %s",
+                        ((Number) d.get("resolvedTestPower")).doubleValue(), rate)));
+            } else if (d.get("minimumDetectableDegradation") instanceof Number mdd) {
+                sb.append(label("Detectable drop:", String.format(Locale.ROOT,
+                        "%.4f with 80%% power (inverts the design power)", mdd.doubleValue())));
+            }
+        } else if (DecisionRule.COMPLIANCE_EXACT_BINOMIAL.id().equals(rule)) {
+            sb.append(label("H₀ (null):", "p ≤ " + formatRate(d.get("threshold"))
+                    + " (the requirement is not met)"));
+            sb.append(label("H₁ (alternative):", "p > " + formatRate(d.get("threshold"))));
+            sb.append(label("Decision rule:", rule + " v1, alpha " + alpha));
+            sb.append(label("Requirement:", formatRate(d.get("threshold"))
+                    + " (origin: " + d.get("origin") + ")"));
+            sb.append(label("Observed:", String.format(Locale.ROOT, "K = %s of n = %s (%s)",
+                    d.get("successes"), d.get("total"), formatRate(d.get("observed")))));
+            sb.append(label("Smallest passing:", d.containsKey("kMin")
+                    ? "PASS iff K ≥ k_min = " + d.get("kMin")
+                    : "no count of this size can pass"));
+            sb.append(label("Calibration:", String.format(Locale.ROOT,
+                    "were the true rate at or below the requirement, the test would falsely "
+                            + "declare compliance with probability at most %s", alpha)));
+            sb.append(label("False compliance:", formatRate(d.get("falseCompliance"))));
+            sb.append(label("Clopper–Pearson:", formatRate(d.get("clopperPearsonLower"))
+                    + " (one-sided lower bound; reported, decides nothing)"));
         } else {
-            sb.append(label("Threshold:",
-                    formatRate(threshold) + " (origin: " + origin + ")"));
-            sb.append(label("Reasoning:", formatBernoulliReasoning(
-                    observed, threshold, cr.verdict())));
+            sb.append(label("Observed:", String.format(Locale.ROOT, "%s of %s (%s)",
+                    d.get("successes"), d.get("total"), formatRate(d.get("observed")))));
+            sb.append(label("Rule:", d.containsKey("origin")
+                    ? "zero failures (origin: " + d.get("origin") + ")" : "none"));
+        }
+    }
+
+    /** One block per enforced latency constraint. */
+    private static void renderLatency(StringBuilder sb, Map<String, Object> d) {
+        sb.append(label("Successful:", d.get("successfulSamples") + " latencies"));
+        for (PercentileKey key : PercentileKey.values()) {
+            String k = key.detailKey();
+            if (!(d.get("verdict." + k) instanceof String verdict)) {
+                continue;
+            }
+            sb.append("    ").append(k).append(" → ").append(verdict).append('\n');
+            sb.append(label("Decision rule:", d.get("decisionRule." + k) + " v1, alpha " + d.get("alpha")));
+            if (d.containsKey("withinThreshold." + k)) {
+                sb.append(label("Within ceiling:", d.get("withinThreshold." + k) + " of "
+                        + d.get("successfulSamples") + " at or below " + d.get("threshold." + k) + " ms"));
+                sb.append(label("Required:", d.containsKey("requiredWithin." + k)
+                        ? String.valueOf(d.get("requiredWithin." + k))
+                        : "no count of this size can pass"));
+                if (d.containsKey("observed." + k)) {
+                    sb.append(label("Raw percentile:", d.get("observed." + k)
+                            + " ms (advisory; decides nothing)"));
+                }
+            } else if (Boolean.TRUE.equals(d.get("saturated." + k))) {
+                sb.append(label("Threshold:", "none — saturated: no baseline rank achieves alpha"));
+            } else if (d.containsKey("threshold." + k)) {
+                sb.append(label("Threshold:", d.get("threshold." + k) + " ms (baseline rank "
+                        + d.get("threshold." + k + ".rank") + ")"));
+                sb.append(label("Observed:", d.get("observed." + k) + " ms"));
+            }
+            if (Boolean.TRUE.equals(d.get("indicative." + k))) {
+                sb.append(label("Indicative:", "below the non-degeneracy minimum: a directional "
+                        + "signal only"));
+            }
         }
     }
 
@@ -240,14 +312,6 @@ public final class TransparentStatsRenderer {
             return String.format(Locale.ROOT, "%.4f", n.doubleValue());
         }
         return String.valueOf(value);
-    }
-
-    private static String formatBernoulliReasoning(Object lhs, Object threshold, Verdict verdict) {
-        String comparator = verdict == Verdict.PASS ? "≥" : "<";
-        String mark = verdict == Verdict.PASS ? " ✓"
-                : verdict == Verdict.FAIL ? " ✗"
-                : "";
-        return formatRate(lhs) + " " + comparator + " " + formatRate(threshold) + mark;
     }
 
     /**

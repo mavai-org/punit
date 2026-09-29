@@ -95,7 +95,12 @@ public enum TerminationReason {
     /**
      * Scorer failed to evaluate an iteration during optimization.
      */
-    SCORING_FAILURE("Scoring failed");
+    SCORING_FAILURE("Scoring failed"),
+
+    // === Configuration ===
+
+    /** The configuration was refused before any sample ran (Statistical Companion §5.7.1). */
+    CONFIGURATION_REFUSED("Configuration refused before any sample ran");
 
     private final String description;
 

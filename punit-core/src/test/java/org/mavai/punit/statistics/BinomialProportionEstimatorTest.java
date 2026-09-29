@@ -230,115 +230,7 @@ class BinomialProportionEstimatorTest {
         }
     }
     
-    @Nested
-    @DisplayName("Z-Test Statistic: z = (p̂ - π₀) / √(π₀(1-π₀)/n)")
-    class ZTestStatistic {
 
-        @Test
-        @DisplayName("computes z-statistic for observed rate below hypothesis")
-        void observedBelowHypothesis() {
-            // p̂ = 0.80, π₀ = 0.95, n = 100
-            // SE = √(0.95 × 0.05 / 100) = √0.000475 ≈ 0.02179
-            // z = (0.80 - 0.95) / 0.02179 ≈ -6.882
-            double z = estimator.zTestStatistic(0.80, 0.95, 100);
-            assertThat(z).isCloseTo(-6.882, within(0.01));
-        }
-
-        @Test
-        @DisplayName("computes z-statistic for observed rate above hypothesis")
-        void observedAboveHypothesis() {
-            // p̂ = 0.98, π₀ = 0.90, n = 200
-            // SE = √(0.90 × 0.10 / 200) ≈ 0.02121
-            // z = (0.98 - 0.90) / 0.02121 ≈ 3.771
-            double z = estimator.zTestStatistic(0.98, 0.90, 200);
-            assertThat(z).isCloseTo(3.771, within(0.01));
-        }
-
-        @Test
-        @DisplayName("returns zero when observed equals hypothesized")
-        void observedEqualsHypothesized() {
-            double z = estimator.zTestStatistic(0.95, 0.95, 100);
-            assertThat(z).isEqualTo(0.0);
-        }
-
-        @Test
-        @DisplayName("returns zero for non-positive sample size")
-        void nonPositiveSampleSize() {
-            assertThat(estimator.zTestStatistic(0.90, 0.95, 0)).isEqualTo(0.0);
-            assertThat(estimator.zTestStatistic(0.90, 0.95, -1)).isEqualTo(0.0);
-        }
-
-        @Test
-        @DisplayName("returns zero when hypothesized rate is 0 or 1 (SE collapses)")
-        void hypothesizedAtBoundary() {
-            assertThat(estimator.zTestStatistic(0.50, 0.0, 100)).isEqualTo(0.0);
-            assertThat(estimator.zTestStatistic(0.50, 1.0, 100)).isEqualTo(0.0);
-        }
-
-        @Test
-        @DisplayName("magnitude increases with sample size for fixed shortfall")
-        void magnitudeIncreasesWithSampleSize() {
-            double zSmall = estimator.zTestStatistic(0.90, 0.95, 50);
-            double zLarge = estimator.zTestStatistic(0.90, 0.95, 500);
-            assertThat(Math.abs(zLarge)).isGreaterThan(Math.abs(zSmall));
-        }
-    }
-
-    @Nested
-    @DisplayName("One-Sided P-Value: P(Z ≤ z) — left-tailed test for degradation detection")
-    class OneSidedPValue {
-
-        @Test
-        @DisplayName("p-value is 0.5 when z = 0")
-        void pValueAtZero() {
-            double p = estimator.oneSidedPValue(0.0);
-            assertThat(p).isCloseTo(0.5, within(0.0001));
-        }
-
-        @Test
-        @DisplayName("p-value is small for large negative z (strong evidence of degradation)")
-        void smallPValueForLargeNegativeZ() {
-            // z = -1.645 → lower tail ≈ 0.05
-            double p = estimator.oneSidedPValue(-1.645);
-            assertThat(p).isCloseTo(0.05, within(0.001));
-        }
-
-        @Test
-        @DisplayName("p-value approaches 1 for large positive z (no evidence of degradation)")
-        void largePValueForPositiveZ() {
-            // z = 3.0 → lower tail ≈ 0.9987
-            double p = estimator.oneSidedPValue(3.0);
-            assertThat(p).isCloseTo(0.9987, within(0.001));
-        }
-
-        @Test
-        @DisplayName("p-value increases as z increases (further above threshold = less evidence of degradation)")
-        void pValueIncreasesWithZ() {
-            double p1 = estimator.oneSidedPValue(-2.0);
-            double p2 = estimator.oneSidedPValue(0.0);
-            double p3 = estimator.oneSidedPValue(2.0);
-            assertThat(p1).isLessThan(p2);
-            assertThat(p2).isLessThan(p3);
-        }
-
-        @Test
-        @DisplayName("observed far below threshold produces small p-value (strong evidence of degradation)")
-        void observedBelowThresholdProducesSmallPValue() {
-            // observed 0.80 vs threshold 0.95 with n=100 → z is strongly negative
-            double z = estimator.zTestStatistic(0.80, 0.95, 100);
-            double p = estimator.oneSidedPValue(z);
-            assertThat(p).isLessThan(0.01);
-        }
-
-        @Test
-        @DisplayName("observed above threshold produces large p-value (no evidence of degradation)")
-        void observedAboveThresholdProducesLargePValue() {
-            // observed 0.98 vs threshold 0.90 with n=100 → z is positive
-            double z = estimator.zTestStatistic(0.98, 0.90, 100);
-            double p = estimator.oneSidedPValue(z);
-            assertThat(p).isGreaterThan(0.99);
-        }
-    }
 
     @Nested
     @DisplayName("Input Validation")
@@ -400,20 +292,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.9016, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario A: Z-test statistic for p̂=0.96, π₀=0.9374, n=100")
-        void scenarioA_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.96, 0.9374, 100))
-                    .isCloseTo(0.9331, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario A: p-value for z=0.9331")
-        void scenarioA_pValue() {
-            double z = estimator.zTestStatistic(0.96, 0.9374, 100);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.8246, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario B: SE(p̂) for 85/100")
@@ -429,21 +308,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.7672, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario B: Z-test statistic for p̂=0.85, π₀=0.9374, n=100")
-        void scenarioB_zTestStatistic() {
-            // Z = (0.85 - 0.9374) / √(0.9374 × 0.0626 / 100) ≈ -3.6080
-            assertThat(estimator.zTestStatistic(0.85, 0.9374, 100))
-                    .isCloseTo(-3.6080, within(0.001));
-        }
 
-        @Test
-        @DisplayName("Scenario B: p-value for z≈-3.61")
-        void scenarioB_pValue() {
-            double z = estimator.zTestStatistic(0.85, 0.9374, 100);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.0002, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario C: SE(p̂) for 40/50")
@@ -459,20 +324,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.6696, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario C: Z-test statistic for p̂=0.80, π₀=0.90, n=50")
-        void scenarioC_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.80, 0.90, 50))
-                    .isCloseTo(-2.3570, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario C: p-value for z≈-2.36")
-        void scenarioC_pValue() {
-            double z = estimator.zTestStatistic(0.80, 0.90, 50);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.0092, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario D: SE(p̂) for 180/200")
@@ -488,20 +340,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.8506, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario D: Z-test statistic for p̂=0.90, π₀=0.85, n=200")
-        void scenarioD_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.90, 0.85, 200))
-                    .isCloseTo(1.9802, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario D: p-value for z≈1.98")
-        void scenarioD_pValue() {
-            double z = estimator.zTestStatistic(0.90, 0.85, 200);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.9762, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario E: SE(p̂) for 95/100")
@@ -517,20 +356,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.8883, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario E: Z-test statistic for p̂=0.95, π₀=0.90, n=100")
-        void scenarioE_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.95, 0.90, 100))
-                    .isCloseTo(1.6667, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario E: p-value for z≈1.67")
-        void scenarioE_pValue() {
-            double z = estimator.zTestStatistic(0.95, 0.90, 100);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.9522, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario F: SE(p̂) for 93/100")
@@ -547,20 +373,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.8625, within(0.001));
         }
 
-        @Test
-        @DisplayName("Scenario F: Z-test statistic for p̂=0.93, π₀=0.90, n=100")
-        void scenarioF_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.93, 0.90, 100))
-                    .isCloseTo(1.0000, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario F: p-value for z=1.0")
-        void scenarioF_pValue() {
-            double z = estimator.zTestStatistic(0.93, 0.90, 100);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.8413, within(0.0005));
-        }
 
         @Test
         @DisplayName("Scenario G: SE(p̂) for 20/30")
@@ -576,61 +389,7 @@ class BinomialProportionEstimatorTest {
                     .isCloseTo(0.4880, within(0.0005));
         }
 
-        @Test
-        @DisplayName("Scenario G: Z-test statistic for p̂=0.6667, π₀=0.90, n=30")
-        void scenarioG_zTestStatistic() {
-            assertThat(estimator.zTestStatistic(0.6667, 0.90, 30))
-                    .isCloseTo(-4.2597, within(0.0005));
-        }
 
-        @Test
-        @DisplayName("Scenario G: p-value for z≈-4.26")
-        void scenarioG_pValue() {
-            double z = estimator.zTestStatistic(0.6667, 0.90, 30);
-            assertThat(estimator.oneSidedPValue(z))
-                    .isCloseTo(0.0000, within(0.0005));
-        }
     }
 
-    @Nested
-    @DisplayName("Zero rate")
-    class ZeroRate {
-
-        @Test
-        @DisplayName("the bound is exactly zero, not a cancellation residue")
-        void zeroRateGivesExactlyZero() {
-            // At pHat = 0 the centre and the margin are the same quantity,
-            // z^2 / (2n), so they cancel and the bound is exactly 0 — an
-            // algebraic identity holding at every n and every confidence.
-            // Asserted with isEqualTo, not isCloseTo: a tolerance comparison
-            // is precisely what cannot see the failure this pins. The sweep
-            // is dense because the round numbers one would sample by hand
-            // mostly cancel cleanly on their own.
-            for (int n = 1; n <= 1000; n++) {
-                for (double confidence : new double[] {0.90, 0.95, 0.99}) {
-                    assertThat(estimator.lowerBoundFromRate(0.0, n, confidence))
-                            .as("n = %d, confidence = %s", n, confidence)
-                            .isEqualTo(0.0);
-                }
-            }
-        }
-
-        @Test
-        @DisplayName("the integer cutoff stays at zero")
-        void zeroRateLeavesTheCutoffAtZero() {
-            // Why the identity above earns a test of its own. The binding
-            // decision artefact is ceil(n * threshold), and ceil turns any
-            // positive residue into 1 — demanding one success of a test whose
-            // baseline can demand nothing. Against the previous arithmetic
-            // this failed at 265 sizes at 90%, 201 at 95% and 121 at 99%.
-            for (int n = 1; n <= 1000; n++) {
-                for (double confidence : new double[] {0.90, 0.95, 0.99}) {
-                    double threshold = estimator.lowerBoundFromRate(0.0, n, confidence);
-                    assertThat(Math.ceil(n * threshold))
-                            .as("n = %d, confidence = %s", n, confidence)
-                            .isEqualTo(0.0);
-                }
-            }
-        }
-    }
 }

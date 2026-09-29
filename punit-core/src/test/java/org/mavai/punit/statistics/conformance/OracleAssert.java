@@ -1,6 +1,12 @@
 package org.mavai.punit.statistics.conformance;
 
+import java.util.Iterator;
+import java.util.Map;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -10,45 +16,24 @@ import static org.assertj.core.api.Assertions.within;
  * Asserts one binding expected field of one fixture case against the
  * oracle, recording the {@code (suite, case, field)} triple <em>before</em>
  * asserting — an attempted-and-failed assertion is a red test, not a
- * coverage gap. A {@code null} actual value fails with a
- * missing-capability diagnostic: the production surface produced nothing
- * for a field the manifest classifies as binding.
+ * coverage gap.
+ *
+ * <p>Comparison: exact equality for booleans, strings and integer-valued
+ * fields, and whenever no tolerance is given; numeric comparison within
+ * the suite's tolerance otherwise. An expected {@code null} demands that
+ * the production surface produced nothing — a refused configuration has
+ * no cutoff, no verdict, no rank, and a framework that returned a number
+ * there would fail. Lists and objects (the configuration-error list, the
+ * per-criterion rows, the latency constraints) are compared element by
+ * element under the same rules.
  */
 final class OracleAssert {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private OracleAssert() { }
 
-    /** Exact-equality form: booleans, strings, integer-valued fields. */
-    /**
-     * Discharge a binding field whose expected value on this case is null.
-     *
-     * <p>A refusal case carries every numeric expectation as null, because
-     * none exists: the design was declined, so there is no sample size, no
-     * floor, no power. The manifest still lists those fields as binding —
-     * it classifies fields per suite, not per case — so the obligation is
-     * real and has to be met by saying something true about them.
-     *
-     * <p>What is true is that the oracle expects no value and the production
-     * surface produced none. Asserting that is not a formality: a framework
-     * that returned a number here — having clamped the baseline to something
-     * small, or fallen back to a fixed-threshold form — would fail it, which
-     * is exactly the repair companion §4.3.4 forbids.
-     */
-    static void assertOracleAbsent(
-            ConformanceRecorder recorder, String suite, JsonNode fixtureCase, String field) {
-        String caseName = fixtureCase.get("name").asText();
-        recorder.record(suite, caseName, field);
-        JsonNode expected = fixtureCase.get("expected").get(field);
-        String label = suite + "/" + caseName + "/" + field;
-        if (expected == null) {
-            throw new IllegalStateException(
-                    label + ": the fixture case carries no such expected field — check the assertion");
-        }
-        assertThat(expected.isNull())
-                .as("%s: expected an absent value, but the oracle publishes %s", label, expected)
-                .isTrue();
-    }
-
+    /** Exact-equality form: booleans, strings, integer-valued fields, lists. */
     static void assertOracle(
             ConformanceRecorder recorder, String suite, JsonNode fixtureCase,
             String field, Object actual) {
@@ -66,24 +51,64 @@ final class OracleAssert {
             throw new IllegalStateException(
                     label + ": the fixture case carries no such expected field — check the assertion");
         }
-        if (actual == null) {
+        compare(label, expected, MAPPER.valueToTree(unwrap(actual)), tolerance);
+    }
+
+    private static Object unwrap(Object actual) {
+        if (actual instanceof OptionalInt oi) {
+            return oi.isPresent() ? oi.getAsInt() : null;
+        }
+        if (actual instanceof OptionalDouble od) {
+            return od.isPresent() ? od.getAsDouble() : null;
+        }
+        if (actual instanceof java.util.Optional<?> o) {
+            return o.orElse(null);
+        }
+        return actual;
+    }
+
+    private static void compare(String label, JsonNode expected, JsonNode actual, Double tolerance) {
+        if (expected.isNull()) {
+            assertThat(actual == null || actual.isNull())
+                    .as("%s: the oracle expects no value, but the production surface produced %s",
+                            label, actual)
+                    .isTrue();
+            return;
+        }
+        if (actual == null || actual.isNull()) {
             fail("%s: the oracle expects %s, but the production surface produced nothing "
                     + "for this binding field", label, expected);
         }
-        if (expected.isBoolean()) {
-            assertThat(actual).as(label).isEqualTo(expected.asBoolean());
+        if (expected.isArray()) {
+            assertThat(actual.isArray()).as("%s: expected a list, got %s", label, actual).isTrue();
+            assertThat(actual.size()).as("%s: list length (expected %s, got %s)", label, expected, actual)
+                    .isEqualTo(expected.size());
+            for (int i = 0; i < expected.size(); i++) {
+                compare(label + "[" + i + "]", expected.get(i), actual.get(i), tolerance);
+            }
+        } else if (expected.isObject()) {
+            assertThat(actual.isObject()).as("%s: expected an object, got %s", label, actual).isTrue();
+            Iterator<Map.Entry<String, JsonNode>> fields = expected.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> e = fields.next();
+                compare(label + "." + e.getKey(), e.getValue(), actual.get(e.getKey()), tolerance);
+            }
+            assertThat(actual.size()).as("%s: fields (expected %s, got %s)", label, expected, actual)
+                    .isEqualTo(expected.size());
+        } else if (expected.isBoolean()) {
+            assertThat(actual.asBoolean()).as(label).isEqualTo(expected.asBoolean());
+            assertThat(actual.isBoolean()).as(label + " (type)").isTrue();
         } else if (expected.isTextual()) {
-            assertThat(String.valueOf(actual)).as(label).isEqualTo(expected.asText());
-        } else if (tolerance == null || tolerance == 0.0) {
+            assertThat(actual.asText()).as(label).isEqualTo(expected.asText());
+        } else if (tolerance == null || tolerance == 0.0 || expected.isIntegralNumber() && actual.isIntegralNumber()) {
             if (expected.isIntegralNumber()) {
-                assertThat(((Number) actual).longValue()).as(label).isEqualTo(expected.asLong());
+                assertThat(actual.isNumber()).as(label + " (numeric)").isTrue();
+                assertThat(actual.asDouble()).as(label).isEqualTo(expected.asDouble());
             } else {
-                assertThat(((Number) actual).doubleValue()).as(label).isEqualTo(expected.asDouble());
+                assertThat(actual.asDouble()).as(label).isEqualTo(expected.asDouble());
             }
         } else {
-            assertThat(((Number) actual).doubleValue())
-                    .as(label)
-                    .isCloseTo(expected.asDouble(), within(tolerance));
+            assertThat(actual.asDouble()).as(label).isCloseTo(expected.asDouble(), within(tolerance));
         }
     }
 }

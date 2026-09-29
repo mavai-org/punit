@@ -45,10 +45,12 @@ public record ProbabilisticTestVerdict(
         String verdictReason,
         Map<String, FailureCount> postconditionFailures,
         Optional<PerCriterionStructure> perCriterion,
-        Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings
+        Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings,
+        TestDecision decision
 ) {
 
     public ProbabilisticTestVerdict {
+        decision = decision != null ? decision : TestDecision.NONE;
         // Preserve insertion order — clauses appear in the order the
         // contract declared them. Map.copyOf does not guarantee order;
         // unmodifiableMap(LinkedHashMap) does.
@@ -59,6 +61,36 @@ public record ProbabilisticTestVerdict(
         postconditionStandings = postconditionStandings != null
                 ? postconditionStandings
                 : Optional.empty();
+    }
+
+    /**
+     * Constructor for the shape that predates the decision behind the
+     * verdict; defaults it to {@link TestDecision#NONE}.
+     */
+    public ProbabilisticTestVerdict(
+            String correlationId,
+            Instant timestamp,
+            TestIdentity identity,
+            ExecutionSummary execution,
+            Optional<FunctionalDimension> functional,
+            Optional<LatencyDimension> latency,
+            StatisticalAnalysis statistics,
+            CovariateStatus covariates,
+            CostSummary cost,
+            Optional<PacingSummary> pacing,
+            Optional<SpecProvenance> provenance,
+            Termination termination,
+            Map<String, String> environmentMetadata,
+            boolean junitPassed,
+            PUnitVerdict punitVerdict,
+            String verdictReason,
+            Map<String, FailureCount> postconditionFailures,
+            Optional<PerCriterionStructure> perCriterion,
+            Optional<org.mavai.punit.api.spec.PostconditionStandings> postconditionStandings) {
+        this(correlationId, timestamp, identity, execution, functional, latency,
+                statistics, covariates, cost, pacing, provenance, termination,
+                environmentMetadata, junitPassed, punitVerdict, verdictReason,
+                postconditionFailures, perCriterion, postconditionStandings, TestDecision.NONE);
     }
 
     /**
@@ -87,7 +119,7 @@ public record ProbabilisticTestVerdict(
         this(correlationId, timestamp, identity, execution, functional, latency,
                 statistics, covariates, cost, pacing, provenance, termination,
                 environmentMetadata, junitPassed, punitVerdict, verdictReason,
-                postconditionFailures, perCriterion, Optional.empty());
+                postconditionFailures, perCriterion, Optional.empty(), TestDecision.NONE);
     }
 
     /**
@@ -117,7 +149,7 @@ public record ProbabilisticTestVerdict(
         this(correlationId, timestamp, identity, execution, functional, latency,
                 statistics, covariates, cost, pacing, provenance, termination,
                 environmentMetadata, junitPassed, punitVerdict, verdictReason,
-                postconditionFailures, Optional.empty(), Optional.empty());
+                postconditionFailures, Optional.empty(), Optional.empty(), TestDecision.NONE);
     }
 
     /**
@@ -145,7 +177,7 @@ public record ProbabilisticTestVerdict(
         this(correlationId, timestamp, identity, execution, functional, latency,
                 statistics, covariates, cost, pacing, provenance, termination,
                 environmentMetadata, junitPassed, punitVerdict, verdictReason,
-                Map.of(), Optional.empty(), Optional.empty());
+                Map.of(), Optional.empty(), Optional.empty(), TestDecision.NONE);
     }
 
     // ── TestIdentity ──────────────────────────────────────────────────────
@@ -243,10 +275,13 @@ public record ProbabilisticTestVerdict(
      * @param p95Ms observed p95 latency (-1 if unavailable)
      * @param p99Ms observed p99 latency (-1 if unavailable)
      * @param maxMs observed max latency (-1 if unavailable)
-     * @param assertions per-percentile assertion results
      * @param caveats advisory messages
-     * @param dimensionSuccesses latency dimension success count from aggregator
-     * @param dimensionFailures latency dimension failure count from aggregator
+     * @param basis the latency population: the samples that passed every
+     *              functional criterion (Statistical Companion §12.2.1)
+     * @param verdict the latency dimension's verdict {@code V_latency}, the
+     *                structural composite of the enforced constraints;
+     *                empty when the test enforces none
+     * @param evaluations the enforced constraints' evaluations
      */
     public record LatencyDimension(
             int successfulSamples,
@@ -259,20 +294,43 @@ public record ProbabilisticTestVerdict(
             long p99Ms,
             long maxMs,
             List<String> caveats,
-            String basis
+            String basis,
+            Optional<org.mavai.punit.api.spec.Verdict> verdict,
+            List<LatencyEvaluation> evaluations
     ) {
         public LatencyDimension {
             skipReason = skipReason != null ? skipReason : Optional.empty();
             caveats = caveats != null ? List.copyOf(caveats) : List.of();
             basis = basis != null ? basis : "passing-samples";
+            verdict = verdict != null ? verdict : Optional.empty();
+            evaluations = evaluations != null ? List.copyOf(evaluations) : List.of();
+        }
+
+        /**
+         * Constructor for a descriptive latency dimension: no enforced
+         * constraint, so no latency verdict and no evaluations.
+         */
+        public LatencyDimension(
+                int successfulSamples,
+                int totalSamples,
+                boolean skipped,
+                Optional<String> skipReason,
+                long p50Ms,
+                long p90Ms,
+                long p95Ms,
+                long p99Ms,
+                long maxMs,
+                List<String> caveats,
+                String basis) {
+            this(successfulSamples, totalSamples, skipped, skipReason,
+                    p50Ms, p90Ms, p95Ms, p99Ms, maxMs, caveats, basis,
+                    Optional.empty(), List.of());
         }
 
         /**
          * Backward-compatible constructor that defaults
          * {@link #basis()} to {@code "passing-samples"} (the only
-         * currently defined population). Test fixtures and older
-         * call sites that haven't yet adopted the canonical field
-         * shape can construct via this overload.
+         * currently defined population).
          */
         public LatencyDimension(
                 int successfulSamples,
@@ -299,32 +357,40 @@ public record ProbabilisticTestVerdict(
      * @param confidenceLevel the confidence level used (e.g., 0.95)
      * @param standardError SE = √(p̂(1-p̂)/n)
      * @param wilsonLower Wilson one-sided lower bound on the test
-     *                    observation's pass rate at {@code confidenceLevel}.
-     *                    The verdict path is one-sided (degradation only);
-     *                    the upper bound carries no operational meaning under
-     *                    a left-tailed test and is not emitted.
-     * @param testStatistic z-test statistic, if computable
-     * @param pValue one-sided p-value, if computable
+     *                    observation's pass rate at {@code confidenceLevel} —
+     *                    descriptive: it decides nothing
      * @param thresholdDerivation description of how the threshold was derived, if spec-driven
      * @param baseline baseline data summary, if spec-driven
      * @param caveats advisory notes about the statistical analysis
+     * @param regression what a regression/fisher decision discloses about
+     *                   its design, when one decided
      */
     public record StatisticalAnalysis(
             double confidenceLevel,
             double standardError,
             double wilsonLower,
-            Optional<Double> testStatistic,
-            Optional<Double> pValue,
             Optional<String> thresholdDerivation,
             Optional<BaselineSummary> baseline,
-            List<String> caveats
+            List<String> caveats,
+            Optional<RegressionDisclosure> regression
     ) {
         public StatisticalAnalysis {
-            testStatistic = testStatistic != null ? testStatistic : Optional.empty();
-            pValue = pValue != null ? pValue : Optional.empty();
             thresholdDerivation = thresholdDerivation != null ? thresholdDerivation : Optional.empty();
             baseline = baseline != null ? baseline : Optional.empty();
             caveats = caveats != null ? List.copyOf(caveats) : List.of();
+            regression = regression != null ? regression : Optional.empty();
+        }
+
+        /** Constructor for an analysis with no regression disclosure. */
+        public StatisticalAnalysis(
+                double confidenceLevel,
+                double standardError,
+                double wilsonLower,
+                Optional<String> thresholdDerivation,
+                Optional<BaselineSummary> baseline,
+                List<String> caveats) {
+            this(confidenceLevel, standardError, wilsonLower, thresholdDerivation,
+                    baseline, caveats, Optional.empty());
         }
     }
 

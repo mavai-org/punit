@@ -173,6 +173,9 @@ class PostconditionFailureHistogramTest {
                         // across all four declared samples, not the
                         // failure-inevitable short-circuit.
                         .disableEarlyTermination()
+                        // SMOKE: four samples are a histogram fixture, not a
+                        // design able to demonstrate the declared requirement.
+                        .intent(org.mavai.punit.api.TestIntent.SMOKE)
                         .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);

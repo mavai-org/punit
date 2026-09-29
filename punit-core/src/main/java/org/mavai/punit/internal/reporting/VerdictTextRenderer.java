@@ -153,10 +153,19 @@ public final class VerdictTextRenderer {
         sb.append(PUnitReporter.labelValueLn("Wilson lower bound:",
                 String.format("%.4f", stats.wilsonLower())));
 
-        stats.testStatistic().ifPresent(t ->
-                sb.append(PUnitReporter.labelValueLn("Z:", String.format("%.4f", t))));
-        stats.pValue().ifPresent(p ->
-                sb.append(PUnitReporter.labelValueLn("p-value:", String.format("%.4f", p))));
+        verdict.decision().decisionRule().ifPresent(rule ->
+                sb.append(PUnitReporter.labelValueLn("Decision rule:",
+                        rule.id() + " v" + rule.version())));
+        stats.regression().ifPresent(r -> {
+            r.sizeAtAssumedCommonRate().ifPresent(v ->
+                    sb.append(PUnitReporter.labelValueLn("Size at p\u0302_b:", String.format("%.4f", v))));
+            r.designPower().ifPresent(v ->
+                    sb.append(PUnitReporter.labelValueLn("Design power:", String.format("%.4f", v))));
+            r.resolvedTestPower().ifPresent(v ->
+                    sb.append(PUnitReporter.labelValueLn("Resolved power:", String.format("%.4f", v))));
+            r.minimumDetectableDegradation().ifPresent(v ->
+                    sb.append(PUnitReporter.labelValueLn("Detectable drop:", String.format("%.4f", v))));
+        });
 
         if (!stats.caveats().isEmpty()) {
             sb.append("\nCaveats:\n");
@@ -195,9 +204,12 @@ public final class VerdictTextRenderer {
             Map.entry("Derived threshold:", "Minimum pass rate derived from the baseline"),
             Map.entry("Confidence level:", "Probability that the CI method captures the true rate"),
             Map.entry("SE(p\u0302):", "Standard error of the observed proportion — measures sampling noise in p\u0302"),
-            Map.entry("Wilson lower bound:", "One-sided Wilson lower bound on the true pass rate — we are this confident the true rate is at least this value"),
-            Map.entry("Z:", "How many standard errors p\u0302 is from the threshold \u03C0\u2080 — negative means below"),
-            Map.entry("p-value:", "Probability of seeing a rate this low or lower if the system truly meets the threshold — small = evidence of degradation"),
+            Map.entry("Wilson lower bound:", "One-sided Wilson lower bound on the true pass rate — descriptive; it decides nothing"),
+            Map.entry("Decision rule:", "The versioned rule that decided the verdict (Statistical Companion 1.5.0)"),
+            Map.entry("Size at p\u0302_b:", "The rule's false-alarm probability were the common rate the baseline's observed rate — a property of the procedure, not of this run"),
+            Map.entry("Design power:", "Power at the design alternative rate with the baseline and the test both yet to be drawn"),
+            Map.entry("Resolved power:", "Power at the design alternative rate of this test, whose cutoff the observed baseline fixed"),
+            Map.entry("Detectable drop:", "The smallest drop detected with 80% design power"),
             Map.entry("Threshold derivation:", "Method used to derive the threshold from baseline data"),
             Map.entry("Latency assertions:", "Per-percentile latency checks against configured thresholds"),
             Map.entry("Covariate misalignments:", "Test conditions that differ from the baseline — may reduce comparability")
@@ -293,19 +305,26 @@ public final class VerdictTextRenderer {
         boolean isSmoke = exec.intent() == TestIntent.SMOKE;
         String originName = verdict.provenance()
                 .map(SpecProvenance::thresholdOriginName).orElse("UNSPECIFIED");
+        boolean regression = "EMPIRICAL".equalsIgnoreCase(originName);
 
         HypothesisFraming framing = getHypothesisFraming(originName, isSmoke);
 
-        String h0 = String.format("True success rate %s %s %s (%s)",
-                StatisticalVocabulary.PI, StatisticalVocabulary.GEQ,
-                RateFormat.format(threshold), framing.h0Text);
-        String h1 = String.format("True success rate %s < %s (%s)",
-                StatisticalVocabulary.PI, RateFormat.format(threshold), framing.h1Text);
+        String h0 = regression
+                ? String.format("baseline and test share one success probability (%s)", framing.h0Text)
+                : String.format("True success rate %s %s %s (%s)",
+                        StatisticalVocabulary.PI, symbols.leq(),
+                        RateFormat.format(threshold), framing.h0Text);
+        String h1 = regression
+                ? String.format("the test's success probability is lower (%s)", framing.h1Text)
+                : String.format("True success rate %s > %s (%s)",
+                        StatisticalVocabulary.PI, RateFormat.format(threshold), framing.h1Text);
 
         sb.append("HYPOTHESIS TEST\n");
         sb.append(statLabel(symbols.h0() + " (null):", h0));
         sb.append(statLabel(symbols.h1() + " (alternative):", h1));
-        sb.append(statLabel("Test type:", "One-sided binomial proportion test"));
+        sb.append(statLabel("Test type:", regression
+                ? "One-sided Fisher exact test (regression/fisher)"
+                : "Exact one-sided binomial test (compliance/exact-binomial)"));
         sb.append("\n");
     }
 
@@ -371,46 +390,27 @@ public final class VerdictTextRenderer {
                         symbols.sqrt(), pHat, symbols.times(), (1 - pHat), n,
                         stats.standardError())));
 
-        // One-sided Wilson lower bound (the verdict path is left-tailed —
-        // an upper bound carries no operational meaning).
+        // The Wilson lower bound is the descriptive interval; the rule's
+        // integer artefact decides.
         sb.append(statLabel("Wilson lower bound:",
-                String.format("%.0f%% one-sided lower = %.3f",
+                String.format("%.0f%% one-sided lower = %.3f (descriptive)",
                         stats.confidenceLevel() * 100, stats.wilsonLower())));
-
-        renderZTestCalculation(sb, verdict);
-
-        sb.append("\n");
-    }
-
-    private void renderZTestCalculation(StringBuilder sb, ProbabilisticTestVerdict verdict) {
-        StatisticalAnalysis stats = verdict.statistics();
-        ExecutionSummary exec = verdict.execution();
-
-        if (stats.testStatistic().isEmpty()) {
-            return;
-        }
-
-        double pHat = exec.observedPassRate();
-        double pi0 = exec.minPassRate();
-        int n = exec.samplesExecuted();
-        double z = stats.testStatistic().get();
-
-        String valueIndent = " ".repeat(PUnitReporter.DETAIL_LABEL_WIDTH);
-        sb.append("\n");
-        sb.append(statLabel("Z:",
-                String.format("z = (%s - %s%s) / %s(%s%s(1-%s%s)/n)",
-                        symbols.pHat(), symbols.pi(), StatisticalVocabulary.SUB_ZERO,
-                        symbols.sqrt(), symbols.pi(), StatisticalVocabulary.SUB_ZERO,
-                        symbols.pi(), StatisticalVocabulary.SUB_ZERO)));
-        sb.append(String.format("  %sz = (%.2f - %.2f) / %s(%.2f %s %.2f / %d)%n",
-                valueIndent, pHat, pi0, symbols.sqrt(), pi0, symbols.times(), (1 - pi0), n));
-        sb.append(String.format("  %sz = %.2f%n", valueIndent, z));
-
-        stats.pValue().ifPresent(p -> {
-            sb.append("\n");
-            sb.append(statLabel("p-value:",
-                    String.format("P(Z %s %.2f) = %.3f", symbols.leq(), z, p)));
+        verdict.decision().decisionRule().ifPresent(rule ->
+                sb.append(statLabel("Decision rule:", rule.id() + " v" + rule.version())));
+        stats.regression().ifPresent(r -> {
+            r.sizeAtAssumedCommonRate().ifPresent(v -> sb.append(statLabel("Size at p\u0302_b:",
+                    String.format("%.4f (assumed common rate; not a property of the run)", v))));
+            r.designAlternativeRate().ifPresent(rate -> {
+                r.designPower().ifPresent(v -> sb.append(statLabel("Design power:",
+                        String.format("%.4f at %.4f", v, rate))));
+                r.resolvedTestPower().ifPresent(v -> sb.append(statLabel("Resolved power:",
+                        String.format("%.4f at %.4f", v, rate))));
+            });
+            r.minimumDetectableDegradation().ifPresent(v -> sb.append(statLabel("Detectable drop:",
+                    String.format("%.4f with 80%% power (inverts the design power)", v))));
         });
+
+        sb.append("\n");
     }
 
     private void renderLatencyAnalysisSection(StringBuilder sb, ProbabilisticTestVerdict verdict) {
@@ -529,27 +529,30 @@ public final class VerdictTextRenderer {
 
         VerdictFraming framing = getVerdictFraming(originName, isSmoke);
 
-        if (passed) {
-            if (verdict.statistics().baseline().isPresent()) {
-                return String.format(
-                        "The observed success rate of %s is consistent with the baseline expectation of %s. %s",
-                        RateFormat.format(exec.observedPassRate()),
-                        RateFormat.format(verdict.statistics().baseline().get().baselineRate()),
-                        framing.passText);
-            } else {
-                return String.format(
-                        "The observed success rate of %s meets the required threshold of %s. %s",
-                        RateFormat.format(exec.observedPassRate()),
-                        RateFormat.format(exec.minPassRate()),
-                        framing.passText);
-            }
-        } else {
-            return String.format(
-                    "The observed success rate of %s falls below the required threshold of %s. %s",
-                    RateFormat.format(exec.observedPassRate()),
-                    RateFormat.format(exec.minPassRate()),
-                    framing.failText);
+        if (verdict.statistics().baseline().isPresent()) {
+            return passed
+                    ? String.format("No degradation signal at the configured cutoff: the observed "
+                            + "success rate of %s is consistent with the baseline of %s. %s",
+                            RateFormat.format(exec.observedPassRate()),
+                            RateFormat.format(verdict.statistics().baseline().get().baselineRate()),
+                            framing.passText)
+                    : String.format("The observed success rate of %s is below the cutoff derived "
+                            + "from the baseline of %s. %s",
+                            RateFormat.format(exec.observedPassRate()),
+                            RateFormat.format(verdict.statistics().baseline().get().baselineRate()),
+                            framing.failText);
         }
+        return passed
+                ? String.format("Evidence supports compliance with the requirement of %s at the "
+                        + "configured level (observed %s). %s",
+                        RateFormat.format(exec.minPassRate()),
+                        RateFormat.format(exec.observedPassRate()),
+                        framing.passText)
+                : String.format("Compliance with the requirement of %s was not demonstrated at the "
+                        + "configured level (observed %s). %s",
+                        RateFormat.format(exec.minPassRate()),
+                        RateFormat.format(exec.observedPassRate()),
+                        framing.failText);
     }
 
     private List<String> buildVerboseCaveats(ProbabilisticTestVerdict verdict) {
@@ -621,14 +624,14 @@ public final class VerdictTextRenderer {
 
         // Compliance evidence caveat
         if (ComplianceEvidenceEvaluator.hasComplianceContext(originName, contractRef)) {
-            if (ComplianceEvidenceEvaluator.isUndersized(samples, threshold)) {
+            double alpha = org.mavai.punit.statistics.Methodology.alphaFromConfidence(confidenceLevel);
+            if (ComplianceEvidenceEvaluator.isUndersized(samples, threshold, alpha)) {
                 caveats.add(String.format(
-                        "Warning: %s. With n=%d and target of %s, even zero failures would " +
-                        "not provide sufficient statistical evidence of compliance (\u03b1=%.3f). " +
-                        "A PASS at this sample size is a smoke-test-level observation, not a compliance " +
-                        "determination. Note: a FAIL verdict remains a reliable indication of non-conformance.",
+                        "Warning: %s. With n=%d and a requirement of %s, even zero failures would " +
+                        "not demonstrate compliance (\u03b1=%s): PASS is not possible at this size, " +
+                        "and this result carries no evidence about the service.",
                         ComplianceEvidenceEvaluator.SIZING_NOTE, samples, RateFormat.format(threshold),
-                        ComplianceEvidenceEvaluator.DEFAULT_ALPHA));
+                        alpha));
             }
         }
 
@@ -641,12 +644,12 @@ public final class VerdictTextRenderer {
                 var result = VerificationFeasibilityEvaluator.evaluate(samples, threshold, confidenceLevel);
                 if (!result.feasible()) {
                     caveats.add(String.format(
-                            "Sample not sized for verification (N=%d, need %d). " +
-                            "This is a smoke-test-level observation, not a compliance determination.",
+                            "PASS not possible at this size (N = %d, need at least %d). " +
+                            "This result carries no evidence about the service.",
                             samples, result.minimumSamples()));
                 } else {
-                    caveats.add("Sample is sized for verification. " +
-                            "Consider setting intent = VERIFICATION for stronger statistical guarantees.");
+                    caveats.add("PASS is possible at this size. Consider setting " +
+                            "intent = VERIFICATION for evidential strength, and check the power statement.");
                 }
             }
         }
@@ -658,37 +661,22 @@ public final class VerdictTextRenderer {
 
     private HypothesisFraming getHypothesisFraming(String originName, boolean isSmoke) {
         if (originName == null) originName = "UNSPECIFIED";
-
-        if (isSmoke) {
-            return switch (originName.toUpperCase()) {
-                case "SLA", "SLO", "POLICY" -> new HypothesisFraming(
-                        "observed rate consistent with target",
-                        "observed rate inconsistent with target");
-                case "EMPIRICAL" -> new HypothesisFraming(
-                        "no degradation from baseline",
-                        "degradation from baseline");
-                default -> new HypothesisFraming(
-                        "observed rate meets threshold",
-                        "observed rate below threshold");
-            };
-        }
-
         return switch (originName.toUpperCase()) {
             case "SLA" -> new HypothesisFraming(
-                    "system meets SLA requirement",
-                    "system violates SLA");
+                    "the SLA requirement is not met",
+                    "the SLA requirement is met");
             case "SLO" -> new HypothesisFraming(
-                    "system meets SLO target",
-                    "system falls short of SLO");
+                    "the SLO target is not met",
+                    "the SLO target is met");
             case "POLICY" -> new HypothesisFraming(
-                    "system meets policy requirement",
-                    "system violates policy");
+                    "the policy requirement is not met",
+                    "the policy requirement is met");
             case "EMPIRICAL" -> new HypothesisFraming(
                     "no degradation from baseline",
                     "degradation from baseline");
             default -> new HypothesisFraming(
-                    "success rate meets threshold",
-                    "success rate below threshold");
+                    "the requirement is not met",
+                    "the requirement is met");
         };
     }
 

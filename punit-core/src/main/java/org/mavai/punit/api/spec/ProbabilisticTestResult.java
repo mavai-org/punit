@@ -52,6 +52,17 @@ import org.mavai.punit.api.covariate.CovariateAlignment;
  *                         contract or policy document the threshold
  *                         derives from; {@link Optional#empty()} when
  *                         not declared
+ * @param composition      how {@link #verdict()} composes the functional
+ *                         and latency dimensions, and what decided it;
+ *                         empty for a refused configuration and for
+ *                         results built without one
+ * @param refusals         the configuration errors that refused the test
+ *                         before any sample ran, in the fixed reporting
+ *                         order; empty for a test that ran. A refused
+ *                         result has no verdict of its own: its
+ *                         {@link #verdict()} is INCONCLUSIVE as a
+ *                         placeholder, and consumers read {@link #refused()}
+ *                         first
  */
 public record ProbabilisticTestResult(
         Verdict verdict,
@@ -64,7 +75,30 @@ public record ProbabilisticTestResult(
         Map<String, FailureCount> failuresByPostcondition,
         EngineRunSummary engineSummary,
         PerCriterionEvaluation perCriterionEvaluation,
-        Optional<PostconditionStandings> postconditionStandings) implements EngineResult {
+        Optional<PostconditionStandings> postconditionStandings,
+        Optional<VerdictComposition> composition,
+        List<ConfigurationRefusal> refusals) implements EngineResult {
+
+    /**
+     * Constructor without the verdict composition and refusals; defaults
+     * them absent.
+     */
+    public ProbabilisticTestResult(
+            Verdict verdict,
+            FactorBundle factors,
+            List<EvaluatedCriterion> criterionResults,
+            TestIntent intent,
+            List<String> warnings,
+            CovariateAlignment covariates,
+            Optional<String> contractRef,
+            Map<String, FailureCount> failuresByPostcondition,
+            EngineRunSummary engineSummary,
+            PerCriterionEvaluation perCriterionEvaluation,
+            Optional<PostconditionStandings> postconditionStandings) {
+        this(verdict, factors, criterionResults, intent, warnings, covariates, contractRef,
+                failuresByPostcondition, engineSummary, perCriterionEvaluation,
+                postconditionStandings, Optional.empty(), List.of());
+    }
 
     /**
      * Backward-compatible constructor without the postcondition
@@ -98,9 +132,48 @@ public record ProbabilisticTestResult(
         Objects.requireNonNull(engineSummary, "engineSummary");
         Objects.requireNonNull(perCriterionEvaluation, "perCriterionEvaluation");
         Objects.requireNonNull(postconditionStandings, "postconditionStandings");
+        Objects.requireNonNull(composition, "composition");
+        Objects.requireNonNull(refusals, "refusals");
         criterionResults = List.copyOf(criterionResults);
         warnings = List.copyOf(warnings);
         failuresByPostcondition = Map.copyOf(failuresByPostcondition);
+        refusals = List.copyOf(refusals);
+    }
+
+    /**
+     * A test refused before any sample ran: no criterion was evaluated
+     * and there is no verdict.
+     *
+     * @param refusals every refusal, in the fixed reporting order; at least one
+     */
+    public static ProbabilisticTestResult refused(
+            FactorBundle factors,
+            TestIntent intent,
+            List<String> warnings,
+            Optional<String> contractRef,
+            EngineRunSummary engineSummary,
+            List<ConfigurationRefusal> refusals) {
+        if (refusals.isEmpty()) {
+            throw new IllegalArgumentException("a refused result needs at least one refusal");
+        }
+        return new ProbabilisticTestResult(
+                Verdict.INCONCLUSIVE, factors, List.of(), intent, warnings,
+                CovariateAlignment.compute(
+                        org.mavai.punit.api.covariate.CovariateProfile.empty(),
+                        org.mavai.punit.api.covariate.CovariateProfile.empty()),
+                contractRef, Map.of(), engineSummary, PerCriterionEvaluation.empty(),
+                Optional.empty(), Optional.empty(), refusals);
+    }
+
+    /** Whether the configuration was refused before any sample ran. */
+    public boolean refused() {
+        return !refusals.isEmpty();
+    }
+
+    /** The configuration errors, once each, in the fixed reporting order. */
+    public List<org.mavai.punit.statistics.ConfigurationError> configurationErrors() {
+        return org.mavai.punit.statistics.ConfigurationError.ordered(
+                refusals.stream().map(ConfigurationRefusal::code).toList());
     }
 
     /**
@@ -114,7 +187,8 @@ public record ProbabilisticTestResult(
         return new ProbabilisticTestResult(
                 verdict, factors, criterionResults, intent, warnings,
                 covariates, contractRef, failuresByPostcondition,
-                engineSummary, perCriterionEvaluation);
+                engineSummary, perCriterionEvaluation, postconditionStandings,
+                composition, refusals);
     }
 
     /**
@@ -135,6 +209,7 @@ public record ProbabilisticTestResult(
         return new ProbabilisticTestResult(
                 verdict, factors, criterionResults, intent, warnings,
                 covariates, wrapped, failuresByPostcondition,
-                engineSummary, perCriterionEvaluation);
+                engineSummary, perCriterionEvaluation, postconditionStandings,
+                composition, refusals);
     }
 }

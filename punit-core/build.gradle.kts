@@ -56,6 +56,13 @@ dependencies {
 
     // Apache Commons Statistics — for statistical calculations (confidence intervals, distributions)
     implementation("org.apache.commons:commons-statistics-distribution:1.3")
+    // Commons Numbers — log-gamma / log-beta for the latency precedence
+    // breach probability, and exact rationals for the exact-boundary
+    // convention (companion §10.6). The same versions commons-statistics
+    // already brings in; declared because the statistics package uses them
+    // directly.
+    implementation("org.apache.commons:commons-numbers-gamma:1.3")
+    implementation("org.apache.commons:commons-numbers-fraction:1.3")
 
     // SnakeYAML — for YAML serialization in spec generation
     implementation("org.yaml:snakeyaml:2.7")

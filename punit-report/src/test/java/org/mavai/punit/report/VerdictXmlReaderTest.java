@@ -97,8 +97,6 @@ class VerdictXmlReaderTest {
             assertThat(stats.standardError()).isEqualTo(0.0218);
             assertThat(stats.wilsonLower())
                     .isEqualTo(original.statistics().wilsonLower());
-            assertThat(stats.testStatistic()).isPresent();
-            assertThat(stats.pValue()).isPresent();
         }
 
         @Test
@@ -520,7 +518,6 @@ class VerdictXmlReaderTest {
                 Optional.empty(),
                 Optional.empty(),
                 new StatisticalAnalysis(0.95, 0.0218, 0.8948,
-                        Optional.of(2.29), Optional.of(0.011),
                         Optional.empty(), Optional.empty(), List.of()),
                 CovariateStatus.allAligned(),
                 new CostSummary(0, 0, 0, TokenMode.NONE, Optional.empty(), Optional.empty()),
@@ -586,7 +583,6 @@ class VerdictXmlReaderTest {
         ProbabilisticTestVerdict base = minimalVerdict(true, PUnitVerdict.PASS);
         StatisticalAnalysis stats = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8948,
-                Optional.of(2.29), Optional.of(0.011),
                 Optional.of("Wilson score lower bound"),
                 Optional.of(new BaselineSummary(
                         "my-spec.yaml", Instant.parse("2026-02-15T00:00:00Z"),
@@ -672,7 +668,6 @@ class VerdictXmlReaderTest {
                 Optional.of(new ExpirationInfo(expiringStatus, Optional.of(Instant.parse("2026-04-15T00:00:00Z")))));
         StatisticalAnalysis stats = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8948,
-                Optional.of(2.29), Optional.of(0.011),
                 Optional.of("Wilson score lower bound"),
                 Optional.of(new BaselineSummary("payment-gateway.yaml",
                         Instant.parse("2026-02-15T00:00:00Z"), 1000, 940, 0.94, 0.92)),

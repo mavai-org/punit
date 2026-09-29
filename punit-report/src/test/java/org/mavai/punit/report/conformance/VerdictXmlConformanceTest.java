@@ -208,7 +208,6 @@ class VerdictXmlConformanceTest {
                 List.of());
         StatisticalAnalysis statistics = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8883,
-                Optional.of(1.6667), Optional.of(0.9522),
                 Optional.empty(), Optional.empty(),
                 List.of());
         return verdict(identity, execution,
@@ -237,7 +236,6 @@ class VerdictXmlConformanceTest {
         FunctionalDimension functional = new FunctionalDimension(85, 15, 0.85);
         StatisticalAnalysis statistics = new StatisticalAnalysis(
                 0.95, 0.0357, 0.7821,
-                Optional.of(-1.6667), Optional.of(0.0478),
                 Optional.empty(), Optional.empty(),
                 List.of());
         Map<String, FailureCount> postconditionFailures = new LinkedHashMap<>();
@@ -276,7 +274,6 @@ class VerdictXmlConformanceTest {
         StatisticalAnalysis statistics = new StatisticalAnalysis(
                 0.95, 0.0, 0.0,
                 Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(),
                 List.of());
         return verdict(identity, execution,
                 Optional.empty(), Optional.empty(),
@@ -306,7 +303,6 @@ class VerdictXmlConformanceTest {
                 1000, 920, 0.92, 0.9);
         StatisticalAnalysis statistics = new StatisticalAnalysis(
                 0.95, 0.0218, 0.8883,
-                Optional.of(1.6667), Optional.of(0.9522),
                 Optional.empty(), Optional.of(baseline),
                 List.of());
         SpecProvenance provenance = new SpecProvenance(

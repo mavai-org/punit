@@ -83,8 +83,8 @@ Regardless of which paradigm you use, you must decide **how to parameterize** yo
 
 > **Where the threshold comes from, and how the comparison is decided.** The pass-rate criterion has two modes, declared via `Criteria.meeting()` or `Criteria.empirical()` on the service contract's `criteria()`:
 >
-> - **Empirical** (`empirical().passRate()`) — the threshold is derived at runtime from the matched baseline spec (produced by a prior MEASURE experiment): the one-sided **Wilson score lower bound** of the baseline rate at the test's sample size and configured confidence (default 0.95). The binding decision is discrete — the derivation's **integer cutoff** `c = ⌈n·p*⌉` — and the run passes iff the raw observed success count `K ≥ c`. Approaches 1 and 2 below use this mode.
-> - **Contractual** (`meeting().passRate(threshold).contractRef(origin, ref)`) — the threshold is an externally-fixed number declared in code (an SLA, SLO, or policy figure). The verdict compares the **run's own Wilson lower bound** (at the default confidence) against the declared threshold: the commitment is met when the sample provides confidence-grade evidence for it, not when the point estimate happens to graze it. Approach 3 uses this mode.
+> - **Empirical** (`empirical().passRate()`) — the criterion is decided against the matched baseline spec (produced by a prior MEASURE experiment) by Fisher's exact test, `regression/fisher`, at the configured confidence (default 0.95). The binding decision is discrete: the run passes iff its success count `K` reaches the cutoff `c`, the smallest count the one-sided test does not reject. A test may not be larger than its baseline (`TEST_LARGER_THAN_BASELINE`). Approaches 1 and 2 below use this mode.
+> - **Contractual** (`meeting().passRate(threshold).contractRef(origin, ref)`) — the threshold is an externally-fixed number declared in code (an SLA, SLO, or policy figure). The criterion is decided by the exact one-sided binomial test, `compliance/exact-binomial`: the run passes iff its success count reaches `k_min`, so the sample must provide evidence for the commitment, not merely a point estimate that grazes it. Approach 3 uses this mode.
 >
 > What the three approaches differ in is which knob the author fixes first.
 
@@ -105,9 +105,9 @@ void sampleSizeFirst() {
 
 **What happens:**
 - PUnit runs the chosen samples.
-- The contract's `empirical().passRate()` criterion resolves the matched baseline spec at runtime; its observed rate becomes the threshold for this run.
-- The verdict applies the Wilson lower bound at the default confidence (0.95) to *this* run's observed rate, and passes iff that lower bound clears the baseline.
-- With small N the Wilson margin is wide, so passing requires the observed rate to be clearly above the baseline.
+- The contract's `empirical().passRate()` criterion resolves the matched baseline spec at runtime.
+- The verdict compares this run's count with the baseline's by Fisher's exact test at the default confidence (0.95), and passes iff the count reaches the cutoff `c`.
+- With small N the cutoff sits well below the baseline rate, so only a large degradation fails the run.
 
 **Trade-off:** You accept whatever statistical power 100 samples affords. Detects large regressions confidently; less sensitive to small ones.
 
@@ -137,7 +137,7 @@ needs overriding.
 **What happens:**
 - `PowerAnalysis.sampleSize(baseline, mde, power)` derives the required N from the baseline rate, the minimum detectable effect (MDE), and the target power.
 - PUnit runs that many samples (typically larger than budget-driven runs).
-- Verdict still applies the Wilson lower bound at the target confidence — but N is sized so a real regression of size MDE has the configured probability of failing the bound.
+- The verdict is still Fisher's exact test at the target confidence — but N is sized, by the exact resolved power against the actual baseline, so a real regression of size MDE has the configured probability of failing the run. N never exceeds the baseline's size.
 
 **Trade-off:** Sample size is determined by statistics, not budget. Tight MDEs and high power require many samples.
 
@@ -159,14 +159,14 @@ void thresholdFirst() {
 
 **What happens:**
 - The threshold and its provenance (`SLA`, `SLO`, or `POLICY`) are declared in code; no baseline is involved.
-- PUnit runs the chosen samples and passes iff the **run's own Wilson lower bound** clears the declared threshold — the sample must provide confidence-grade evidence for the commitment.
+- PUnit runs the chosen samples and passes iff the count reaches `k_min` of the exact one-sided binomial test — the sample must provide evidence for the commitment.
 - The threshold's provenance and the optional `contractRef` are recorded on the verdict for audit traceability.
 
-**Trade-off:** Evidence costs samples. The Wilson comparison means a strict threshold needs a sample size that can actually support it (even a perfect run of 30 samples only evidences ≈ 0.917); with a small N relative to a strict threshold, declare `.intent(TestIntent.SMOKE)` to mark the run as a sentinel rather than a verification claim; otherwise PUnit's pre-flight feasibility gate rejects the configuration as undersized for verification.
+**Trade-off:** Evidence costs samples. A strict threshold needs a sample size that can support it (0.95 at alpha 0.05 needs at least 59 samples, all passing); with a smaller N, declare `.intent(TestIntent.SMOKE)` to run as a sentinel that cannot pass; otherwise the configuration is refused before any sample runs (`COMPLIANCE_INFEASIBLE`).
 
 **Best for:** SLA-style verification of services with externally-committed reliability targets.
 
-> **Antipattern: pinning a contractual threshold to a baseline's observed rate.** Reading a baseline file by eye and pasting its observed rate into `meeting().passRate(0.935).contractRef(EMPIRICAL, ...)` looks like the empirical-pair pattern but isn't. The contractual path demands confidence-grade evidence *for that number*: the run's Wilson lower bound must clear 0.935, which a service performing exactly at the 0.935 baseline essentially never provides at test-scale sample counts. Result: near-permanent false-fail. The proper baseline-comparison path is `empirical().passRate()`, which resolves the baseline at runtime, derives the sample-size-aware threshold and integer cutoff from it, and gives the test the statistical margin that the hardcoded contractual approach is missing.
+> **Antipattern: pinning a contractual threshold to a baseline's observed rate.** Reading a baseline file by eye and pasting its observed rate into `meeting().passRate(0.935).contractRef(EMPIRICAL, ...)` looks like the empirical-pair pattern but isn't. The contractual path demands evidence *for that number*: the count must demonstrate a true rate above 0.935, which a service performing exactly at the 0.935 baseline essentially never provides. Result: near-permanent false-fail. The proper baseline-comparison path is `empirical().passRate()`, which resolves the baseline at runtime and compares the two counts by Fisher's exact test, accounting for the uncertainty of both.
 
 ### Choosing Your Approach
 
@@ -344,11 +344,10 @@ and the criterion auto-injects.
 3. Read the per-criterion observed pass rate (here: 0.935 over 1000 samples
    for `output-valid-json`)
 4. Run 100 samples
-5. Apply the Wilson lower bound at the configured confidence (default 0.95)
-   to this run's observed rate; the test passes iff the lower bound clears
-   the baseline rate
-6. Report pass/fail with the statistical context (baseline rate, observed
-   rate, Wilson bound, intent)
+5. Decide by Fisher's exact test at the configured confidence (default
+   0.95): the test passes iff its count reaches the cutoff `c`
+6. Report pass/fail with the statistical context (baseline count, test
+   count, cutoff, decision rule, intent)
 
 ---
 

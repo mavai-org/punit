@@ -10,9 +10,10 @@ import java.util.Optional;
  *
  * <p>This is glue, not statistics: it reuses the verdicts and
  * thresholds the criterion evaluation already produced (via
- * {@code PassRate.evaluate}). The decision rule itself — integer
- * cutoff on the empirical path, test-side Wilson lower bound on the
- * declared path (statistical companion §3.4 / §3.2) — is applied
+ * {@code PassRate.evaluate}). The decision rule itself — the
+ * {@code regression/fisher} cutoff on the empirical path, the
+ * {@code compliance/exact-binomial} {@code k_min} on the declared path
+ * (Statistical Companion §3.4 / §3.6) — is applied
  * exactly once, inside the criterion; this helper consumes the
  * criterion's published {@code verdictsByCriterion} rather than
  * re-deriving a verdict of its own. Any new statistical arithmetic
@@ -22,14 +23,12 @@ import java.util.Optional;
  * <p>Behavioural contract:
  *
  * <ul>
- *   <li>The legacy spec-layer evaluation (the list of
+ *   <li>The functional spec-layer evaluation (the list of
  *       {@link EvaluatedCriterion}) is the source of truth for the
  *       resolved threshold and for the gate-fired INCONCLUSIVE state.
- *       When the legacy composite is INCONCLUSIVE — e.g. no baseline,
- *       sample-size constraint violated, identity mismatch — every
- *       per-criterion verdict is INCONCLUSIVE too. The framework has
- *       judged the entire run statistically inconclusive; a
- *       per-criterion verdict cannot meaningfully be PASS or FAIL.</li>
+ *       When a gate fired before any rule — no baseline, identity
+ *       mismatch — and the evaluation published no per-criterion
+ *       judgement, every per-criterion verdict is INCONCLUSIVE.</li>
  *   <li>Otherwise: per-criterion verdict = the criterion evaluation's
  *       own published verdict for that methodology criterion. For
  *       results from evaluators that publish no per-criterion verdict
@@ -57,8 +56,11 @@ public final class PerCriterionVerdicts {
                 scanPerCriterionThresholds(legacyEvaluated);
         java.util.Map<String, Verdict> judgedVerdicts = scanJudgedVerdicts(legacyEvaluated);
         Optional<Double> sharedThreshold = scanThreshold(legacyEvaluated);
-        Verdict legacyComposed = Verdict.compose(legacyEvaluated);
-        boolean propagateInconclusive = legacyComposed == Verdict.INCONCLUSIVE;
+        // A gate that fired before any rule (no baseline, inputs
+        // mismatch) leaves the evaluation INCONCLUSIVE with no judgement
+        // of its own; every criterion is then INCONCLUSIVE too.
+        boolean propagateInconclusive = judgedVerdicts.isEmpty()
+                && Verdict.compose(legacyEvaluated) == Verdict.INCONCLUSIVE;
 
         List<PerCriterionVerdict> derived = new ArrayList<>(perCriterionCounts.size());
         List<Verdict> verdicts = new ArrayList<>(perCriterionCounts.size());

@@ -134,18 +134,21 @@ class EmpiricalEndToEndIntegrationTest {
     }
 
     @Test
-    @DisplayName("with a baseline whose sample count is below the test's, EmpiricalChecks rejects → INCONCLUSIVE")
-    void empiricalRejectsWhenTestOutRiguresBaseline(@TempDir Path baselineDir) throws IOException {
+    @DisplayName("a test planned larger than its baseline is refused before any sample runs (TEST_LARGER_THAN_BASELINE)")
+    void empiricalRefusedWhenTestLargerThanBaseline(@TempDir Path baselineDir) throws IOException {
         // Test asks for 1000 samples; baseline only has 100.
         writeBaselineWithPassRate(baselineDir, 0.50, 100);
 
         var engine = new Engine(new YamlBaselineProvider(baselineDir));
         var result = (ProbabilisticTestResult) engine.run(empiricalTest(sampling(1000)));
 
-        assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
-        var detail = result.criterionResults().get(0).result().detail();
-        assertThat(detail).containsEntry("testSampleCount", 1000);
-        assertThat(detail).containsEntry("baselineSampleCount", 100);
+        assertThat(result.refused()).isTrue();
+        assertThat(result.configurationErrors())
+                .containsExactly(org.mavai.punit.statistics.ConfigurationError.TEST_LARGER_THAN_BASELINE);
+        assertThat(result.criterionResults()).isEmpty();
+        assertThat(result.engineSummary().samplesExecuted()).isZero();
+        assertThat(result.engineSummary().terminationReason())
+                .isEqualTo(org.mavai.punit.api.spec.TerminationReason.CONFIGURATION_REFUSED);
     }
 
     @Test

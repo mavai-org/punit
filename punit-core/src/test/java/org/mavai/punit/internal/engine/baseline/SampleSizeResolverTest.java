@@ -172,9 +172,11 @@ class SampleSizeResolverTest {
                 provider,
                 100);
 
-        // The oracle-locked pricing for (0.96, 0.93, 0.95, 0.80).
-        int expected = new org.mavai.punit.statistics.RiskDrivenSizingCalculator()
-                .requiredSamples(0.96, 0.93, 0.95, 0.80);
+        // Resolved sizing against the observed 960 of 1000, at a design
+        // alternative rate of 0.93, alpha 0.05, power 0.80.
+        int expected = org.mavai.punit.statistics.RegressionSizing
+                .resolvedSizing(960, 1000, 0.93, 0.05, 0.80)
+                .orElseThrow().requiredSamples();
         assertThat(resolution.effective()).isEqualTo(expected);
         assertThat(resolution.drivenBy()).contains("the-criterion");
         assertThat(resolution.wasUplifted()).isTrue();
@@ -193,14 +195,15 @@ class SampleSizeResolverTest {
                 100))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("criterion 'the-criterion'")
-                .hasMessageContaining("re-measure the baseline");
+                .hasMessageContaining("ALTERNATIVE_NOT_BELOW_BASELINE")
+                .hasMessageContaining("Re-measure the baseline");
     }
 
     @Test
     @DisplayName("risk-driven: a requirement the baseline cannot ground is refused in sizing terms")
     void riskDrivenRequirementBeyondBaselineIsRefused(@TempDir Path dir) throws IOException {
-        // (0.96, 0.93) prices to ~hundreds of samples; a 200-sample
-        // baseline cannot ground that test.
+        // (0.96, 0.93) needs hundreds of samples; no test of at most 200 —
+        // the baseline's size — reaches and holds the target power.
         writeBaseline(dir, 0.96, 200);
         var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
 
@@ -210,9 +213,9 @@ class SampleSizeResolverTest {
                 provider,
                 100))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("requires")
-                .hasMessageContaining("measured over only 200")
-                .hasMessageContaining("Re-measure the baseline with at least");
+                .hasMessageContaining("BASELINE_TOO_SMALL")
+                .hasMessageContaining("no test of at most 200 samples")
+                .hasMessageContaining("Measure a larger baseline");
     }
 
     @Test
@@ -237,12 +240,12 @@ class SampleSizeResolverTest {
         // Two-criterion baseline: 'loose' at 0.95 (easy), 'tight' at 0.95.
         BaselineRecord record = new BaselineRecord(
                 CONTRACT_ID, "measure", FactorsFingerprint.of(FactorBundle.of(FACTORS)),
-                "sha256:any", 1000, Instant.parse("2026-05-16T00:00:00Z"),
+                "sha256:any", 20000, Instant.parse("2026-05-16T00:00:00Z"),
                 Map.<String, BaselineStatistics>of(
                         "bernoulli-pass-rate",
                         new PerCriterionPassRateStatistics(Map.of(
-                                "loose", new org.mavai.punit.api.spec.PassRateStatistics(0.95, 1000),
-                                "tight", new org.mavai.punit.api.spec.PassRateStatistics(0.95, 1000)))));
+                                "loose", new org.mavai.punit.api.spec.PassRateStatistics(0.95, 20000),
+                                "tight", new org.mavai.punit.api.spec.PassRateStatistics(0.95, 20000)))));
         new BaselineWriter().write(record, dir);
         var provider = new org.mavai.punit.internal.engine.baseline.YamlBaselineProvider(dir);
 

@@ -72,8 +72,11 @@ class AutoInjectionFromPostureTest {
             }
         };
 
+        // SMOKE: the sampling is too small to demonstrate 0.95 at all, which
+        // VERIFICATION would refuse before the run; a smoke run goes ahead.
         ProbabilisticTest spec = ProbabilisticTest
                 .testing(sampling(alwaysFails), FACTORS)
+                .intent(org.mavai.punit.api.TestIntent.SMOKE)
                 .build();
 
         var result = (ProbabilisticTestResult) new Engine().run(spec);

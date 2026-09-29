@@ -1,85 +1,58 @@
 package org.mavai.punit.internal.reporting;
 
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator.FeasibilityResult;
+import java.util.List;
+
+import org.mavai.punit.api.spec.ConfigurationRefusal;
+import org.mavai.punit.statistics.ConfigurationError;
+
 
 /**
- * Renders human-readable infeasibility messages when a VERIFICATION
- * test's sample size is too small for meaningful statistical evidence.
- *
- * <p>Separates presentation from statistical evaluation: the math
- * lives in
- * {@link org.mavai.punit.statistics.VerificationFeasibilityEvaluator},
- * the prose lives here.
+ * Renders human-readable messages for configurations the framework
+ * refuses before any sample runs: the configuration errors of
+ * Statistical Companion §5.7.1, and the soundness-floor breach.
  */
 public final class InfeasibilityMessageRenderer {
 
     private InfeasibilityMessageRenderer() {}
 
     /**
-     * Builds a human-readable infeasibility message.
-     *
-     * <p>When {@code verbose} is false, produces a concise message suited to
-     * non-statisticians. When true, includes the full statistical context
-     * (criterion, confidence, alpha, assumptions).
+     * Builds the message for a refused configuration: every
+     * configuration error, in the fixed reporting order, with the reason
+     * each part of the configuration is invalid, and the remedies.
      *
      * @param testName the test identity (service contract id) — appears verbatim
-     *                 in the output
-     * @param result   the infeasible evaluation result
-     * @param verbose  true for full statistical detail, false for summary
-     * @return a formatted message explaining why verification is impossible
+     * @param refusals the refusals, in the fixed reporting order; at least one
+     * @return a formatted message naming every code
      */
-    public static String render(String testName, FeasibilityResult result, boolean verbose) {
-        return verbose
-                ? renderVerbose(testName, result)
-                : renderSummary(testName, result);
-    }
-
-    private static String renderSummary(String testName, FeasibilityResult result) {
-        String targetPercent = formatTargetAsPercentage(result.target());
+    public static String renderRefusal(String testName, List<ConfigurationRefusal> refusals) {
         StringBuilder sb = new StringBuilder();
-        sb.append("\nINFEASIBLE VERIFICATION\n\n");
+        sb.append("\nCONFIGURATION REFUSED\n\n");
         sb.append(testName).append("\n\n");
-        sb.append(String.format(
-                "The configured sample size (%d) is too small to verify a %s\n",
-                result.configuredSamples(), targetPercent));
-        sb.append(String.format("pass rate. At least %d samples are required.\n\n", result.minimumSamples()));
-        sb.append("REMEDIATION\n");
-        sb.append("  • Increase samples to at least ").append(result.minimumSamples()).append("\n");
-        sb.append("  • Set intent = SMOKE to run as a sentinel test");
-        return sb.toString();
-    }
-
-    private static String renderVerbose(String testName, FeasibilityResult result) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\nINFEASIBLE VERIFICATION\n\n");
-        sb.append(testName).append("\n\n");
-        sb.append(String.format(
-                "The configured sample size (N=%d) is insufficient for verification\n",
-                result.configuredSamples()));
-        sb.append("at the declared confidence level.\n\n");
-        sb.append("CONFIGURATION\n");
-        sb.append("  ").append(PUnitReporter.labelValueLn("Target (p₀):", String.format("%.4f", result.target())));
-        sb.append("  ").append(PUnitReporter.labelValueLn("Confidence:",
-                String.format("%.2f (α = %.2f)", 1.0 - result.configuredAlpha(), result.configuredAlpha())));
-        sb.append("  ").append(PUnitReporter.labelValueLn("Samples:", String.valueOf(result.configuredSamples())));
-        sb.append("\nFEASIBILITY\n");
-        sb.append("  ").append(PUnitReporter.labelValueLn("Criterion:", result.criterion()));
-        sb.append("  ").append(PUnitReporter.labelValueLn("Minimum N:", String.valueOf(result.minimumSamples())));
-        sb.append("  ").append(PUnitReporter.labelValueLn("Assumption:", FeasibilityResult.ASSUMPTION));
+        sb.append("The test was refused before any sample ran:\n");
+        for (ConfigurationRefusal refusal : refusals) {
+            sb.append("  • ").append(refusal.code().name()).append(" — ")
+                    .append(refusal.reason()).append("\n");
+        }
         sb.append("\nREMEDIATION\n");
-        sb.append("  • Increase samples to at least ").append(result.minimumSamples()).append("\n");
-        sb.append("  • Set intent = SMOKE to run as a sentinel test");
-        return sb.toString();
+        boolean larger = refusals.stream()
+                .anyMatch(r -> r.code() == ConfigurationError.TEST_LARGER_THAN_BASELINE);
+        boolean infeasible = refusals.stream()
+                .anyMatch(r -> r.code() == ConfigurationError.COMPLIANCE_INFEASIBLE);
+        if (larger) {
+            sb.append("  • Measure a baseline at least as large as the test, or run fewer samples\n");
+        }
+        if (infeasible) {
+            sb.append("  • Increase samples to at least the feasibility minimum\n");
+            sb.append("  • Set intent = SMOKE to run as a sentinel test (a pass is then not possible)\n");
+        }
+        return sb.toString().stripTrailing();
     }
 
     /**
      * Builds a soundness-floor breach message — the configured
      * confidence level is below the framework's hard floor and the
      * test cannot underwrite a verdict at that confidence regardless
-     * of sampling. Distinct from the
-     * {@link #render(String, FeasibilityResult, boolean) "INFEASIBLE
-     * VERIFICATION"} message: that one is intent-gated (silent under
-     * SMOKE); the soundness-floor breach fires under SMOKE too.
+     * of sampling. It fires under SMOKE too.
      *
      * @param testName the test identity (service contract id) — appears
      *                 verbatim in the output

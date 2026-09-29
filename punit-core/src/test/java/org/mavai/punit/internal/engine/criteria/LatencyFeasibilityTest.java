@@ -1,125 +1,110 @@
 package org.mavai.punit.internal.engine.criteria;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-
 import java.util.List;
+import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.mavai.punit.api.FactorBundle;
+import org.mavai.punit.api.LatencyResult;
 import org.mavai.punit.api.PercentileKey;
 import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.spec.BaselineProvider;
 import org.mavai.punit.api.spec.BaselineStatistics;
+import org.mavai.punit.api.spec.LatencyStatistics;
 import org.mavai.punit.api.spec.PercentileLatency;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 
-@DisplayName("Latency-criterion preflight feasibility")
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The pre-run latency checks of a baseline-derived constraint
+ * (Statistical Companion §12.5.3): non-degeneracy and the precedence
+ * rank's existence at the expected number of successful latencies. They
+ * are warnings with a planning figure — never a refusal: the run goes
+ * ahead, and both are decided on the actual count after it.
+ */
+@DisplayName("Latency-criterion preflight planning")
 class LatencyFeasibilityTest {
 
     private static final String CONTRACT_ID = "feasibility-test";
     private static final FactorBundle EMPTY_FACTORS = FactorBundle.empty();
-    private static final BaselineProvider NULL_PROVIDER = new BaselineProvider() {
-        @Override
-        public <S extends BaselineStatistics> java.util.Optional<S> baselineFor(
-                String id, FactorBundle factors, String name, Class<S> type,
-                org.mavai.punit.api.covariate.CovariateProfile profile,
-                java.util.List<org.mavai.punit.api.covariate.Covariate> declarations) {
-            return java.util.Optional.empty();
+
+    private static BaselineProvider providerOf(Optional<LatencyStatistics> baseline) {
+        return new BaselineProvider() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <S extends BaselineStatistics> Optional<S> baselineFor(
+                    String id, FactorBundle factors, String name, Class<S> type,
+                    org.mavai.punit.api.covariate.CovariateProfile profile,
+                    List<org.mavai.punit.api.covariate.Covariate> declarations) {
+                return type == LatencyStatistics.class ? (Optional<S>) baseline : Optional.empty();
+            }
+
+            @Override
+            public Optional<String> baselineInputsIdentityFor(
+                    String id, FactorBundle factors,
+                    org.mavai.punit.api.covariate.CovariateProfile profile,
+                    List<org.mavai.punit.api.covariate.Covariate> declarations) {
+                return Optional.empty();
+            }
+        };
+    }
+
+    /** A baseline of {@code latencies} successful latencies from a run of {@code runSamples}. */
+    private static LatencyStatistics baseline(int latencies, int runSamples) {
+        long[] ms = new long[latencies];
+        for (int i = 0; i < latencies; i++) {
+            ms[i] = i + 1;
         }
-        @Override
-        public java.util.Optional<String> baselineInputsIdentityFor(
-                String id, FactorBundle factors,
-                org.mavai.punit.api.covariate.CovariateProfile profile,
-                java.util.List<org.mavai.punit.api.covariate.Covariate> declarations) {
-            return java.util.Optional.empty();
-        }
-    };
-
-    // ── Existence gate (companion §12.5.2.1): ⌈log(α) / log(p)⌉ ──
-    //
-    // At α = 0.05 (the default 0.95 confidence):
-    //   P50 → 5
-    //   P90 → 29
-    //   P95 → 59
-    //   P99 → 299
-
-    @Test
-    @DisplayName("VERIFICATION: samples below P95 existence floor (59 at α=0.05) → IllegalStateException")
-    void verificationP95Below59Aborts() {
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> Feasibility.check(
-                        50,
-                        PercentileLatency.<Integer>empirical(PercentileKey.P95),
-                        CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION, NULL_PROVIDER))
-                .withMessageContaining("P95")
-                .withMessageContaining("50 samples")
-                .withMessageContaining("at least 59")
-                .withMessageContaining("§12.5.2.1");
+        return new LatencyStatistics(LatencyResult.empty(), ms, latencies, runSamples);
     }
 
     @Test
-    @DisplayName("VERIFICATION: samples at P95 existence floor → no abort, no warning")
-    void verificationP95AtFloorSilent() {
+    @DisplayName("the §12.5.3 non-degeneracy example: 110 planned at a passing rate of 0.80 expects 88 < 100 at p99 — a warning naming 125")
+    void nonDegeneracyWarningWithPlanningFigure() {
         List<String> warnings = Feasibility.check(
-                59,
-                PercentileLatency.<Integer>empirical(PercentileKey.P95),
-                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION, NULL_PROVIDER);
-        assertThat(warnings).isEmpty();
-    }
-
-    @Test
-    @DisplayName("VERIFICATION: samples below P99 existence floor (299) → IllegalStateException")
-    void verificationP99Below299Aborts() {
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> Feasibility.check(
-                        100,
-                        PercentileLatency.<Integer>empirical(PercentileKey.P99),
-                        CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION, NULL_PROVIDER))
-                .withMessageContaining("P99")
-                .withMessageContaining("at least 299");
-    }
-
-    @Test
-    @DisplayName("VERIFICATION: gate fires on the strictest failing percentile when multiple are asserted")
-    void verificationMultiPercentileFiresOnStrictest() {
-        // 100 samples: passes P95's floor of 59, fails P99's floor of 299.
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> Feasibility.check(
-                        100,
-                        PercentileLatency.<Integer>empirical(PercentileKey.P95, PercentileKey.P99),
-                        CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION, NULL_PROVIDER))
-                .withMessageContaining("P99");
-    }
-
-    @Test
-    @DisplayName("SMOKE: silences both gates, no abort, no warnings")
-    void smokeSilencesAllGates() {
-        List<String> warnings = Feasibility.check(
-                5,
+                110,
                 PercentileLatency.<Integer>empirical(PercentileKey.P99),
-                CONTRACT_ID, EMPTY_FACTORS, TestIntent.SMOKE, NULL_PROVIDER);
+                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION,
+                providerOf(Optional.of(baseline(4000, 5000))));
+
+        assertThat(warnings).anySatisfy(w -> assertThat(w)
+                .contains("p99").contains("88").contains("minimum of 100").contains("125"));
+    }
+
+    @Test
+    @DisplayName("the §12.5.3 existence example: no rank for 160 expected latencies against 400 — a warning naming 554")
+    void existenceWarningWithPlanningFigure() {
+        List<String> warnings = Feasibility.check(
+                200,
+                PercentileLatency.<Integer>empirical(PercentileKey.P99),
+                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION,
+                providerOf(Optional.of(baseline(400, 500))));
+
+        assertThat(warnings).anySatisfy(w -> assertThat(w)
+                .contains("p99").contains("160").contains("saturated").contains("554"));
+    }
+
+    @Test
+    @DisplayName("a design with room to spare draws no warning")
+    void noWarningWhenPlanningIsSound() {
+        List<String> warnings = Feasibility.check(
+                200,
+                PercentileLatency.<Integer>empirical(PercentileKey.P95),
+                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION,
+                providerOf(Optional.of(baseline(2000, 2000))));
+
         assertThat(warnings).isEmpty();
     }
 
-    // ── Non-degeneracy floor (§12.5.2) — only surfaces when the
-    // existence gate is relaxed by lowering confidence enough that
-    // ⌈log(α) / log(p)⌉ falls below the non-degeneracy floor.
-
     @Test
-    @DisplayName("VERIFICATION + relaxed confidence: non-degeneracy floor warns when existence gate doesn't fire")
-    void nonDegeneracyWarningWhenExistenceGatePasses() {
-        // At confidence 0.50, α=0.50, existence floor for P95 is
-        // ⌈log(0.50)/log(0.95)⌉ = 14. Non-degeneracy floor is 20.
-        // A 15-sample run clears the existence gate but trips the
-        // non-degeneracy warning.
-        List<String> warnings = Feasibility.check(
-                15,
-                PercentileLatency.<Integer>empirical(0.50, PercentileKey.P95),
-                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION, NULL_PROVIDER);
-        assertThat(warnings).hasSize(1);
-        assertThat(warnings.get(0))
-                .contains("P95")
-                .contains("at least 20");
+    @DisplayName("SMOKE, a missing baseline and an explicit ceiling draw no planning warning")
+    void silentWhereNoPlanningApplies() {
+        assertThat(Feasibility.check(5, PercentileLatency.<Integer>empirical(PercentileKey.P99),
+                CONTRACT_ID, EMPTY_FACTORS, TestIntent.SMOKE,
+                providerOf(Optional.of(baseline(400, 500))))).isEmpty();
+        assertThat(Feasibility.check(5, PercentileLatency.<Integer>empirical(PercentileKey.P99),
+                CONTRACT_ID, EMPTY_FACTORS, TestIntent.VERIFICATION,
+                providerOf(Optional.empty()))).isEmpty();
     }
 }

@@ -11,13 +11,9 @@ import org.mavai.punit.statistics.NormativeJudgementEvaluator.State;
 @DisplayName("Normative judgement at experiment time — statistical evaluation")
 class NormativeJudgementEvaluatorTest {
 
-    private static final BinomialProportionEstimator ESTIMATOR =
-            new BinomialProportionEstimator();
-
     @Test
-    @DisplayName("judges met when the Wilson lower bound at the run's sample count "
-            + "clears the stipulated threshold")
-    void metWhenBoundClearsThreshold() {
+    @DisplayName("judges met when the success count reaches k_min of the exact binomial test")
+    void metWhenCountReachesKMin() {
         Judgement judgement = NormativeJudgementEvaluator.judge(980, 1000, 0.9, 0.95);
 
         assertThat(judgement.state()).isEqualTo(State.MET);
@@ -25,24 +21,24 @@ class NormativeJudgementEvaluatorTest {
         assertThat(judgement.stipulatedThreshold()).isEqualTo(0.9);
         assertThat(judgement.confidence()).isEqualTo(0.95);
         assertThat(judgement.lowerBound())
-                .as("the bound is the estimator's Wilson one-sided lower bound — "
-                        + "no parallel arithmetic")
-                .isEqualTo(ESTIMATOR.lowerBound(980, 1000, 0.95))
+                .as("the reported bound is the Clopper–Pearson lower bound, which "
+                        + "coincides with the exact test")
+                .isEqualTo(ComplianceRule.clopperPearsonLower(980, 1000, 0.05))
                 .isGreaterThanOrEqualTo(0.9);
     }
 
     @Test
-    @DisplayName("judges failed when the bound does not clear the threshold, even "
-            + "though the observed rate does — the judgement is bound-based")
-    void failedWhenBoundDoesNotClearThreshold() {
-        // Observed 0.91 exceeds the stipulated 0.9, but the 95%-confident
-        // lower bound at n=1000 sits below it: evidence, not point estimate.
+    @DisplayName("judges failed when the count falls short of k_min, even though the "
+            + "observed rate exceeds the stipulation — compliance was not demonstrated")
+    void failedWhenCountFallsShortOfKMin() {
+        // Observed 0.91 exceeds the stipulated 0.9, but the exact test at
+        // n=1000 needs more successes: evidence, not point estimate.
         Judgement judgement = NormativeJudgementEvaluator.judge(910, 1000, 0.9, 0.95);
 
         assertThat(judgement.state()).isEqualTo(State.FAILED);
         assertThat(judgement.observedRate()).isGreaterThan(0.9);
         assertThat(judgement.lowerBound())
-                .isEqualTo(ESTIMATOR.lowerBound(910, 1000, 0.95))
+                .isEqualTo(ComplianceRule.clopperPearsonLower(910, 1000, 0.05))
                 .isLessThan(0.9);
     }
 

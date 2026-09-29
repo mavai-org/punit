@@ -18,7 +18,12 @@ import org.mavai.punit.verdict.TerminationReason;
 import org.mavai.punit.api.ServiceContractAttributes;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
+import org.mavai.punit.statistics.ConfigurationError;
+import org.mavai.punit.statistics.DecisionRule;
+import org.mavai.punit.verdict.LatencyEvaluation;
 import org.mavai.punit.verdict.PUnitVerdict;
+import org.mavai.punit.verdict.RegressionDisclosure;
+import org.mavai.punit.verdict.TestDecision;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -76,9 +81,26 @@ public final class VerdictXmlReader {
         Map<String, String> environment = readEnvironment(root);
 
         Element verdictEl = firstElement(root, "verdict");
-        PUnitVerdict punitVerdict = PUnitVerdict.valueOf(verdictEl.getAttribute("value"));
+        // A 1.7 record refused before any sample ran carries its
+        // configuration errors and no verdict value; its verdict is read
+        // as INCONCLUSIVE, and the decision states the refusal.
+        List<ConfigurationError> configurationErrors = optionalAttribute(verdictEl, "configuration-error")
+                .map(list -> java.util.Arrays.stream(list.trim().split("\\s+"))
+                        .map(ConfigurationError::valueOf)
+                        .toList())
+                .orElse(List.of());
+        PUnitVerdict punitVerdict = optionalAttribute(verdictEl, "value")
+                .map(PUnitVerdict::valueOf)
+                .orElse(PUnitVerdict.INCONCLUSIVE);
         String verdictReason = optionalAttribute(verdictEl, "reason").orElse("");
-        boolean junitPassed = punitVerdict != PUnitVerdict.FAIL;
+        boolean junitPassed = punitVerdict != PUnitVerdict.FAIL && configurationErrors.isEmpty();
+        TestDecision decision = new TestDecision(
+                configurationErrors,
+                configurationErrors.isEmpty() ? Optional.empty() : termination.details(),
+                optionalAttribute(verdictEl, "decision-rule").flatMap(DecisionRule::fromId),
+                List.of(),
+                java.util.OptionalDouble.empty(),
+                java.util.OptionalDouble.empty());
 
         // The reader is permissive: a <legacy-aggregate> element that
         // appears inside <per-criterion> (from a 1.1 emitter still in
@@ -104,7 +126,8 @@ public final class VerdictXmlReader {
                 junitPassed, punitVerdict, verdictReason,
                 Map.of(),
                 perCriterion,
-                standings
+                standings,
+                decision
         );
     }
 
@@ -166,7 +189,8 @@ public final class VerdictXmlReader {
             double threshold = optionalAttribute(r, "threshold")
                     .map(Double::parseDouble).orElse(Double.NaN);
             criteria.add(new org.mavai.punit.verdict.CriterionRow(
-                    r.getAttribute("id"), v, pass, fail, inc, observed, threshold));
+                    r.getAttribute("id"), v, pass, fail, inc, observed, threshold,
+                    optionalAttribute(r, "decision-rule").flatMap(DecisionRule::fromId)));
         }
         org.mavai.punit.api.spec.Verdict composite = compositeEl
                 .map(e -> org.mavai.punit.api.spec.Verdict.valueOf(e.getAttribute("value")))
@@ -243,41 +267,107 @@ public final class VerdictXmlReader {
             }
         }
 
-        // The wire format carries strict-violations / advisory-violations
-        // attributes and an optional <evaluations> block for per-percentile
-        // assertion details. punit's latency dimension is descriptive
-        // only (gating happens at the criterion layer), so those carry no
-        // additional information here. They are read past for schema-
-        // tolerance but not surfaced on the reconstructed verdict.
+        Optional<org.mavai.punit.api.spec.Verdict> verdict = optionalAttribute(el, "verdict")
+                .map(org.mavai.punit.api.spec.Verdict::valueOf);
+        List<LatencyEvaluation> evaluations = new ArrayList<>();
+        Optional<Element> evaluationsEl = optionalElement(el, "evaluations");
+        if (evaluationsEl.isPresent()) {
+            NodeList nodes = evaluationsEl.get().getElementsByTagNameNS(
+                    VerdictXmlWriter.NAMESPACE, "evaluation");
+            for (int i = 0; i < nodes.getLength(); i++) {
+                readEvaluation((Element) nodes.item(i)).ifPresent(evaluations::add);
+            }
+        }
         return new LatencyDimension(
                 successfulSamples, successfulSamples, false, Optional.empty(),
                 p50, p90, p95, p99, Math.max(Math.max(p95, p99), p50),
-                List.of()
+                List.of(), "passing-samples", verdict, evaluations
         );
     }
 
+    /**
+     * One enforced latency evaluation. Advisory evaluations (which punit
+     * never writes) and evaluations no rule decided are read past.
+     */
+    private Optional<LatencyEvaluation> readEvaluation(Element e) {
+        if (!"strict".equals(e.getAttribute("mode"))) {
+            return Optional.empty();
+        }
+        Optional<DecisionRule> rule = optionalAttribute(e, "decision-rule").flatMap(DecisionRule::fromId);
+        if (rule.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new LatencyEvaluation(
+                e.getAttribute("percentile"),
+                optionalLong(e, "observed-ms"),
+                optionalLong(e, "threshold-ms"),
+                "explicit".equals(e.getAttribute("provenance"))
+                        ? LatencyEvaluation.Provenance.EXPLICIT
+                        : LatencyEvaluation.Provenance.BASELINE_DERIVED,
+                LatencyEvaluation.Status.valueOf(e.getAttribute("status")),
+                optionalAttribute(e, "baseline-confidence")
+                        .map(v -> java.util.OptionalDouble.of(Double.parseDouble(v)))
+                        .orElse(java.util.OptionalDouble.empty()),
+                optionalInt(e, "baseline-rank"),
+                optionalInt(e, "baseline-n"),
+                rule.get(),
+                optionalInt(e, "within-threshold"),
+                optionalInt(e, "required-within"),
+                false));
+    }
+
+    private java.util.OptionalLong optionalLong(Element e, String name) {
+        return optionalAttribute(e, name)
+                .map(v -> java.util.OptionalLong.of(Long.parseLong(v)))
+                .orElse(java.util.OptionalLong.empty());
+    }
+
+    private java.util.OptionalInt optionalInt(Element e, String name) {
+        return optionalAttribute(e, name)
+                .map(v -> java.util.OptionalInt.of(Integer.parseInt(v)))
+                .orElse(java.util.OptionalInt.empty());
+    }
+
     private StatisticalAnalysis readStatistics(Element root) {
-        Element el = firstElement(root, "statistics");
         Optional<BaselineSummary> baseline = optionalElement(root, "baseline")
                 .map(this::readBaseline);
         List<String> caveats = readWarnings(root);
-
+        Optional<Element> statistics = optionalElement(root, "statistics");
+        if (statistics.isEmpty()) {
+            // The element is optional: a refused record has none.
+            return new StatisticalAnalysis(0.0, 0.0, 0.0, Optional.empty(), baseline, caveats);
+        }
+        Element el = statistics.get();
         String wilsonLowerAttr = el.getAttribute("wilson-lower");
         if (wilsonLowerAttr == null || wilsonLowerAttr.isEmpty()) {
             throw new IllegalArgumentException(
                     "verdict <statistics> element is missing required attribute 'wilson-lower' "
-                            + "(the verdict XML schema requires it on every verdict document)");
+                            + "(the verdict XML schema requires it on every statistics element)");
+        }
+        Optional<RegressionDisclosure> regression = Optional.empty();
+        if (el.hasAttribute("size-at-assumed-common-rate") || el.hasAttribute("design-power")) {
+            regression = Optional.of(new RegressionDisclosure(
+                    optionalDouble(el, "size-at-assumed-common-rate"),
+                    optionalDouble(el, "design-alternative-rate"),
+                    optionalDouble(el, "design-power"),
+                    optionalDouble(el, "resolved-test-power"),
+                    java.util.OptionalDouble.empty()));
         }
         return new StatisticalAnalysis(
                 Double.parseDouble(el.getAttribute("confidence-level")),
                 Double.parseDouble(el.getAttribute("standard-error")),
                 Double.parseDouble(wilsonLowerAttr),
-                optionalAttribute(el, "test-statistic").map(Double::parseDouble),
-                optionalAttribute(el, "p-value").map(Double::parseDouble),
                 Optional.empty(), // threshold-derivation
                 baseline,
-                caveats
+                caveats,
+                regression
         );
+    }
+
+    private java.util.OptionalDouble optionalDouble(Element e, String name) {
+        return optionalAttribute(e, name)
+                .map(v -> java.util.OptionalDouble.of(Double.parseDouble(v)))
+                .orElse(java.util.OptionalDouble.empty());
     }
 
     private BaselineSummary readBaseline(Element el) {
@@ -369,6 +459,7 @@ public final class VerdictXmlReader {
             case "SUCCESS_GUARANTEED" -> TerminationReason.SUCCESS_GUARANTEED;
             case "TIME_BUDGET_EXHAUSTED" -> TerminationReason.METHOD_TIME_BUDGET_EXHAUSTED;
             case "TOKEN_BUDGET_EXHAUSTED" -> TerminationReason.METHOD_TOKEN_BUDGET_EXHAUSTED;
+            case "CONFIGURATION_REFUSED" -> TerminationReason.CONFIGURATION_REFUSED;
             default -> TerminationReason.COMPLETED;
         };
         return new Termination(mapped, detail);

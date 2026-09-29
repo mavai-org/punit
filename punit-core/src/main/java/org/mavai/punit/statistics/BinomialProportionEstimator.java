@@ -12,10 +12,15 @@ import org.apache.commons.statistics.distribution.NormalDistribution;
  * <p>This class provides:
  * <ul>
  *   <li>{@link #estimate}: Wilson score confidence interval (two-sided)</li>
- *   <li>{@link #lowerBound}: Wilson score lower bound (one-sided, for threshold derivation)</li>
+ *   <li>{@link #lowerBound}: Wilson score lower bound (one-sided)</li>
  *   <li>{@link #standardError}: Standard error of the proportion estimate</li>
  * </ul>
  * 
+ * <p>The Wilson interval is the methodology's <em>descriptive</em>
+ * interval (companion §2.3.1): it is reported beside a verdict and decides
+ * none. Verdicts are decided by the exact rules in {@link RegressionRule}
+ * and {@link ComplianceRule}.
+ *
  * <h2>Why Wilson Score?</h2>
  * <p>The Wilson score interval is preferred over the normal (Wald) approximation because:
  * <ul>
@@ -96,7 +101,8 @@ public class BinomialProportionEstimator {
 	/**
      * Computes the one-sided Wilson lower bound for the proportion.
      * 
-     * <p>This is the critical method for threshold derivation. It answers:
+     * <p>A descriptive bound, reported beside verdicts; it decides none.
+     * It answers:
      * <blockquote>
      *   "What is the lowest value for the true proportion p that is consistent
      *   with our observations at the given confidence level?"
@@ -105,11 +111,6 @@ public class BinomialProportionEstimator {
      * <h3>One-Sided vs Two-Sided</h3>
      * <p>For a one-sided lower bound at confidence (1-α), we use z_{α} (not z_{α/2}).
      * For example, 95% one-sided uses z = 1.645, not 1.96.
-     * 
-     * <h3>Perfect Baseline Handling (p̂ = 1)</h3>
-     * <p>When all trials succeed (k = n), the Wilson formula remains valid and
-     * produces a sensible lower bound below 1.0. This avoids the "perfect baseline
-     * problem" where naive methods produce threshold = 1.0.
      * 
      * @param successes Number of successes k
      * @param trials Number of trials n
@@ -125,20 +126,10 @@ public class BinomialProportionEstimator {
     }
 
     /**
-     * Computes the one-sided Wilson lower bound from a continuous rate.
-     *
-     * <p>Same Wilson formula as {@link #lowerBound}, but takes a continuous
-     * proportion {@code pHat} rather than discrete successes. Used by the
-     * two-step threshold construction (statistical companion §4.3.2),
-     * where the second step needs to apply Wilson at {@code n_test} with
-     * a rate already derived from the baseline.
-     *
-     * @param pHat            the rate to wrap, in [0, 1]
-     * @param trials          the sample size n at which to evaluate Wilson
-     * @param confidenceLevel one-sided confidence level (1 − α)
-     * @return Wilson one-sided lower bound at the given rate and sample size
+     * The one-sided Wilson lower bound at a rate {@code pHat} and size
+     * {@code trials}.
      */
-    public double lowerBoundFromRate(double pHat, int trials, double confidenceLevel) {
+    private double lowerBoundFromRate(double pHat, int trials, double confidenceLevel) {
         if (Double.isNaN(pHat) || pHat < 0.0 || pHat > 1.0) {
             throw new IllegalArgumentException(
                     "pHat must be in [0, 1], got: " + pHat);
@@ -150,33 +141,9 @@ public class BinomialProportionEstimator {
 
         // At pHat = 0 the centre and the margin are the same quantity,
         // z^2 / (2n), so the bound is exactly 0 at every n and confidence.
-        // That is an algebraic identity, not a small number, and floating
-        // point does not reliably deliver it: over n in 1..1000 a residue
-        // near 1e-18 survives at 265 sizes at one-sided 90%, 201 at 95%,
-        // and 121 at 99%. The residue is invisible against any tolerance
-        // a caller would set and decisive on the artefact that binds,
-        // because the integer cutoff is ceil(n * threshold) and ceil
-        // turns any positive residue into 1 — demanding one success of a
-        // test whose baseline can demand nothing. Return the algebraic
-        // value rather than the computed one.
-        //
-        // On the exact comparison, which is normally a smell: this is a
-        // test on an *input*, not on two computed quantities, and the
-        // input's domain is discrete. Baselines store (k, n) rather than
-        // a rate (companion §4.3), so pHat arrives here as either k/n —
-        // exactly +0.0 when k = 0, since IEEE 754 division of zero is
-        // exact — or as an effective baseline rate, which §4.3.2 bounds
-        // at n/(n + z^2), far from zero. There is no value between 0 and
-        // 1/n for the comparison to miss: the smallest non-zero rate a
-        // million-sample baseline can express is 1e-6. Negative zero
-        // compares equal, and NaN is rejected above.
-        //
-        // The failure mode of an exact test is also benign here. A rate
-        // that is genuinely tiny but non-zero is not a degenerate case
-        // needing to be snapped; it falls through and is computed by the
-        // formula, which is well defined there. Widening this to an
-        // epsilon would do the opposite of what it looks like — it would
-        // silently round real, small rates down to a threshold of zero.
+        // Floating point leaves a residue near 1e-18 at some sizes; return
+        // the algebraic value. The exact comparison is on an input whose
+        // domain is discrete (k/n is exactly +0.0 when k = 0).
         if (pHat == 0.0) {
             return 0.0;
         }
@@ -215,142 +182,6 @@ public class BinomialProportionEstimator {
         validateConfidenceLevel(confidenceLevel);
         double alpha = 1.0 - confidenceLevel;
         return STANDARD_NORMAL.inverseCumulativeProbability(1.0 - alpha / 2.0);
-    }
-
-    /**
-     * Computes the z-test statistic for a one-sided binomial proportion test.
-     *
-     * <p>Tests H₀: p ≥ π₀ vs H₁: p < π₀ using the test statistic:
-     * <pre>
-     *   z = (p̂ - π₀) / √(π₀(1-π₀)/n)
-     * </pre>
-     *
-     * @param observedRate the observed proportion p̂
-     * @param hypothesizedRate the hypothesized proportion π₀
-     * @param sampleSize the number of trials n
-     * @return the z-test statistic, or 0 if the standard error is zero
-     */
-    public double zTestStatistic(double observedRate, double hypothesizedRate, int sampleSize) {
-        if (sampleSize <= 0) {
-            return 0.0;
-        }
-        double se = Math.sqrt(hypothesizedRate * (1 - hypothesizedRate) / sampleSize);
-        return se > 0 ? (observedRate - hypothesizedRate) / se : 0.0;
-    }
-
-    /**
-     * Computes the one-sided p-value P(Z ≤ z) for a left-tailed test.
-     *
-     * <p>Under H₀: p ≥ π₀ vs H₁: p &lt; π₀, the p-value is the probability of
-     * observing a test statistic this low or lower if the null hypothesis is true.
-     * A small p-value indicates strong evidence of degradation.
-     *
-     * @param z the z-score
-     * @return the lower-tail probability
-     */
-    public double oneSidedPValue(double z) {
-        return STANDARD_NORMAL.cumulativeProbability(z);
-    }
-    
-    /**
-     * Minimum sample count for the normal approximation to the binomial
-     * to be statistically meaningful at the given target rate.
-     *
-     * <p>The classical sufficiency rule is {@code n · p ≥ 5} and
-     * {@code n · (1 − p) ≥ 5}, giving
-     * <pre>
-     *   n_min = ⌈5 / min(p, 1 − p)⌉
-     * </pre>
-     *
-     * <p>Below this floor the sampling distribution is too skewed for
-     * the normal approximation to underwrite a verdict; the run must
-     * continue past a guaranteed-success short-circuit until the floor
-     * is met.
-     *
-     * @param targetRate the proportion at which the floor is evaluated, in (0, 1)
-     * @return the minimum number of trials for the normal approximation
-     *         to be valid at {@code targetRate}
-     */
-    public int minSamplesForNormalApproximation(double targetRate) {
-        if (Double.isNaN(targetRate) || targetRate <= 0.0 || targetRate >= 1.0) {
-            throw new IllegalArgumentException(
-                    "targetRate must be in (0, 1), got: " + targetRate);
-        }
-        double tighter = Math.min(targetRate, 1.0 - targetRate);
-        return (int) Math.ceil(5.0 / tighter);
-    }
-
-    /**
-     * The exact binomial cumulative distribution function
-     * {@code P(K ≤ k)} for {@code trials} Bernoulli trials at success
-     * probability {@code p}. Used for the achieved size of the
-     * integer-cutoff decision rule (statistical companion §3.4):
-     * {@code achievedSize = P(K < c) = binomialCdf(c − 1, n, p)}.
-     *
-     * @param k      the (inclusive) upper success count; {@code k < 0}
-     *               yields {@code 0.0}, {@code k ≥ trials} yields {@code 1.0}
-     * @param trials the number of trials, positive
-     * @param p      the per-trial success probability in [0, 1]
-     * @return {@code P(K ≤ k)}
-     */
-    public double binomialCdf(int k, int trials, double p) {
-        if (trials <= 0) {
-            throw new IllegalArgumentException("Trials must be positive, got: " + trials);
-        }
-        if (Double.isNaN(p) || p < 0.0 || p > 1.0) {
-            throw new IllegalArgumentException("Probability must be in [0, 1], got: " + p);
-        }
-        if (k < 0) {
-            return 0.0;
-        }
-        if (k >= trials) {
-            return 1.0;
-        }
-        return org.apache.commons.statistics.distribution.BinomialDistribution
-                .of(trials, p)
-                .cumulativeProbability(k);
-    }
-
-    /**
-     * The smallest success count {@code K} whose one-sided Wilson lower
-     * bound at the given confidence clears the threshold — the
-     * declared-threshold (compliance) analogue of the empirical
-     * procedure's integer cutoff. The Wilson lower bound is monotone in
-     * the success count, so the answer is found by binary search.
-     *
-     * <p>Used by the engine's guaranteed-success early termination: a
-     * run whose success count has reached this value cannot fail the
-     * declared-threshold comparison however the remaining samples land.
-     *
-     * @param threshold       the declared threshold in [0, 1]
-     * @param trials          the planned sample count, positive
-     * @param confidenceLevel the confidence of the Wilson comparison, in (0, 1)
-     * @return the minimal clearing success count in {@code [0, trials]},
-     *         or {@code trials + 1} when even a perfect run cannot clear
-     *         the threshold at this sample count
-     */
-    public int minimumSuccessesToClear(double threshold, int trials, double confidenceLevel) {
-        if (trials <= 0) {
-            throw new IllegalArgumentException("Trials must be positive, got: " + trials);
-        }
-        if (Double.isNaN(threshold) || threshold < 0.0 || threshold > 1.0) {
-            throw new IllegalArgumentException("Threshold must be in [0, 1], got: " + threshold);
-        }
-        validateConfidenceLevel(confidenceLevel);
-        if (lowerBound(trials, trials, confidenceLevel) < threshold) {
-            return trials + 1;
-        }
-        int lo = 0;
-        int hi = trials;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (lowerBound(mid, trials, confidenceLevel) >= threshold) {
-                hi = mid;
-            } else {
-                lo = mid + 1;
-            }
-        }
-        return lo;
     }
 
     private void validateInputs(int successes, int trials) {

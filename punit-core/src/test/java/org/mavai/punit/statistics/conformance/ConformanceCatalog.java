@@ -1,57 +1,50 @@
 package org.mavai.punit.statistics.conformance;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import org.mavai.punit.api.PercentileKey;
-import org.mavai.punit.api.TestIntent;
-import org.mavai.punit.api.spec.CriterionResult;
-import org.mavai.punit.api.spec.PercentileLatency;
-import org.mavai.punit.api.spec.Verdict;
-import org.mavai.punit.internal.engine.emit.LatencySection;
-import org.mavai.punit.statistics.BinomialProportionEstimator;
-import org.mavai.punit.statistics.DerivationContext;
-import org.mavai.punit.statistics.DerivedThreshold;
-import org.mavai.punit.statistics.LatencyStatistics;
-import org.mavai.punit.statistics.LatencyThresholdDeriver;
-import org.mavai.punit.statistics.OperationalApproach;
-import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
-import org.mavai.punit.statistics.SampleSizeCalculator;
-import org.mavai.punit.statistics.SizingRefusedException;
-import org.mavai.punit.statistics.SampleSizeRequirement;
-import org.mavai.punit.statistics.TestVerdictEvaluator;
-import org.mavai.punit.statistics.ThresholdDeriver;
-import org.mavai.punit.statistics.VerdictWithConfidence;
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
-
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
+import org.mavai.punit.api.TestIntent;
+import org.mavai.punit.api.spec.CriterionResult;
+import org.mavai.punit.api.spec.LatencyStatistics;
+import org.mavai.punit.api.spec.ProbabilisticTestResult;
+import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.api.spec.VerdictComposition;
+import org.mavai.punit.internal.engine.emit.LatencySection;
+import org.mavai.punit.statistics.BinomialProportionEstimator;
+import org.mavai.punit.statistics.ComplianceRule;
+import org.mavai.punit.statistics.DecisionRule;
+import org.mavai.punit.statistics.LatencyRules;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.statistics.RegressionRule;
+import org.mavai.punit.statistics.RegressionSizing;
+import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mavai.punit.statistics.conformance.OracleAssert.assertOracle;
-import static org.mavai.punit.statistics.conformance.OracleAssert.assertOracleAbsent;
 
 /**
  * The registry of every conformance check punit runs against the mavai-R
- * fixtures — one {@link CaseCheck} per fixture case (occasionally two,
- * when a case is verified on both a component surface and the production
- * verdict path).
+ * fixtures — one {@link CaseCheck} per fixture case.
  *
- * <p>Two consumers execute the same checks:
+ * <p>Two consumers execute the same checks: the per-suite display test
+ * ({@code ConformanceTest}) turns each check into a {@code DynamicTest};
+ * {@code ConformanceCoverageTest} re-runs the whole catalog with a
+ * collecting {@link ConformanceRecorder} and diffs the recorded
+ * {@code (suite, case, binding-field)} triples against the manifest's
+ * obligations.
  *
- * <ul>
- *   <li>the per-suite display tests ({@code ProportionConformanceTest},
- *       {@code LatencyConformanceTest}, {@code DecisionRuleConformanceTest})
- *       turn each check into a {@code DynamicTest} for per-case reporting;</li>
- *   <li>{@code ConformanceCoverageTest} re-runs the whole catalog with a
- *       collecting {@link ConformanceRecorder} and diffs the recorded
- *       {@code (suite, case, binding-field)} triples against the
- *       manifest's obligations. Because the coverage test re-executes the
- *       checks itself, its verdict is deterministic regardless of test
- *       ordering, filtering, or Gradle fork configuration — there is no
- *       shared mutable ledger to lose.</li>
- * </ul>
+ * <p>The decision suites are evaluated through the production paths
+ * ({@link ProductionPath}): configuration errors by the engine's pre-run
+ * refusal, pass-rate verdicts by the engine end to end, latency verdicts
+ * by the criterion's evaluation step. The decision-rule layer and the
+ * primitives are checked on the statistics package directly.
  */
 final class ConformanceCatalog {
 
@@ -63,10 +56,6 @@ final class ConformanceCatalog {
     record CaseCheck(String suite, String caseName, Check check) { }
 
     private static final BinomialProportionEstimator ESTIMATOR = new BinomialProportionEstimator();
-    private static final ThresholdDeriver THRESHOLD_DERIVER = new ThresholdDeriver();
-    private static final SampleSizeCalculator SAMPLE_SIZE_CALCULATOR = new SampleSizeCalculator();
-    private static final RiskDrivenSizingCalculator RISK_DRIVEN_SIZING = new RiskDrivenSizingCalculator();
-    private static final TestVerdictEvaluator VERDICT_EVALUATOR = new TestVerdictEvaluator();
 
     private ConformanceCatalog() { }
 
@@ -76,673 +65,625 @@ final class ConformanceCatalog {
         checks.addAll(wilsonCi());
         checks.addAll(wilsonLower());
         checks.addAll(thresholdDerivation());
+        checks.addAll(regressionDecision());
+        checks.addAll(complianceDecision());
+        checks.addAll(feasibility());
         checks.addAll(powerAnalysis());
         checks.addAll(riskDrivenSizing());
-        checks.addAll(feasibility());
-        checks.addAll(verdict());
-        checks.addAll(latencyPercentileValues());
-        checks.addAll(latencyPercentileSummaries());
+        checks.addAll(latencyPercentile());
+        checks.addAll(latencyPercentileMinimums());
         checks.addAll(latencyThreshold());
-        checks.addAll(latencyThresholdBootstrap());
-        checks.addAll(latencyThresholdBootstrapProductionPath());
-        checks.addAll(latencyPercentileEmissionMinimums());
-        checks.addAll(latencyBoundExistenceMinimums());
-        checks.addAll(regressionDecisionDerivation());
-        checks.addAll(regressionDecisionProductionVerdicts());
+        checks.addAll(latencyComplianceDecision());
+        checks.addAll(verdict());
         return checks;
     }
 
-    // ── wilson_ci ───────────────────────────────────────────────────
+    private static List<CaseCheck> suite(String suite, CaseAssertion assertion) {
+        JsonNode file = ConformanceFixtures.load(suite + ".json");
+        double tolerance = file.get("tolerance").asDouble();
+        List<CaseCheck> checks = new ArrayList<>();
+        for (JsonNode c : file.get("cases")) {
+            checks.add(new CaseCheck(suite, c.get("name").asText(),
+                    recorder -> assertion.check(recorder, c, tolerance)));
+        }
+        return checks;
+    }
+
+    @FunctionalInterface
+    private interface CaseAssertion {
+        void check(ConformanceRecorder recorder, JsonNode c, double tolerance) throws Exception;
+    }
+
+    // ── Descriptive primitives ──────────────────────────────────────
 
     static List<CaseCheck> wilsonCi() {
-        JsonNode suite = ConformanceFixtures.load("wilson_ci.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("wilson_ci", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                var result = ESTIMATOR.estimate(
-                        inputs.get("successes").asInt(),
-                        inputs.get("trials").asInt(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "wilson_ci", c, "lower", result.lowerBound(), tolerance);
-                assertOracle(recorder, "wilson_ci", c, "upper", result.upperBound(), tolerance);
-                assertOracle(recorder, "wilson_ci", c, "point", result.pointEstimate(), tolerance);
-            }));
-        }
-        return checks;
+        return suite("wilson_ci", (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            var result = ESTIMATOR.estimate(
+                    in.get("successes").asInt(), in.get("trials").asInt(),
+                    in.get("confidence").asDouble());
+            assertOracle(recorder, "wilson_ci", c, "point", result.pointEstimate(), tol);
+            assertOracle(recorder, "wilson_ci", c, "lower", result.lowerBound(), tol);
+            assertOracle(recorder, "wilson_ci", c, "upper", result.upperBound(), tol);
+        });
     }
-
-    // ── wilson_lower ────────────────────────────────────────────────
 
     static List<CaseCheck> wilsonLower() {
-        JsonNode suite = ConformanceFixtures.load("wilson_lower.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("wilson_lower", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                double result = ESTIMATOR.lowerBound(
-                        inputs.get("successes").asInt(),
-                        inputs.get("trials").asInt(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "wilson_lower", c, "lower_bound", result, tolerance);
-            }));
-        }
-        return checks;
+        return suite("wilson_lower", (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            assertOracle(recorder, "wilson_lower", c, "lower_bound",
+                    ESTIMATOR.lowerBound(in.get("successes").asInt(), in.get("trials").asInt(),
+                            in.get("confidence").asDouble()), tol);
+        });
     }
 
-    // ── threshold_derivation ────────────────────────────────────────
+    // ── regression/fisher ───────────────────────────────────────────
 
+    /**
+     * The decision-rule layer: the cutoff (with the configuration error
+     * judged by the engine's refusal) and the threshold-first inversion.
+     */
     static List<CaseCheck> thresholdDerivation() {
-        JsonNode suite = ConformanceFixtures.load("threshold_derivation.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            String approach = c.get("approach").asText();
-            checks.add(new CaseCheck("threshold_derivation", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                int baselineSuccesses = inputs.get("baseline_successes").asInt();
-                int baselineTrials = inputs.get("baseline_trials").asInt();
-
-                if ("sample_size_first".equals(approach)) {
-                    DerivedThreshold result = THRESHOLD_DERIVER.deriveSampleSizeFirst(
-                            baselineTrials, baselineSuccesses,
-                            inputs.get("test_samples").asInt(),
-                            inputs.get("confidence").asDouble());
-                    assertOracle(recorder, "threshold_derivation", c, "threshold",
-                            result.value(), tolerance);
-                    // The real-valued Wilson lower bound at n_test IS the
-                    // derived threshold in the sample-size-first construction.
-                    assertOracle(recorder, "threshold_derivation", c, "wilson_lower_real",
-                            result.value(), tolerance);
-                    // The integer cutoff and achieved size are the binding
-                    // decision artefacts of the regression procedure; the
-                    // derivation must produce them alongside the real-valued
-                    // threshold. Looked up reflectively so this check compiles
-                    // (and fails red, not red-compile) while the deriver does
-                    // not yet expose them — the Java analogue of baseltest's
-                    // getattr(result, "cutoff", None).
-                    assertOracle(recorder, "threshold_derivation", c, "cutoff_integer",
-                            derivedArtefact(result, "cutoff"));
-                    assertOracle(recorder, "threshold_derivation", c, "achieved_size",
-                            derivedArtefact(result, "achievedSize"), tolerance);
-                } else if ("threshold_first".equals(approach)) {
-                    // testSamples is not used in the threshold-first implied
-                    // confidence computation but is required by the API; use
-                    // baseline trials as a reasonable value.
-                    DerivedThreshold result = THRESHOLD_DERIVER.deriveThresholdFirst(
-                            baselineTrials, baselineSuccesses, baselineTrials,
-                            inputs.get("threshold").asDouble());
-                    assertOracle(recorder, "threshold_derivation", c, "implied_confidence",
-                            result.context().confidence(), tolerance);
-                    assertOracle(recorder, "threshold_derivation", c, "is_sound",
-                            result.isStatisticallySound());
-                }
-            }));
-        }
-        return checks;
+        String s = "threshold_derivation";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            int kb = in.get("baseline_successes").asInt();
+            int nb = in.get("baseline_trials").asInt();
+            int nt = in.get("test_samples").asInt();
+            if ("threshold_first".equals(c.get("approach").asText())) {
+                var implied = RegressionRule.impliedAlpha(kb, nb, nt, in.get("declared_cutoff").asInt());
+                assertOracle(recorder, s, c, "implied_alpha", implied.alpha(), tol);
+                assertOracle(recorder, s, c, "is_sound", implied.isSound());
+                return;
+            }
+            double alpha = in.get("alpha").asDouble();
+            ProbabilisticTestResult result = ProductionPath.run(
+                    List.of(new ProductionPath.Baseline("c", kb, nb, alpha)), nt, 0,
+                    TestIntent.VERIFICATION);
+            List<String> errors = ProductionPath.errors(result);
+            assertOracle(recorder, s, c, "configuration_error", errors);
+            if (!errors.isEmpty()) {
+                assertOracle(recorder, s, c, "cutoff_integer", null);
+                return;
+            }
+            RegressionRule.Derivation d = RegressionRule.derive(kb, nb, nt, alpha);
+            assertOracle(recorder, s, c, "cutoff_integer", d.cutoff());
+            assertOracle(recorder, s, c, "threshold_real", d.thresholdReal(), tol);
+            assertOracle(recorder, s, c, "displayed_rate", d.displayedRate(), tol);
+            assertOracle(recorder, s, c, "size_at_assumed_common_rate", d.sizeAtAssumedCommonRate(), tol);
+        });
     }
 
-    // ── power_analysis ──────────────────────────────────────────────
+    /** PASS iff the observed count meets the Fisher cutoff, as the engine judges it. */
+    static List<CaseCheck> regressionDecision() {
+        String s = "regression_decision";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            ProbabilisticTestResult result = ProductionPath.run(
+                    List.of(new ProductionPath.Baseline("c",
+                            in.get("baseline_successes").asInt(), in.get("baseline_trials").asInt(),
+                            in.get("alpha").asDouble())),
+                    in.get("test_samples").asInt(), in.get("observed_successes").asInt(),
+                    TestIntent.VERIFICATION);
+            List<String> errors = ProductionPath.errors(result);
+            assertOracle(recorder, s, c, "configuration_error", errors);
+            if (!errors.isEmpty()) {
+                assertOracle(recorder, s, c, "cutoff_integer", null);
+                assertOracle(recorder, s, c, "verdict", null);
+                return;
+            }
+            Map<?, ?> d = ProductionPath.decision(result, "c");
+            assertThat(d.get("decisionRule")).isEqualTo(DecisionRule.REGRESSION_FISHER.id());
+            assertOracle(recorder, s, c, "cutoff_integer", d.get("cutoff"));
+            assertOracle(recorder, s, c, "verdict", result.verdict().name());
+            assertOracle(recorder, s, c, "threshold_real", d.get("threshold"), tol);
+            assertOracle(recorder, s, c, "displayed_rate", d.get("displayedRate"), tol);
+            assertOracle(recorder, s, c, "size_at_assumed_common_rate",
+                    d.get("sizeAtAssumedCommonRate"), tol);
+        });
+    }
+
+    // ── compliance/exact-binomial ───────────────────────────────────
+
+    static List<CaseCheck> complianceDecision() {
+        String s = "compliance_decision";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            ProbabilisticTestResult result = ProductionPath.run(
+                    List.of(new ProductionPath.Requirement("c",
+                            in.get("threshold").asDouble(), in.get("alpha").asDouble())),
+                    in.get("test_samples").asInt(), in.get("observed_successes").asInt(),
+                    TestIntent.valueOf(in.get("intent").asText()));
+            List<String> errors = ProductionPath.errors(result);
+            assertOracle(recorder, s, c, "configuration_error", errors);
+            if (!errors.isEmpty()) {
+                for (String field : List.of("k_min", "pass_possible", "verdict")) {
+                    assertOracle(recorder, s, c, field, null);
+                }
+                return;
+            }
+            Map<?, ?> d = ProductionPath.decision(result, "c");
+            assertThat(d.get("decisionRule")).isEqualTo(DecisionRule.COMPLIANCE_EXACT_BINOMIAL.id());
+            assertOracle(recorder, s, c, "k_min", d.get("kMin"));
+            assertOracle(recorder, s, c, "pass_possible", d.get("passPossible"));
+            assertOracle(recorder, s, c, "verdict", result.verdict().name());
+            assertOracle(recorder, s, c, "false_compliance", d.get("falseCompliance"), tol);
+            assertOracle(recorder, s, c, "clopper_pearson_lower", d.get("clopperPearsonLower"), tol);
+        });
+    }
+
+    static List<CaseCheck> feasibility() {
+        String s = "feasibility";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            var result = VerificationFeasibilityEvaluator.evaluate(
+                    in.get("sample_size").asInt(), in.get("target_proportion").asDouble(),
+                    Methodology.confidenceFromAlpha(in.get("alpha").asDouble()));
+            assertOracle(recorder, s, c, "feasible", result.feasible());
+            assertOracle(recorder, s, c, "minimum_samples", result.minimumSamples());
+            assertOracle(recorder, s, c, "criterion", result.criterion());
+        });
+    }
+
+    // ── Power and sizing ────────────────────────────────────────────
 
     static List<CaseCheck> powerAnalysis() {
-        JsonNode suite = ConformanceFixtures.load("power_analysis.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("power_analysis", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                double baselineRate = inputs.get("baseline_rate").asDouble();
-                double minDetectableEffect = inputs.get("min_detectable_effect").asDouble();
-                double confidence = inputs.get("confidence").asDouble();
-
-                SampleSizeRequirement result = SAMPLE_SIZE_CALCULATOR.calculateForPower(
-                        baselineRate, minDetectableEffect, confidence,
-                        inputs.get("power").asDouble());
-                assertOracle(recorder, "power_analysis", c, "required_samples",
-                        result.requiredSamples());
-
-                double achievedPower = SAMPLE_SIZE_CALCULATOR.calculateAchievedPower(
-                        result.requiredSamples(), baselineRate, minDetectableEffect, confidence);
-                assertOracle(recorder, "power_analysis", c, "achieved_power",
-                        achievedPower, tolerance);
-            }));
-        }
-        return checks;
-    }
-
-    // ── risk_driven_sizing ──────────────────────────────────────────
-
-    /**
-     * Sizing against the moving acceptance floor. Three case groups,
-     * discriminated by the {@code approach} field: required-n cases bind
-     * the minimal sample size plus the floor and achieved power at that
-     * size; power-at cases bind the floor and self-consistent power at a
-     * fixed candidate size; detectable-rate cases bind the inversion.
-     * The floor is asserted through the same Wilson-from-rate machinery
-     * the calculator itself reuses, so the shared-z requirement is
-     * exercised on the production path.
-     */
-    static List<CaseCheck> riskDrivenSizing() {
-        JsonNode suite = ConformanceFixtures.load("risk_driven_sizing.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("risk_driven_sizing", c.get("name").asText(),
-                    recorder -> assertRiskDrivenSizingCase(recorder, c, tolerance)));
-        }
-        return checks;
-    }
-
-    private static void assertRiskDrivenSizingCase(
-            ConformanceRecorder recorder, JsonNode c, double tolerance) {
-        if ("REFUSE".equals(c.get("expected").get("sizing_gate").asText())) {
-            assertSizingRefusalCase(recorder, c);
-            return;
-        }
-        assertOracle(recorder, "risk_driven_sizing", c, "sizing_gate", "ADMIT");
-        switch (c.get("approach").asText()) {
-            case "required_n" -> assertRequiredSampleSizeCase(recorder, c, tolerance);
-            case "power_at" -> assertPowerAtCandidateSizeCase(recorder, c, tolerance);
-            case "detectable_rate" -> assertDetectableRateInversionCase(recorder, c, tolerance);
-            default -> throw new IllegalStateException(
-                    "unknown sizing approach '%s' in case '%s'".formatted(
-                            c.get("approach").asText(), c.get("name").asText()));
-        }
-    }
-
-    private static void assertRequiredSampleSizeCase(
-            ConformanceRecorder recorder, JsonNode c, double tolerance) {
-        var inputs = c.get("inputs");
-        double baselineRate = inputs.get("baseline_rate").asDouble();
-        double confidence = inputs.get("confidence").asDouble();
-        double minimumAcceptableRate = inputs.get("minimum_acceptable_rate").asDouble();
-        int requiredSamples = RISK_DRIVEN_SIZING.requiredSamples(
-                baselineRate, minimumAcceptableRate, confidence,
-                inputs.get("target_power").asDouble());
-        assertOracle(recorder, "risk_driven_sizing", c, "required_n", requiredSamples);
-        assertOracle(recorder, "risk_driven_sizing", c, "floor",
-                ESTIMATOR.lowerBoundFromRate(baselineRate, requiredSamples, confidence),
-                tolerance);
-        assertOracle(recorder, "risk_driven_sizing", c, "achieved_power",
-                RISK_DRIVEN_SIZING.powerAt(requiredSamples, baselineRate,
-                        minimumAcceptableRate, confidence),
-                tolerance);
-    }
-
-    /**
-     * An inadmissible sizing design: the refusal itself is the expected
-     * outcome, so the assertion is that the production surface declines and
-     * names the cause — not that it returns a number.
-     *
-     * <p>Sizing refusal is misconfiguration, so it travels on the exception
-     * channel (the family's {@code Outcome} channel carries the anticipated
-     * failure of a sample, and sizing happens before any sample is taken).
-     * What the fixture binds is that the refusal is *distinguishable*: the
-     * cause is carried as data on {@link SizingRefusedException}, so this
-     * assertion never parses a message.
-     */
-    private static void assertSizingRefusalCase(ConformanceRecorder recorder, JsonNode c) {
-        var inputs = c.get("inputs");
-        double baselineRate = inputs.get("baseline_rate").asDouble();
-        double confidence = inputs.get("confidence").asDouble();
-
-        SizingRefusedException refusal = catchThrowableOfType(
-                SizingRefusedException.class,
-                () -> {
-                    switch (c.get("approach").asText()) {
-                        case "required_n" -> RISK_DRIVEN_SIZING.requiredSamples(
-                                baselineRate, inputs.get("minimum_acceptable_rate").asDouble(),
-                                confidence, inputs.get("target_power").asDouble());
-                        case "power_at" -> RISK_DRIVEN_SIZING.powerAt(
-                                inputs.get("test_samples").asInt(), baselineRate,
-                                inputs.get("minimum_acceptable_rate").asDouble(), confidence);
-                        case "detectable_rate" -> RISK_DRIVEN_SIZING.detectableRate(
-                                inputs.get("test_samples").asInt(), baselineRate,
-                                confidence, inputs.get("target_power").asDouble());
-                        default -> throw new IllegalStateException(
-                                "unknown sizing approach '%s' in case '%s'".formatted(
-                                        c.get("approach").asText(), c.get("name").asText()));
-                    }
-                });
-
-        assertThat(refusal)
-                .as("risk_driven_sizing/%s: the oracle expects this design to be refused",
-                        c.get("name").asText())
-                .isNotNull();
-        assertOracle(recorder, "risk_driven_sizing", c, "sizing_gate", "REFUSE");
-        assertOracle(recorder, "risk_driven_sizing", c, "refusal_category",
-                refusal.refusalCause().name());
-
-        // The numerics the manifest still binds on this case. The refusal
-        // means there is no value for any of them, and saying so is the
-        // assertion: a framework that clamped the baseline and returned a
-        // number would fail here.
-        c.get("expected").fieldNames().forEachRemaining(field -> {
-            if (c.get("expected").get(field).isNull()) {
-                assertOracleAbsent(recorder, "risk_driven_sizing", c, field);
+        String s = "power_analysis";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            switch (c.get("approach").asText()) {
+                case "compliance_sizing" -> {
+                    OptionalDouble declared = in.has("alternative_rate")
+                            ? OptionalDouble.of(in.get("alternative_rate").asDouble())
+                            : OptionalDouble.empty();
+                    ComplianceRule.Sizing sizing = ComplianceRule.size(
+                            in.get("threshold").asDouble(), in.get("min_detectable_effect").asDouble(),
+                            in.get("alpha").asDouble(), in.get("power").asDouble(), declared,
+                            ComplianceRule.DEFAULT_SIZING_HORIZON);
+                    assertOracle(recorder, s, c, "required_samples", sizing.requiredSamples());
+                    assertOracle(recorder, s, c, "achieved_power", sizing.achievedPower(), tol);
+                    assertOracle(recorder, s, c, "alternative_rate", sizing.alternative().rate(), tol);
+                    assertOracle(recorder, s, c, "alternative_kind", sizing.alternative().kind().name());
+                    assertOracle(recorder, s, c, "first_crossing", sizing.firstCrossing());
+                }
+                case "regression_power" -> assertOracle(recorder, s, c, "design_power",
+                        RegressionRule.designPower(
+                                in.get("baseline_trials").asInt(), in.get("test_samples").asInt(),
+                                in.get("alpha").asDouble(), in.get("baseline_rate").asDouble(),
+                                in.get("baseline_rate").asDouble()
+                                        - in.get("min_detectable_effect").asDouble()), tol);
+                case "regression_resolved_power" -> {
+                    int kb = in.get("baseline_successes").asInt();
+                    int nb = in.get("baseline_trials").asInt();
+                    int nt = in.get("test_samples").asInt();
+                    double alpha = in.get("alpha").asDouble();
+                    assertOracle(recorder, s, c, "cutoff_integer", RegressionRule.cutoff(kb, nb, nt, alpha));
+                    assertOracle(recorder, s, c, "resolved_test_power", RegressionRule.resolvedPower(
+                            kb, nb, nt, alpha, in.get("design_alternative_rate").asDouble()), tol);
+                }
+                case "regression_mdd" -> assertOracle(recorder, s, c, "minimum_detectable_degradation",
+                        RegressionRule.minimumDetectableDegradation(
+                                in.get("baseline_trials").asInt(), in.get("test_samples").asInt(),
+                                in.get("alpha").asDouble(), in.get("baseline_rate").asDouble(),
+                                in.get("power").asDouble()), tol);
+                default -> throw new IllegalStateException("unknown approach in " + c.get("name"));
             }
         });
     }
 
-    private static void assertPowerAtCandidateSizeCase(
-            ConformanceRecorder recorder, JsonNode c, double tolerance) {
-        var inputs = c.get("inputs");
-        double baselineRate = inputs.get("baseline_rate").asDouble();
-        double confidence = inputs.get("confidence").asDouble();
-        int testSamples = inputs.get("test_samples").asInt();
-        assertOracle(recorder, "risk_driven_sizing", c, "floor",
-                ESTIMATOR.lowerBoundFromRate(baselineRate, testSamples, confidence),
-                tolerance);
-        assertOracle(recorder, "risk_driven_sizing", c, "power",
-                RISK_DRIVEN_SIZING.powerAt(testSamples, baselineRate,
-                        inputs.get("minimum_acceptable_rate").asDouble(), confidence),
-                tolerance);
+    static List<CaseCheck> riskDrivenSizing() {
+        String s = "risk_driven_sizing";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            double rate = in.has("baseline_rate")
+                    ? in.get("baseline_rate").asDouble()
+                    : in.get("baseline_successes").asDouble() / in.get("baseline_trials").asInt();
+            int nb = in.get("baseline_trials").asInt();
+            double alpha = in.get("alpha").asDouble();
+            Optional<RegressionSizing.Refusal> refusal = RegressionSizing.checkDomain(
+                    rate, nb,
+                    in.has("design_alternative_rate")
+                            ? OptionalDouble.of(in.get("design_alternative_rate").asDouble())
+                            : OptionalDouble.empty(),
+                    in.has("test_samples")
+                            ? OptionalInt.of(in.get("test_samples").asInt())
+                            : OptionalInt.empty());
+            if (refusal.isPresent()) {
+                assertRefused(recorder, c, refusal.get());
+                return;
+            }
+            switch (c.get("approach").asText()) {
+                case "required_n" -> {
+                    var sized = RegressionSizing.designRequiredSamples(
+                            rate, nb, in.get("design_alternative_rate").asDouble(), alpha,
+                            in.get("target_power").asDouble());
+                    if (sized.isEmpty()) {
+                        assertRefused(recorder, c, RegressionSizing.Refusal.BASELINE_TOO_SMALL);
+                        return;
+                    }
+                    assertOracle(recorder, s, c, "required_n", sized.get().requiredSamples());
+                    assertOracle(recorder, s, c, "achieved_power", sized.get().power(), tol);
+                }
+                case "power_at" -> assertOracle(recorder, s, c, "power",
+                        RegressionSizing.designPowerAt(in.get("test_samples").asInt(), rate, nb,
+                                in.get("design_alternative_rate").asDouble(), alpha), tol);
+                case "detectable_rate" -> assertOracle(recorder, s, c, "detectable_rate",
+                        RegressionSizing.designDetectableRate(in.get("test_samples").asInt(), rate, nb,
+                                alpha, in.get("target_power").asDouble()), tol);
+                case "resolved_required_n" -> {
+                    var sized = RegressionSizing.resolvedSizing(
+                            in.get("baseline_successes").asInt(), nb,
+                            in.get("design_alternative_rate").asDouble(), alpha,
+                            in.get("target_power").asDouble());
+                    if (sized.isEmpty()) {
+                        assertRefused(recorder, c, RegressionSizing.Refusal.BASELINE_TOO_SMALL);
+                        return;
+                    }
+                    assertOracle(recorder, s, c, "required_n", sized.get().requiredSamples());
+                    assertOracle(recorder, s, c, "resolved_power", sized.get().power(), tol);
+                    assertOracle(recorder, s, c, "first_crossing", sized.get().firstCrossing());
+                }
+                case "resolved_power_at" -> {
+                    int kb = in.get("baseline_successes").asInt();
+                    int nt = in.get("test_samples").asInt();
+                    assertOracle(recorder, s, c, "cutoff_integer", RegressionRule.cutoff(kb, nb, nt, alpha));
+                    assertOracle(recorder, s, c, "resolved_power", RegressionRule.resolvedPower(
+                            kb, nb, nt, alpha, in.get("design_alternative_rate").asDouble()), tol);
+                }
+                default -> throw new IllegalStateException("unknown approach in " + c.get("name"));
+            }
+            assertOracle(recorder, s, c, "sizing_gate", "ADMIT");
+        });
     }
 
-    private static void assertDetectableRateInversionCase(
-            ConformanceRecorder recorder, JsonNode c, double tolerance) {
-        var inputs = c.get("inputs");
-        assertOracle(recorder, "risk_driven_sizing", c, "detectable_rate",
-                RISK_DRIVEN_SIZING.detectableRate(
-                        inputs.get("test_samples").asInt(),
-                        inputs.get("baseline_rate").asDouble(),
-                        inputs.get("confidence").asDouble(),
-                        inputs.get("target_power").asDouble()),
-                tolerance);
+    /** A refused design: its category, and no number for any other field. */
+    private static void assertRefused(
+            ConformanceRecorder recorder, JsonNode c, RegressionSizing.Refusal refusal) {
+        String s = "risk_driven_sizing";
+        assertOracle(recorder, s, c, "sizing_gate", "REFUSE");
+        assertOracle(recorder, s, c, "refusal_category", refusal.name());
+        c.get("expected").fieldNames().forEachRemaining(field -> {
+            if (!field.equals("sizing_gate") && !field.equals("refusal_category")) {
+                assertOracle(recorder, s, c, field, null);
+            }
+        });
     }
 
-    // ── feasibility ─────────────────────────────────────────────────
+    // ── Latency ─────────────────────────────────────────────────────
 
-    static List<CaseCheck> feasibility() {
-        JsonNode suite = ConformanceFixtures.load("feasibility.json");
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("feasibility", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                var result = VerificationFeasibilityEvaluator.evaluate(
-                        inputs.get("sample_size").asInt(),
-                        inputs.get("target_proportion").asDouble(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "feasibility", c, "feasible", result.feasible());
-                assertOracle(recorder, "feasibility", c, "minimum_samples", result.minimumSamples());
-                assertOracle(recorder, "feasibility", c, "criterion",
-                        result.criterion().toLowerCase().replaceAll("[\\s-]+", "_"));
-            }));
-        }
-        return checks;
+    static List<CaseCheck> latencyPercentile() {
+        String s = "latency_percentile";
+        return suite(s, (recorder, c, tol) -> {
+            double[] latencies = ConformanceFixtures.toDoubleArray(c.get("inputs").get("latencies"));
+            if (c.get("expected").has("value")) {
+                assertOracle(recorder, s, c, "value",
+                        nearestRankPercentile(latencies, c.get("inputs").get("percentile").asDouble()), tol);
+            }
+            if (c.get("expected").has("mean")) {
+                assertOracle(recorder, s, c, "mean",
+                        org.mavai.punit.statistics.LatencyStatistics.mean(latencies), tol);
+                assertOracle(recorder, s, c, "max",
+                        org.mavai.punit.statistics.LatencyStatistics.max(latencies), tol);
+            }
+        });
     }
 
-    // ── verdict ─────────────────────────────────────────────────────
+    /**
+     * Exact equality throughout (tolerance 0). The emission minimums are
+     * read from the artefact writers' own gate.
+     */
+    static List<CaseCheck> latencyPercentileMinimums() {
+        String s = "latency_percentile_minimums";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            switch (c.get("approach").asText()) {
+                case "emission_non_degeneracy" -> assertOracle(recorder, s, c,
+                        "minimum_contributing_samples",
+                        LatencySection.minimumSamplesFor(ProductionPath.key(
+                                in.get("percentile").asDouble()).detailKey()));
+                case "nondegeneracy_planning" -> {
+                    var p = LatencyRules.planNondegeneracy(in.get("percentile").asDouble(),
+                            in.get("planned_samples").asInt(), in.get("baseline_success_rate").asDouble());
+                    assertOracle(recorder, s, c, "expected_test_samples", p.expectedTestSamples());
+                    assertOracle(recorder, s, c, "minimum_contributing_samples",
+                            p.minimumContributingSamples());
+                    assertOracle(recorder, s, c, "warning", p.warning());
+                    assertOracle(recorder, s, c, "planned_samples_needed", p.plannedSamplesNeeded());
+                }
+                case "nondegeneracy_decision" -> {
+                    var d = LatencyRules.decideNondegeneracy(in.get("percentile").asDouble(),
+                            in.get("test_samples").asInt(),
+                            "VERIFICATION".equals(in.get("intent").asText()),
+                            in.get("enforced").asBoolean(),
+                            "explicit".equals(in.get("threshold_source").asText())
+                                    ? LatencyRules.ThresholdSource.EXPLICIT
+                                    : LatencyRules.ThresholdSource.BASELINE_DERIVED);
+                    assertOracle(recorder, s, c, "applies", d.applies());
+                    assertOracle(recorder, s, c, "degenerate", d.degenerate());
+                    assertOracle(recorder, s, c, "outcome", d.outcome().name());
+                }
+                case "precedence_existence" -> {
+                    OptionalInt rank = LatencyRules.precedenceRank(in.get("baseline_trials").asInt(),
+                            in.get("test_samples").asInt(), in.get("percentile").asDouble(),
+                            in.get("alpha").asDouble());
+                    assertOracle(recorder, s, c, "saturated", rank.isEmpty());
+                    assertOracle(recorder, s, c, "rank", rank);
+                }
+                case "precedence_planning" -> {
+                    var p = LatencyRules.planPrecedence(in.get("baseline_trials").asInt(),
+                            in.get("planned_samples").asInt(), in.get("baseline_success_rate").asDouble(),
+                            in.get("percentile").asDouble(), in.get("alpha").asDouble());
+                    assertOracle(recorder, s, c, "expected_test_samples", p.expectedTestSamples());
+                    assertOracle(recorder, s, c, "warning", p.warning());
+                    assertOracle(recorder, s, c, "planning_rank", p.planningRank());
+                    assertOracle(recorder, s, c, "minimum_baseline_trials", p.minimumBaselineTrials());
+                }
+                default -> throw new IllegalStateException("unknown approach in " + c.get("name"));
+            }
+        });
+    }
+
+    /**
+     * The design rule judged by the engine's pre-run refusal on the two
+     * samplings; the precedence rank on the successful latencies.
+     */
+    static List<CaseCheck> latencyThreshold() {
+        String s = "latency_threshold";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            double p = in.get("p").asDouble();
+            double alpha = in.get("alpha").asDouble();
+            double[] baseline = ConformanceFixtures.toDoubleArray(in.get("baseline_latencies"));
+            LatencyStatistics stats = ProductionPath.latencyBaseline(
+                    baseline, in.get("baseline_samples").asInt());
+            List<String> errors = ProductionPath.latencyRefusal(
+                    ProductionPath.baselineDerivedDeclaration(p, alpha),
+                    in.get("planned_samples").asInt(), TestIntent.VERIFICATION, Optional.of(stats));
+            assertOracle(recorder, s, c, "configuration_error", errors);
+            if (!errors.isEmpty()) {
+                for (String field : List.of("rank", "threshold", "saturated")) {
+                    assertOracle(recorder, s, c, field, null);
+                }
+                return;
+            }
+            var t = LatencyRules.derivePrecedenceThreshold(baseline, in.get("test_samples").asInt(), p, alpha);
+            assertOracle(recorder, s, c, "rank", t.rank());
+            assertOracle(recorder, s, c, "threshold", t.threshold(), tol);
+            assertOracle(recorder, s, c, "saturated", t.saturated());
+            assertOracle(recorder, s, c, "breach_probability", t.breachProbability(), tol);
+            assertOracle(recorder, s, c, "test_rank", t.testRank());
+            assertOracle(recorder, s, c, "n", t.n());
+            assertOracle(recorder, s, c, "baseline_percentile", t.baselinePercentile(), tol);
+        });
+    }
+
+    /**
+     * Refusal by the engine's pre-run hook on the planned samples; the
+     * verdict by the criterion's evaluation on the successful latencies.
+     */
+    static List<CaseCheck> latencyComplianceDecision() {
+        String s = "latency_compliance_decision";
+        return suite(s, (recorder, c, tol) -> {
+            var in = c.get("inputs");
+            double p = in.get("percentile").asDouble();
+            long threshold = in.get("threshold_ms").asLong();
+            double alpha = in.get("alpha").asDouble();
+            TestIntent intent = TestIntent.valueOf(in.get("intent").asText());
+            List<String> errors = ProductionPath.latencyRefusal(
+                    ProductionPath.explicitDeclaration(p, threshold, alpha),
+                    in.get("planned_samples").asInt(), intent, Optional.empty());
+            assertOracle(recorder, s, c, "configuration_error", errors);
+            if (!errors.isEmpty()) {
+                for (String field : List.of("test_samples", "within_threshold", "y_min",
+                        "pass_possible", "verdict")) {
+                    assertOracle(recorder, s, c, field, null);
+                }
+                return;
+            }
+            double[] latencies = ConformanceFixtures.toDoubleArray(in.get("latencies"));
+            CriterionResult r = ProductionPath.decide(
+                    ProductionPath.explicit(p, threshold, alpha), latencies, null, intent);
+            String k = ProductionPath.key(p).detailKey();
+            Map<String, Object> d = r.detail();
+            assertThat(d.get("decisionRule." + k))
+                    .isEqualTo(DecisionRule.LATENCY_COMPLIANCE_EXACT_BINOMIAL.id());
+            assertOracle(recorder, s, c, "test_samples", d.get("successfulSamples"));
+            assertOracle(recorder, s, c, "within_threshold", d.get("withinThreshold." + k));
+            assertOracle(recorder, s, c, "y_min", d.get("requiredWithin." + k));
+            assertOracle(recorder, s, c, "pass_possible", d.containsKey("requiredWithin." + k));
+            assertOracle(recorder, s, c, "verdict", d.get("verdict." + k));
+            assertOracle(recorder, s, c, "false_compliance", d.get("falseCompliance." + k), tol);
+            assertOracle(recorder, s, c, "clopper_pearson_lower", d.get("clopperPearsonLower." + k), tol);
+            assertOracle(recorder, s, c, "observed_percentile_ms", d.get("observed." + k), tol);
+            assertOracle(recorder, s, c, "advisory_percentile_pass", d.get("advisoryPercentilePass." + k));
+        });
+    }
+
+    // ── Verdicts and their composition ──────────────────────────────
 
     static List<CaseCheck> verdict() {
-        JsonNode suite = ConformanceFixtures.load("verdict.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("verdict", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                int successes = inputs.get("successes").asInt();
-                int trials = inputs.get("trials").asInt();
-                double threshold = inputs.get("threshold").asDouble();
-                double confidence = inputs.get("confidence").asDouble();
-
-                var context = new DerivationContext(threshold, trials, trials, confidence);
-                var derivedThreshold = new DerivedThreshold(
-                        threshold, OperationalApproach.SAMPLE_SIZE_FIRST, context);
-
-                VerdictWithConfidence verdict = VERDICT_EVALUATOR.evaluate(
-                        successes, trials, derivedThreshold);
-                assertOracle(recorder, "verdict", c, "passed", verdict.passed());
-                assertOracle(recorder, "verdict", c, "observed_rate",
-                        verdict.observedRate(), tolerance);
-
-                double observedRate = (double) successes / trials;
-                double z = ESTIMATOR.zTestStatistic(observedRate, threshold, trials);
-                assertOracle(recorder, "verdict", c, "test_statistic", z, tolerance);
-                assertOracle(recorder, "verdict", c, "p_value",
-                        ESTIMATOR.oneSidedPValue(z), tolerance);
-                // false_positive_probability in the reference data is alpha = 1 - confidence.
-                assertOracle(recorder, "verdict", c, "false_positive_probability",
-                        1.0 - confidence, tolerance);
-            }));
-        }
-        return checks;
-    }
-
-    // ── latency_percentile ──────────────────────────────────────────
-
-    static List<CaseCheck> latencyPercentileValues() {
-        JsonNode suite = ConformanceFixtures.load("latency_percentile.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            if (!c.get("inputs").has("percentile")) {
-                continue; // summary case
+        String s = "verdict";
+        return suite(s, (recorder, c, tol) -> {
+            String approach = c.has("approach") ? c.get("approach").asText() : "";
+            switch (approach) {
+                case "test_verdict" -> testVerdict(recorder, c, tol);
+                case "two_criteria" -> twoCriteria(recorder, c, tol);
+                default -> singleCriterion(recorder, c, tol);
             }
-            checks.add(new CaseCheck("latency_percentile", c.get("name").asText(), recorder -> {
-                double[] latencies = ConformanceFixtures.toDoubleArray(c.get("inputs").get("latencies"));
-                double result = LatencyStatistics.nearestRankPercentile(
-                        latencies, c.get("inputs").get("percentile").asDouble());
-                assertOracle(recorder, "latency_percentile", c, "value", result, tolerance);
-            }));
-        }
-        return checks;
+        });
     }
 
-    static List<CaseCheck> latencyPercentileSummaries() {
-        JsonNode suite = ConformanceFixtures.load("latency_percentile.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            if (c.get("inputs").has("percentile")) {
-                continue; // percentile case
-            }
-            checks.add(new CaseCheck("latency_percentile", c.get("name").asText(), recorder -> {
-                double[] latencies = ConformanceFixtures.toDoubleArray(c.get("inputs").get("latencies"));
-                assertOracle(recorder, "latency_percentile", c, "mean",
-                        LatencyStatistics.mean(latencies), tolerance);
-                assertOracle(recorder, "latency_percentile", c, "max",
-                        LatencyStatistics.max(latencies), tolerance);
-            }));
-        }
-        return checks;
+    private static ProductionPath.Bar bar(JsonNode in, String id, String alphaKey) {
+        return in.has("baseline_trials")
+                ? new ProductionPath.Baseline(id, in.get("baseline_successes").asInt(),
+                        in.get("baseline_trials").asInt(), in.get(alphaKey).asDouble())
+                : new ProductionPath.Requirement(id, in.get("threshold").asDouble(),
+                        in.get(alphaKey).asDouble());
     }
 
-    // ── latency_threshold ───────────────────────────────────────────
-
-    static List<CaseCheck> latencyThreshold() {
-        JsonNode suite = ConformanceFixtures.load("latency_threshold.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("latency_threshold", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                LatencyThresholdDeriver.Threshold result = LatencyThresholdDeriver.derive(
-                        ConformanceFixtures.toDoubleArray(inputs.get("baseline_latencies")),
-                        inputs.get("p").asDouble(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "latency_threshold", c, "rank", result.rank());
-                assertOracle(recorder, "latency_threshold", c, "threshold",
-                        result.threshold(), tolerance);
-                assertOracle(recorder, "latency_threshold", c, "baseline_percentile",
-                        result.baselinePercentile(), tolerance);
-                assertOracle(recorder, "latency_threshold", c, "n", result.n());
-            }));
-        }
-        return checks;
+    private static TestIntent intent(JsonNode in) {
+        return in.has("intent") ? TestIntent.valueOf(in.get("intent").asText()) : TestIntent.VERIFICATION;
     }
 
-    // ── latency_threshold_bootstrap (binomial side) ─────────────────
-
-    /**
-     * Conformance against the bootstrap-comparison suite's binding
-     * fields. The conformance fields are integer-valued or specific
-     * elements of the integer-valued baseline array, so the suite
-     * carries {@code tolerance: 0} and equality is exact. The
-     * {@code bootstrap_upper} / {@code point_estimate} / {@code diff}
-     * fields are manifest-classified informational (no bootstrap method
-     * is implemented, deliberately) and are not conformance targets.
-     */
-    static List<CaseCheck> latencyThresholdBootstrap() {
-        JsonNode suite = ConformanceFixtures.load("latency_threshold_bootstrap.json");
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("latency_threshold_bootstrap", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                LatencyThresholdDeriver.Threshold result = LatencyThresholdDeriver.derive(
-                        ConformanceFixtures.toDoubleArray(inputs.get("baseline_latencies")),
-                        inputs.get("p").asDouble(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "rank", result.rank());
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "threshold", result.threshold());
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "baseline_percentile",
-                        result.baselinePercentile());
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "n", result.n());
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "saturated", result.saturated());
-                // The unclamped rank k_raw is a binding field the deriver
-                // does not yet expose — reflective lookup, red until it does.
-                assertOracle(recorder, "latency_threshold_bootstrap", c, "k_raw",
-                        reflectiveAccessor(result, "kRaw"));
-            }));
+    private static void singleCriterion(ConformanceRecorder recorder, JsonNode c, double tol) {
+        String s = "verdict";
+        var in = c.get("inputs");
+        ProbabilisticTestResult result = ProductionPath.run(
+                List.of(bar(in, "c", "alpha")), in.get("trials").asInt(), in.get("successes").asInt(),
+                intent(in));
+        List<String> errors = ProductionPath.errors(result);
+        assertOracle(recorder, s, c, "configuration_error", errors);
+        assertOracle(recorder, s, c, "observed_rate",
+                in.get("successes").asDouble() / in.get("trials").asInt(), tol);
+        if (!errors.isEmpty()) {
+            assertOracle(recorder, s, c, "verdict", null);
+            return;
         }
-        return checks;
+        assertOracle(recorder, s, c, "verdict", result.verdict().name());
+        assertThat(ProductionPath.decision(result, "c").get("decisionRule"))
+                .isEqualTo(c.get("decisionRule").asText());
     }
 
     /**
-     * End-to-end conformance against the bootstrap fixture, driven
-     * through the production evaluation path
-     * ({@code PercentileLatency.evaluate} reading a baseline
-     * {@code LatencyStatistics}) rather than calling
-     * {@code LatencyThresholdDeriver} in isolation. Guards against a
-     * class of regression where the deriver remains correct on its own
-     * but a refactor detaches it from the hot path or rewires the
-     * detail-map value.
+     * A requirement and a baseline on the same postconditions: two
+     * criteria, refused whole when any part is invalid, otherwise each
+     * decided by its own rule and composed structurally.
      */
-    static List<CaseCheck> latencyThresholdBootstrapProductionPath() {
-        JsonNode suite = ConformanceFixtures.load("latency_threshold_bootstrap.json");
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            checks.add(new CaseCheck("latency_threshold_bootstrap", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                var expected = c.get("expected");
-                long[] baselineLatenciesMs = ConformanceFixtures.toLongArray(inputs.get("baseline_latencies"));
-                double confidence = inputs.get("confidence").asDouble();
-                long expectedThreshold = expected.get("threshold").asLong();
-                boolean saturated = expected.get("saturated").asBoolean();
-                PercentileKey key = LatencyProductionPath.percentileKeyFor(inputs.get("p").asDouble());
-
-                var baseline = LatencyProductionPath.buildBaseline(baselineLatenciesMs);
-                PercentileLatency<String> criterion = PercentileLatency.empirical(confidence, key);
-
-                CriterionResult verification = criterion.evaluate(
-                        LatencyProductionPath.evaluationContext(baseline, TestIntent.VERIFICATION));
-                if (saturated) {
-                    assertThat(verification.verdict())
-                            .as("VERIFICATION verdict (saturated)")
-                            .isEqualTo(Verdict.INCONCLUSIVE);
-                    assertThat(verification.detail())
-                            .as("saturated.%s flag", key.detailKey())
-                            .containsEntry("saturated." + key.detailKey(), true);
-                } else {
-                    assertThat(verification.verdict())
-                            .as("VERIFICATION verdict (non-saturated)")
-                            .isEqualTo(Verdict.PASS);
-                    assertThat(verification.detail())
-                            .as("threshold.%s on production path", key.detailKey())
-                            .containsEntry("threshold." + key.detailKey(), expectedThreshold);
-                }
-
-                if (saturated) {
-                    CriterionResult smoke = criterion.evaluate(
-                            LatencyProductionPath.evaluationContext(baseline, TestIntent.SMOKE));
-                    assertThat(smoke.verdict())
-                            .as("SMOKE verdict (saturated, advisory)")
-                            .isEqualTo(Verdict.PASS);
-                    assertThat(smoke.detail())
-                            .as("SMOKE threshold.%s (advisory)", key.detailKey())
-                            .containsEntry("threshold." + key.detailKey(), expectedThreshold);
-                    assertThat(smoke.detail())
-                            .as("SMOKE saturated.%s flag", key.detailKey())
-                            .containsEntry("saturated." + key.detailKey(), true);
-                }
-            }));
+    private static void twoCriteria(ConformanceRecorder recorder, JsonNode c, double tol) {
+        String s = "verdict";
+        var in = c.get("inputs");
+        String complianceId = in.get("compliance_criterion").asText();
+        String regressionId = in.get("regression_criterion").asText();
+        ProbabilisticTestResult result = ProductionPath.run(
+                List.of(new ProductionPath.Requirement(complianceId, in.get("threshold").asDouble(),
+                                in.get("compliance_alpha").asDouble()),
+                        new ProductionPath.Baseline(regressionId, in.get("baseline_successes").asInt(),
+                                in.get("baseline_trials").asInt(), in.get("regression_alpha").asDouble())),
+                in.get("trials").asInt(), in.get("successes").asInt(), intent(in));
+        List<String> errors = ProductionPath.errors(result);
+        assertOracle(recorder, s, c, "configuration_error", errors);
+        assertOracle(recorder, s, c, "observed_rate",
+                in.get("successes").asDouble() / in.get("trials").asInt(), tol);
+        if (!errors.isEmpty()) {
+            assertOracle(recorder, s, c, "verdict", null);
+            assertOracle(recorder, s, c, "criteria", List.of());
+            assertOracle(recorder, s, c, "triggering_criteria", List.of());
+            assertOracle(recorder, s, c, "false_compliance_envelope", null);
+            assertOracle(recorder, s, c, "false_degradation_signal_envelope", null);
+            return;
         }
-        return checks;
-    }
-
-    // ── latency_percentile_minimums ─────────────────────────────────
-
-    static List<CaseCheck> latencyPercentileEmissionMinimums() {
-        JsonNode suite = ConformanceFixtures.load("latency_percentile_minimums.json");
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            if (!"emission_non_degeneracy".equals(c.get("approach").asText())) {
-                continue;
-            }
-            checks.add(new CaseCheck("latency_percentile_minimums", c.get("name").asText(), recorder -> {
-                double p = c.get("inputs").get("percentile").asDouble();
-                String label = "p" + Math.round(p * 100);
-                assertOracle(recorder, "latency_percentile_minimums", c,
-                        "minimum_contributing_samples", LatencySection.minimumSamplesFor(label));
-            }));
+        assertOracle(recorder, s, c, "verdict", result.verdict().name());
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (var row : result.perCriterionEvaluation().perCriterionVerdicts()) {
+            Map<?, ?> d = ProductionPath.decision(result, row.criterionId());
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("criterion_id", row.criterionId());
+            r.put("procedure", DecisionRule.COMPLIANCE_EXACT_BINOMIAL.id().equals(d.get("decisionRule"))
+                    ? "COMPLIANCE" : "REGRESSION");
+            r.put("decisionRule", d.get("decisionRule"));
+            r.put("alpha", d.get("alpha"));
+            r.put("verdict", row.verdict().name());
+            rows.add(r);
         }
-        return checks;
+        assertOracle(recorder, s, c, "criteria", rows, tol);
+        VerdictComposition composition = result.composition().orElseThrow();
+        assertOracle(recorder, s, c, "triggering_criteria", composition.triggering().stream()
+                .map(VerdictComposition.Trigger::id).toList());
+        assertOracle(recorder, s, c, "false_compliance_envelope",
+                composition.falseComplianceEnvelope(), tol);
+        assertOracle(recorder, s, c, "false_degradation_signal_envelope",
+                composition.falseDegradationSignalEnvelope(), tol);
     }
 
     /**
-     * The bound-existence minimums mark the deriver's saturation
-     * boundary: non-saturated at the published minimum, saturated just
-     * below it. The flip assertions are the semantic check that the
-     * published {@code minimum_baseline_samples} equals the deriver's
-     * own floor, so the field is recorded here.
+     * {@code V_test}: the functional criterion through the engine, the
+     * enforced latency constraints through the criterion's evaluation,
+     * composed by the rule the engine composes with. punit has no
+     * advisory latency mode; an advisory constraint is judged by the
+     * statistics package's raw comparison, which is what an advisory
+     * constraint is.
      */
-    static List<CaseCheck> latencyBoundExistenceMinimums() {
-        JsonNode suite = ConformanceFixtures.load("latency_percentile_minimums.json");
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            if (!"bound_existence".equals(c.get("approach").asText())) {
-                continue;
-            }
-            checks.add(new CaseCheck("latency_percentile_minimums", c.get("name").asText(), recorder -> {
-                recorder.record("latency_percentile_minimums", c.get("name").asText(),
-                        "minimum_baseline_samples");
-                double p = c.get("inputs").get("percentile").asDouble();
-                double confidence = c.get("inputs").get("confidence").asDouble();
-                int minimum = c.get("expected").get("minimum_baseline_samples").asInt();
-                assertThat(LatencyThresholdDeriver.derive(ascending(minimum), p, confidence)
-                        .saturated())
-                        .as("non-saturated bound at the published minimum n=%d", minimum)
-                        .isFalse();
-                assertThat(LatencyThresholdDeriver.derive(ascending(minimum - 1), p, confidence)
-                        .saturated())
-                        .as("saturation just below the published minimum, n=%d", minimum - 1)
-                        .isTrue();
-            }));
+    private static void testVerdict(ConformanceRecorder recorder, JsonNode c, double tol) {
+        String s = "verdict";
+        var in = c.get("inputs");
+        List<VerdictComposition.Decided> criteria = new ArrayList<>();
+        List<Map<String, Object>> criteriaRows = new ArrayList<>();
+        if (in.has("functional")) {
+            var f = in.get("functional");
+            String id = f.get("criterion_id").asText();
+            ProbabilisticTestResult result = ProductionPath.run(
+                    List.of(bar(f, id, "alpha")), f.get("trials").asInt(), f.get("successes").asInt(),
+                    TestIntent.VERIFICATION);
+            var row = result.perCriterionEvaluation().perCriterionVerdicts().get(0);
+            Map<?, ?> d = ProductionPath.decision(result, id);
+            criteria.add(new VerdictComposition.Decided(row.criterionId(), row.verdict(),
+                    DecisionRule.fromId(String.valueOf(d.get("decisionRule"))),
+                    OptionalDouble.of(((Number) d.get("alpha")).doubleValue())));
+            criteriaRows.add(Map.of("criterion_id", row.criterionId(), "verdict", row.verdict().name()));
         }
-        return checks;
+        List<VerdictComposition.Decided> enforced = new ArrayList<>();
+        List<Map<String, Object>> constraintRows = new ArrayList<>();
+        for (JsonNode constraint : in.get("latency_constraints")) {
+            String id = constraint.get("constraint_id").asText();
+            double p = constraint.get("percentile").asDouble();
+            double alpha = constraint.get("alpha").asDouble();
+            boolean explicit = "explicit".equals(constraint.get("source").asText());
+            boolean isEnforced = "enforced".equals(constraint.get("mode").asText());
+            double[] latencies = ConformanceFixtures.toDoubleArray(constraint.get("latencies"));
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("constraint_id", id);
+            row.put("source", constraint.get("source").asText());
+            row.put("mode", constraint.get("mode").asText());
+            row.put("participates", isEnforced);
+            if (isEnforced) {
+                LatencyStatistics baseline = explicit ? null : ProductionPath.latencyBaseline(
+                        ConformanceFixtures.toDoubleArray(constraint.get("baseline_latencies")),
+                        constraint.get("baseline_latencies").size());
+                CriterionResult r = ProductionPath.decide(explicit
+                                ? ProductionPath.explicit(p, constraint.get("threshold_ms").asLong(), alpha)
+                                : ProductionPath.baselineDerived(p, alpha),
+                        latencies, baseline, TestIntent.VERIFICATION);
+                String k = ProductionPath.key(p).detailKey();
+                Verdict v = Verdict.valueOf(String.valueOf(r.detail().get("verdict." + k)));
+                String rule = String.valueOf(r.detail().get("decisionRule." + k));
+                row.put("decisionRule", rule);
+                row.put("verdict", v.name());
+                enforced.add(new VerdictComposition.Decided(id, v, DecisionRule.fromId(rule),
+                        OptionalDouble.of(alpha)));
+            } else {
+                row.put("decisionRule", null);
+                row.put("verdict", advisory(constraint, latencies, p, alpha));
+            }
+            constraintRows.add(row);
+        }
+        VerdictComposition composition = VerdictComposition.compose(criteria, enforced);
+        assertOracle(recorder, s, c, "criteria", criteriaRows);
+        assertOracle(recorder, s, c, "latency_constraints", constraintRows);
+        assertOracle(recorder, s, c, "rate_verdict", composition.rateVerdict().map(Enum::name));
+        assertOracle(recorder, s, c, "latency_verdict", composition.latencyVerdict().map(Enum::name));
+        assertOracle(recorder, s, c, "test_verdict", composition.testVerdict().name());
+        assertOracle(recorder, s, c, "triggering", composition.triggering().stream()
+                .map(t -> Map.of("kind", t.kind().name().toLowerCase(java.util.Locale.ROOT),
+                        "id", t.id()))
+                .toList());
     }
 
-    // ── regression_decision ─────────────────────────────────────────
-
-    /**
-     * The derivation the framework performs on the empirical path must
-     * produce the binding decision artefacts: the real-valued threshold
-     * is a report obligation, the integer cutoff and achieved size are
-     * the decision; the displayed rate is §-mandated {@code c/n}.
-     */
-    static List<CaseCheck> regressionDecisionDerivation() {
-        JsonNode suite = ConformanceFixtures.load("regression_decision.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            if (!"REGRESSION".equals(c.get("procedure").asText())) {
-                continue;
-            }
-            checks.add(new CaseCheck("regression_decision", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                DerivedThreshold derived = THRESHOLD_DERIVER.deriveSampleSizeFirst(
-                        inputs.get("baseline_trials").asInt(),
-                        inputs.get("baseline_successes").asInt(),
-                        inputs.get("test_samples").asInt(),
-                        inputs.get("confidence").asDouble());
-                assertOracle(recorder, "regression_decision", c, "threshold_real",
-                        derived.value(), tolerance);
-                assertOracle(recorder, "regression_decision", c, "cutoff_integer",
-                        derivedArtefact(derived, "cutoff"));
-                assertOracle(recorder, "regression_decision", c, "displayed_rate",
-                        derivedArtefact(derived, "displayedRate"), tolerance);
-                assertOracle(recorder, "regression_decision", c, "achieved_size",
-                        derivedArtefact(derived, "achievedSize"), tolerance);
-            }));
+    /** An advisory constraint's raw percentile comparison: a pass or a warning, never a verdict. */
+    private static String advisory(JsonNode constraint, double[] latencies, double p, double alpha) {
+        boolean within;
+        double observed = nearestRankPercentile(latencies, p);
+        if ("explicit".equals(constraint.get("source").asText())) {
+            within = observed <= constraint.get("threshold_ms").asDouble();
+        } else {
+            var t = LatencyRules.derivePrecedenceThreshold(
+                    ConformanceFixtures.toDoubleArray(constraint.get("baseline_latencies")),
+                    latencies.length, p, alpha);
+            within = t.threshold().isPresent() && observed <= t.threshold().getAsDouble();
         }
-        return checks;
+        return within ? "ADVISORY_PASS" : "ADVISORY_WARN";
     }
 
-    /**
-     * The scenario suite through the production verdict path — a real
-     * probabilistic test driven the way a user would drive it (baseline
-     * resolution, threshold derivation inside the framework, engine
-     * sampling, criterion evaluation), not a test-side recomposition of
-     * the formulae. See {@link DecisionRuleProductionPath}.
-     */
-    static List<CaseCheck> regressionDecisionProductionVerdicts() {
-        JsonNode suite = ConformanceFixtures.load("regression_decision.json");
-        double tolerance = suite.get("tolerance").asDouble();
-        List<CaseCheck> checks = new ArrayList<>();
-        for (JsonNode c : suite.get("cases")) {
-            String procedure = c.get("procedure").asText();
-            checks.add(new CaseCheck("regression_decision", c.get("name").asText(), recorder -> {
-                var inputs = c.get("inputs");
-                int testSamples = inputs.get("test_samples").asInt();
-                double confidence = inputs.get("confidence").asDouble();
-                int observedSuccesses = inputs.get("observed_successes").asInt();
-                if ("REGRESSION".equals(procedure)) {
-                    var judged = DecisionRuleProductionPath.judgeRegression(
-                            inputs.get("baseline_successes").asInt(),
-                            inputs.get("baseline_trials").asInt(),
-                            testSamples, confidence, observedSuccesses);
-                    assertOracle(recorder, "regression_decision", c, "verdict",
-                            judged.verdict().name());
-                } else {
-                    var judged = DecisionRuleProductionPath.judgeCompliance(
-                            inputs.get("threshold").asDouble(),
-                            testSamples, confidence, observedSuccesses);
-                    assertOracle(recorder, "regression_decision", c, "verdict",
-                            judged.verdict().name());
-                    // §3.2/§3.6: the test sample's own Wilson lower bound is
-                    // the compliance decision artefact; a conformant verdict
-                    // surfaces it. Absent from the production detail today →
-                    // a red missing-capability assertion.
-                    assertOracle(recorder, "regression_decision", c, "wilson_lower",
-                            judged.detail().get("wilsonLower"), tolerance);
-                }
-            }));
-        }
-        return checks;
-    }
-
-    // ── helpers ─────────────────────────────────────────────────────
-
-    /**
-     * Reflective lookup of a decision artefact the statistics package
-     * does not yet expose — returns {@code null} (→ a clear red
-     * missing-capability assertion) instead of failing to compile. The
-     * Java analogue of baseltest's {@code getattr(result, name, None)}:
-     * the red-then-green discipline wants these tests on the branch
-     * before any production change exists for them to call.
-     */
-    private static Object derivedArtefact(DerivedThreshold derived, String accessor) {
-        return reflectiveAccessor(derived, accessor);
-    }
-
-    private static Object reflectiveAccessor(Object target, String accessor) {
-        try {
-            var method = target.getClass().getMethod(accessor);
-            Object value = method.invoke(target);
-            if (value instanceof OptionalInt oi) {
-                return oi.isPresent() ? oi.getAsInt() : null;
-            }
-            if (value instanceof OptionalDouble od) {
-                return od.isPresent() ? od.getAsDouble() : null;
-            }
-            if (value instanceof java.util.Optional<?> o) {
-                return o.orElse(null);
-            }
-            return value;
-        } catch (NoSuchMethodException e) {
-            return null;
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static double[] ascending(int n) {
-        double[] values = new double[n];
-        for (int i = 0; i < n; i++) {
-            values[i] = i + 1;
-        }
-        return values;
+    private static double nearestRankPercentile(double[] latencies, double p) {
+        return org.mavai.punit.statistics.LatencyStatistics.nearestRankPercentile(latencies, p);
     }
 }

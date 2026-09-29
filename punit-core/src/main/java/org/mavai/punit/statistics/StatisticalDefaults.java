@@ -35,17 +35,10 @@ package org.mavai.punit.statistics;
  * </table>
  *
  * <h2>How these values are used</h2>
- * <ul>
- *   <li><strong>Threshold derivation</strong> — when a test loads a baseline spec, the
- *       confidence level determines how much the threshold is reduced from the observed
- *       baseline rate (a wider interval gives the system more room for normal variation).</li>
- *   <li><strong>Compliance evidence</strong> — the significance level {@code alpha}
- *       controls the one-sided Wilson score bound used to decide whether a sample is
- *       large enough to support a compliance claim.</li>
- *   <li><strong>Feasibility gate</strong> — for VERIFICATION-intent tests, the
- *       confidence level is used to compute the minimum sample size needed before any
- *       samples execute.</li>
- * </ul>
+ * <p>Every decision rule is configured by a one-sided level alpha, and a
+ * criterion that declares no confidence runs at these defaults: the
+ * regression cutoff, the compliance {@code k_min}, the latency rules and
+ * the feasibility minimum are all derived at {@code alpha}.
  *
  * @see ComplianceEvidenceEvaluator
  * @see VerificationFeasibilityEvaluator
@@ -59,10 +52,8 @@ public final class StatisticalDefaults {
      * true population pass rate. It controls how "sure" the framework needs to be
      * before making a verdict.
      *
-     * <p>Raising this value (e.g. to 0.99) would make verdicts more conservative —
-     * fewer false positives, but more samples required to pass. Lowering it (e.g. to
-     * 0.90) is more permissive but increases the risk of passing a system that does
-     * not truly meet the threshold.
+     * <p>Raising this value (e.g. to 0.99) lowers the controlled error rate
+     * of every rule, at the price of more samples for the same power.
      */
     public static final double DEFAULT_CONFIDENCE = 0.95;
 

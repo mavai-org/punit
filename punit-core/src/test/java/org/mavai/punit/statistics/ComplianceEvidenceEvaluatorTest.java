@@ -8,18 +8,10 @@ import org.junit.jupiter.api.Test;
 /**
  * Tests for {@link ComplianceEvidenceEvaluator}.
  *
- * <p>The evaluator uses a Wilson score one-sided lower confidence bound to determine
- * whether a sample size is sufficient for compliance-grade evidence. With the default
- * α=0.001 (z≈3.09), the lower bound for a perfect observation (zero failures)
- * is: n / (n + z²) ≈ n / (n + 9.55).
- *
- * <p>For target p₀=0.9999:
- * <ul>
- *   <li>n=200: lower bound ≈ 0.954 &lt; 0.9999 → undersized</li>
- *   <li>n=500: lower bound ≈ 0.981 &lt; 0.9999 → undersized</li>
- *   <li>n=10,000: lower bound ≈ 0.999 &lt; 0.9999 → undersized</li>
- *   <li>n≈95,500 needed for lower bound to reach 0.9999</li>
- * </ul>
+ * <p>A sample is undersized for compliance when no outcome of its size —
+ * not even zero failures — could demonstrate the requirement under
+ * {@code compliance/exact-binomial}: {@code n < ⌈log α / log p₀⌉}. For
+ * p₀ = 0.9999 at α = 0.05 that minimum is 29,956.
  */
 class ComplianceEvidenceEvaluatorTest {
 
@@ -40,11 +32,9 @@ class ComplianceEvidenceEvaluatorTest {
         }
 
         @Test
-        @DisplayName("p0=0.9999 with N=10000 is still undersized — lower bound ≈ 0.999 < 0.9999")
+        @DisplayName("p0=0.9999 with N=10000 is still undersized — the feasibility minimum is 29956")
         void undersizedAt10000SamplesFor9999() {
-            // With α=0.001, even n=10,000 is insufficient for p₀=0.9999.
-            // The Wilson lower bound at n=10,000 is approximately n/(n+z²) ≈ 10000/10009.55 ≈ 0.99905,
-            // which is below 0.9999. You would need approximately n ≈ 95,500 samples.
+            // At α=0.05 a pass needs 0.9999^n ≤ 0.05: n ≥ 29,956.
             assertThat(ComplianceEvidenceEvaluator.isUndersized(10000, 0.9999)).isTrue();
         }
 

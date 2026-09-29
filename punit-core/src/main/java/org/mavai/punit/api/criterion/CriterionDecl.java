@@ -19,8 +19,8 @@ import org.mavai.punit.api.PostconditionCheck;
  * <p>Carries:
  * <ul>
  *   <li>a {@link CriterionPosture} (required) — what counts as
- *       acceptable: a threshold-first {@code .meeting(...)}, the
- *       empirical Wilson-vs-baseline procedure, or zero-failures;</li>
+ *       acceptable: a declared requirement {@code .meeting(...)}, a
+ *       baseline-derived bar {@code .empirical()}, or zero-failures;</li>
  *   <li>an ordered list of named postconditions (optional) — the
  *       per-sample checks the criterion runs against the contract's
  *       output. Empty means apply-level {@code Outcome.ok / fail}

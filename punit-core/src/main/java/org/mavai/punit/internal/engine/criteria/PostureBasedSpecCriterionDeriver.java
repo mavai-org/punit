@@ -49,6 +49,8 @@ public final class PostureBasedSpecCriterionDeriver implements SpecCriterionDeri
                 "LATENCY_CONTRACTUAL posture without LatencySpec"));
         ThresholdOrigin origin = posture.origin().orElseThrow(() -> new IllegalStateException(
                 "LATENCY_CONTRACTUAL posture without origin"));
-        return PercentileLatency.<O>meeting(spec, origin);
+        double confidence = posture.confidenceFloor()
+                .orElse(org.mavai.punit.statistics.StatisticalDefaults.DEFAULT_CONFIDENCE);
+        return PercentileLatency.<O>meeting(spec, origin, confidence);
     }
 }

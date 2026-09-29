@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <verdict-record xmlns="http://mavai.org/verdict/1.0"
-                version="1.0"
+                version="1.7"
+                methodology-version="1.5.0"
                 timestamp="2026-05-11T12:00:00Z"
                 generator="punit"
                 correlation-id="v:rp07-pass-1">
@@ -30,9 +31,7 @@
               standard-error="0.0218"
               wilson-lower="0.8883"
               threshold="0.9000"
-              threshold-origin="SLA"
-              test-statistic="1.6667"
-              p-value="0.9522"/>
+              threshold-origin="SLA"/>
   <covariates aligned="true"/>
   <provenance origin="SLA"
               contract-ref=""

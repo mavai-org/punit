@@ -120,18 +120,19 @@ class CriterionResultDetailTest {
 
     @Test
     @DisplayName("PassRate's contractual detail carries observed/threshold/origin/successes/failures/total"
-            + " plus the Wilson decision artefacts")
+            + " plus the exact-binomial decision artefacts")
     void bernoulliContractualDetailKeys() {
         var result = PassRate.<Integer>meeting(ThresholdOrigin.SLA, 0.5)
                 .evaluate(ctx(summaryWithLatency(LatencyResult.empty()), Optional.empty()));
 
         assertThat(result.detail()).containsKeys(
                 "observed", "threshold", "origin", "successes", "failures", "total");
-        // The declared-threshold comparison is the test sample's Wilson
-        // lower bound clearing the threshold (companion §3.2/§3.6); the
-        // bound and the confidence it was computed at are the decision
-        // artefacts a conformant result surfaces.
-        assertThat(result.detail()).containsKeys("wilsonLower", "confidence");
+        // A declared requirement is decided by compliance/exact-binomial
+        // (companion §3.6): the rule, its alpha, k_min (absent here — no
+        // count of 2 samples can demonstrate 0.5) and the Clopper–Pearson
+        // bound reported beside the verdict.
+        assertThat(result.detail()).containsKeys(
+                "decisionRule", "alpha", "confidence", "passPossible", "clopperPearsonLower");
     }
 
     @Test
@@ -163,17 +164,33 @@ class CriterionResultDetailTest {
     @Test
     @DisplayName("PercentileLatency adds breach.pNN entries on FAIL, omits them on PASS")
     void percentileLatencyBreachKeysAppearOnlyOnFail() {
+        // 100 successful latencies of 200 ms: all within a 500 ms p95
+        // ceiling (PASS), none within a 50 ms one (FAIL).
         var pass = PercentileLatency.<Integer>meeting(
                 LatencySpec.builder().p95Millis(500).build(), ThresholdOrigin.SLA)
-                .evaluate(ctx(summaryWithLatency(observed(50, 100, 200, 300, 2)), Optional.empty()));
+                .evaluate(ctx(summaryOfLatencies(100, 200), Optional.empty()));
         var fail = PercentileLatency.<Integer>meeting(
                 LatencySpec.builder().p95Millis(50).build(), ThresholdOrigin.SLA)
-                .evaluate(ctx(summaryWithLatency(observed(50, 100, 200, 300, 2)), Optional.empty()));
+                .evaluate(ctx(summaryOfLatencies(100, 200), Optional.empty()));
 
         assertThat(pass.verdict()).isEqualTo(Verdict.PASS);
         assertThat(fail.verdict()).isEqualTo(Verdict.FAIL);
         assertThat(pass.detail()).doesNotContainKey("breach.p95");
         assertThat(fail.detail()).containsEntry("breach.p95", 200L);
+    }
+
+    /** {@code count} passing samples of {@code ms} milliseconds each. */
+    private static SampleSummary<Integer> summaryOfLatencies(int count, long ms) {
+        var outcomes = new java.util.ArrayList<org.mavai.punit.api.ServiceContractOutcome<?, Integer>>();
+        for (int i = 0; i < count; i++) {
+            outcomes.add(new org.mavai.punit.api.ServiceContractOutcome<>(
+                    org.mavai.outcome.Outcome.ok(i), STUB_CONTRACT,
+                    List.of(), 0L, Duration.ofMillis(ms)));
+        }
+        return new SampleSummary<>(
+                outcomes, Duration.ofMillis(10), count, 0, 0L, 0,
+                LatencyResult.empty(), TerminationReason.COMPLETED, List.of(),
+                java.util.Map.of(), LatencyResult.empty(), List.of());
     }
 
     @Test

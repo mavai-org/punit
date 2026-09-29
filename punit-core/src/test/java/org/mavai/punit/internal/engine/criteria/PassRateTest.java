@@ -94,18 +94,32 @@ class PassRateTest {
     // ── meeting() — contractual ────────────────────────────────────
 
     @Test
-    @DisplayName("meeting() returns PASS when observed meets threshold")
+    @DisplayName("meeting() returns PASS when the success count reaches k_min (compliance/exact-binomial)")
     void contractualPass() {
         PassRate<String> criterion = PassRate.meeting(ThresholdOrigin.SLA, 0.9);
 
-        CriterionResult result = criterion.evaluate(ctx(summary(95, 5), Optional.empty()));
+        CriterionResult result = criterion.evaluate(ctx(summary(96, 4), Optional.empty()));
 
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
         assertThat(result.criterionName()).isEqualTo("bernoulli-pass-rate");
         assertThat(result.detail()).containsEntry("origin", "SLA");
         assertThat(result.detail()).containsEntry("threshold", 0.9);
-        assertThat((double) result.detail().get("observed")).isEqualTo(0.95);
+        assertThat(result.detail()).containsEntry("kMin", 96);
+        assertThat(result.detail()).containsEntry("decisionRule", "compliance/exact-binomial");
+        assertThat((double) result.detail().get("observed")).isEqualTo(0.96);
         assertThat(result.detail()).containsEntry("total", 100);
+    }
+
+    @Test
+    @DisplayName("meeting() does not demonstrate compliance when the observed rate merely exceeds the requirement")
+    void contractualObservedAboveRequirementIsNotCompliance() {
+        PassRate<String> criterion = PassRate.meeting(ThresholdOrigin.SLA, 0.9);
+
+        // 95 of 100 is above 0.90, but the exact test needs 96.
+        CriterionResult result = criterion.evaluate(ctx(summary(95, 5), Optional.empty()));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(result.detail()).containsEntry("passPossible", true);
     }
 
     @Test
@@ -233,17 +247,17 @@ class PassRateTest {
     }
 
     @Test
-    @DisplayName("empirical() explanation names the threshold and its baseline-rate provenance")
-    void empiricalExplanationMentionsDerivedThreshold() {
+    @DisplayName("empirical() explanation names the Fisher cutoff and the baseline counts it came from")
+    void empiricalExplanationNamesTheCutoffAndItsBaseline() {
         PassRate<String> criterion = PassRate.empirical();
         PassRateStatistics baseline = new PassRateStatistics(0.88, 2000);
 
         CriterionResult result = criterion.evaluate(ctx(summary(950, 50), Optional.of(baseline)));
 
         assertThat(result.explanation())
-                .contains("threshold=")
-                .contains("baseline rate")
-                .contains("Wilson-95% lower");
+                .contains("cutoff=")
+                .contains("regression/fisher")
+                .contains("baseline 1760 of 2000");
     }
 
     @Test
@@ -264,21 +278,41 @@ class PassRateTest {
     // ── sample-size constraint (test_N ≤ baseline_N) ───────────────
 
     @Test
-    @DisplayName("empirical() with test sample count > baseline returns INCONCLUSIVE")
-    void empiricalRejectsTestLargerThanBaseline() {
+    @DisplayName("a test planned larger than its baseline is refused before the run (TEST_LARGER_THAN_BASELINE)")
+    void empiricalRefusesTestLargerThanBaseline() {
         PassRate<String> criterion = PassRate.empirical();
-        PassRateStatistics baseline = new PassRateStatistics(0.88, 100);
+        var baseline = PerCriterionPassRateStatistics.of("contract", new PassRateStatistics(0.88, 100));
 
-        // 200 test samples > 100 baseline samples
-        CriterionResult result = criterion.evaluate(ctx(summary(180, 20), Optional.of(baseline)));
+        assertThat(criterion.configurationRefusals(check(200, baseline)))
+                .extracting(org.mavai.punit.api.spec.ConfigurationRefusal::code)
+                .containsExactly(org.mavai.punit.statistics.ConfigurationError.TEST_LARGER_THAN_BASELINE);
+        assertThat(criterion.configurationRefusals(check(100, baseline))).isEmpty();
+    }
 
-        assertThat(result.verdict()).isEqualTo(Verdict.INCONCLUSIVE);
-        assertThat(result.explanation())
-                .contains("test sample size (200)")
-                .contains("baseline sample size (100)")
-                .contains("at least as rigorous");
-        assertThat(result.detail()).containsEntry("testSampleCount", 200);
-        assertThat(result.detail()).containsEntry("baselineSampleCount", 100);
+    @Test
+    @DisplayName("a requirement no count of the planned size can demonstrate is refused under VERIFICATION")
+    void contractualRefusedWhenInfeasible() {
+        PassRate<String> criterion = PassRate.meeting(ThresholdOrigin.SLA, 0.995);
+
+        assertThat(criterion.configurationRefusals(check(477, null)))
+                .extracting(org.mavai.punit.api.spec.ConfigurationRefusal::code)
+                .containsExactly(org.mavai.punit.statistics.ConfigurationError.COMPLIANCE_INFEASIBLE);
+        assertThat(criterion.configurationRefusals(check(598, null))).isEmpty();
+    }
+
+    private static org.mavai.punit.api.spec.ConfigurationCheck<PerCriterionPassRateStatistics> check(
+            int planned, PerCriterionPassRateStatistics baseline) {
+        return new org.mavai.punit.api.spec.ConfigurationCheck<>() {
+            @Override public int plannedSamples() { return planned; }
+            @Override public org.mavai.punit.api.TestIntent intent() {
+                return org.mavai.punit.api.TestIntent.VERIFICATION;
+            }
+            @Override public java.util.Map<String, org.mavai.punit.api.criterion.CriterionPosture>
+                    criterionPostures() { return java.util.Map.of(); }
+            @Override public Optional<PerCriterionPassRateStatistics> baseline() {
+                return Optional.ofNullable(baseline);
+            }
+        };
     }
 
     @Test

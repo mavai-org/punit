@@ -203,38 +203,7 @@ class ProbabilisticTestVerdictBuilderTest {
     @DisplayName("Statistical Analysis")
     class StatisticalAnalysisTests {
 
-        @Test
-        void computesStatisticsForPassingTest() {
-            ProbabilisticTestVerdict verdict = minimalBuilder()
-                    .execution(100, 100, 95, 5, 0.90, 0.95, 1000)
-                    .intent(TestIntent.VERIFICATION, 0.95)
-                    .build();
 
-            StatisticalAnalysis stats = verdict.statistics();
-            double expectedWilsonLower =
-                    new BinomialProportionEstimator().lowerBound(95, 100, 0.95);
-            assertThat(stats.confidenceLevel()).isEqualTo(0.95);
-            assertThat(stats.standardError()).isGreaterThan(0.0);
-            assertThat(stats.wilsonLower())
-                    .isGreaterThan(0.0)
-                    .isLessThan(0.95)        // strictly below the observed rate
-                    .isCloseTo(expectedWilsonLower, within(1e-9));
-            assertThat(stats.testStatistic()).isPresent();
-            assertThat(stats.pValue()).isPresent();
-        }
-
-        @Test
-        void handlesZeroSamplesGracefully() {
-            ProbabilisticTestVerdict verdict = minimalBuilder()
-                    .execution(100, 0, 0, 0, 0.90, 0.0, 0)
-                    .build();
-
-            StatisticalAnalysis stats = verdict.statistics();
-            assertThat(stats.standardError()).isEqualTo(0.0);
-            assertThat(stats.wilsonLower()).isEqualTo(0.0);
-            assertThat(stats.testStatistic()).isEmpty();
-            assertThat(stats.pValue()).isEmpty();
-        }
 
         @Test
         void includesBaselineSummaryWhenSpecDriven() {
@@ -519,25 +488,6 @@ class ProbabilisticTestVerdictBuilderTest {
                     .isNotCloseTo(0.0242, org.assertj.core.api.Assertions.within(0.001));
         }
 
-        @Test
-        @DisplayName("computes Z from threshold, not observed rate")
-        void computesZFromThreshold_notObservedRate() {
-            // Scenario A: p̂=0.96, π₀=0.9374, n=100
-            // Z with SE₀ = (0.96 - 0.9374) / √(0.9374 × 0.0626 / 100) ≈ 0.933
-            // Z with SE(p̂) = (0.96 - 0.9374) / √(0.96 × 0.04 / 100) ≈ 1.153
-            ProbabilisticTestVerdict verdict = new ProbabilisticTestVerdictBuilder()
-                    .identity("Test", "method", null)
-                    .execution(100, 100, 96, 4, 0.9374, 0.96, 150)
-                    .junitPassed(true)
-                    .criterionVerdict(Verdict.PASS)
-                    .build();
-
-            double z = verdict.statistics().testStatistic().orElseThrow();
-            assertThat(z).as("Z should use SE₀ (from threshold), not SE(p̂)")
-                    .isCloseTo(0.933, org.assertj.core.api.Assertions.within(0.01));
-            assertThat(z).as("Z must not use SE derived from observed rate")
-                    .isNotCloseTo(1.153, org.assertj.core.api.Assertions.within(0.01));
-        }
     }
 
     @Nested

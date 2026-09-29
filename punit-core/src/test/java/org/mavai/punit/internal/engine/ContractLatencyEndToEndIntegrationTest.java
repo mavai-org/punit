@@ -109,8 +109,10 @@ class ContractLatencyEndToEndIntegrationTest {
         LatencyCriterion latency = Criteria.meeting()
                 .atMost(PercentileKey.P95, Duration.ofMillis(500))
                 .contractRef(ThresholdOrigin.SLA, "test-contract-ref");
+        // 59 samples: the fewest from which an explicit p95 ceiling can be
+        // demonstrated at alpha 0.05 (latency/compliance-exact-binomial).
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(criteria, latency, 20), FACTORS)
+                .testing(sampling(criteria, latency, 59), FACTORS)
                 .build();
 
         ProbabilisticTestResult result = (ProbabilisticTestResult)
@@ -137,8 +139,10 @@ class ContractLatencyEndToEndIntegrationTest {
                         v -> v >= 0 ? Outcome.ok() : Outcome.fail("neg", "v=" + v));
         LatencyCriterion latency = Criteria.empirical().atMost(PercentileKey.P95);
 
+        // 299 samples: the fewest from which a 0.99 requirement can be
+        // demonstrated at alpha 0.05 (compliance/exact-binomial).
         ProbabilisticTest spec = ProbabilisticTest
-                .testing(sampling(criteria, latency, 20), FACTORS)
+                .testing(sampling(criteria, latency, 299), FACTORS)
                 .build();
 
         ProbabilisticTestResult result = (ProbabilisticTestResult)

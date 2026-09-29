@@ -70,7 +70,9 @@ public final class VerdictVerifier {
 
         List<FailedVerdict> failures = new ArrayList<>();
         for (ProbabilisticTestVerdict verdict : verdicts) {
-            if (verdict.punitVerdict() == PUnitVerdict.FAIL) {
+            // A refused configuration fails verification too: it is a
+            // configuration problem that must not pass unnoticed in CI.
+            if (verdict.punitVerdict() == PUnitVerdict.FAIL || verdict.decision().refused()) {
                 String testName = verdict.identity().className() + "."
                         + verdict.identity().methodName();
                 failures.add(new FailedVerdict(

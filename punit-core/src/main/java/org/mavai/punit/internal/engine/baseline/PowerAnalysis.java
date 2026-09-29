@@ -19,16 +19,18 @@ import org.mavai.punit.api.spec.PerCriterionPassRateStatistics;
 import org.mavai.punit.api.spec.Spec;
 import org.mavai.punit.api.spec.TypedSpec;
 import org.mavai.punit.internal.engine.covariate.CovariateResolver;
-import org.mavai.punit.statistics.SampleSizeCalculator;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.statistics.RegressionSizing;
 
 /**
  * Authoring-time sample-size utility for the confidence-first
  * probabilistic-test pattern.
  *
  * <p>Given a baseline supplier and a desired minimum detectable
- * effect plus statistical power, computes the sample size at which
- * the one-proportion z-test achieves that power against the baseline
- * rate.
+ * effect plus statistical power, computes the sample size at which the
+ * {@code regression/fisher} test, resolved against the measured
+ * baseline, reaches and holds that power at the baseline rate less the
+ * effect (Statistical Companion §5.4.1).
  *
  * <p>Authors call this at spec-construction time and stamp the
  * computed sample count onto a template sampling, then bind factors
@@ -52,14 +54,6 @@ public final class PowerAnalysis {
 
     /** Criterion-name key the resolver looks under for the pass-rate baseline. */
     private static final String PASS_RATE_CRITERION = "bernoulli-pass-rate";
-
-    /**
-     * The actual sample-size formula lives in
-     * {@link SampleSizeCalculator}, the dedicated home for statistical
-     * calculations. This class is the bridge that resolves the
-     * baseline rate; it does not duplicate the math.
-     */
-    private static final SampleSizeCalculator SAMPLE_SIZE_CALCULATOR = new SampleSizeCalculator();
 
     private PowerAnalysis() { }
 
@@ -160,9 +154,8 @@ public final class PowerAnalysis {
      * <p>The supplier yields a {@code MEASURE}-flavour {@link Experiment};
      * the utility resolves the baseline file matching that experiment's
      * use-case identity and factors fingerprint under {@code baselineDir},
-     * reads the recorded {@link PassRateStatistics}, and feeds the
-     * recorded {@code observedPassRate} into the z-test sample-size
-     * formula.
+     * reads the recorded {@link PassRateStatistics}, and sizes the test
+     * by resolved sizing against it.
      *
      * @param baselineDir directory containing the baseline YAML files
      *                    the resolver searches
@@ -223,39 +216,37 @@ public final class PowerAnalysis {
         // K>1 worst-case: when the contract carries multiple
         // methodology criteria, the sample-size dictating criterion
         // is the one with the lowest baseline rate — its degradation
-        // is hardest to detect, so its sample-size requirement
-        // dominates. For K=1 this collapses to the lone criterion's
-        // rate, preserving legacy behaviour.
+        // is hardest to detect. For K=1 this collapses to the lone
+        // criterion.
         if (stats.byCriterion().isEmpty()) {
             throw new IllegalStateException(
                     "baseline carries no per-criterion pass-rate entries — "
                             + "the baseline file is malformed");
         }
-        double observedRate = stats.byCriterion().values().stream()
-                .mapToDouble(PassRateStatistics::observedPassRate)
-                .min()
-                .getAsDouble();
-        // One-sided check: degradation testing only cares about the
-        // lower side, so the alternative-hypothesis rate p1 = rate − mde
-        // must be strictly positive. The upper side (rate + mde) is
-        // never used by the formula and intentionally not bounded —
-        // perfect baselines (rate = 1.0) are valid input here, with
-        // σ0 = 0 collapsing the formula to n = (z_β · σ1)² / δ²
-        // inside SampleSizeCalculator.
+        PassRateStatistics lowest = stats.byCriterion().values().stream()
+                .min(java.util.Comparator.comparingDouble(PassRateStatistics::observedPassRate))
+                .orElseThrow();
+        double observedRate = lowest.observedPassRate();
         if (observedRate - mde <= 0.0) {
             throw new IllegalArgumentException(
                     "baseline observed rate " + observedRate
                             + " is incompatible with mde=" + mde
-                            + " — the alternative-hypothesis rate (rate − mde) "
+                            + " — the design alternative rate (rate − mde) "
                             + "must be > 0 for one-sided degradation detection.");
         }
-
-        // The sample-size formula lives in SampleSizeCalculator — the
-        // dedicated statistics-package home. This bridge resolves the
-        // baseline rate and delegates the math.
-        return SAMPLE_SIZE_CALCULATOR
-                .calculateForPower(observedRate, mde, DEFAULT_CONFIDENCE, power)
-                .requiredSamples();
+        int baselineTrials = lowest.sampleCount();
+        int baselineSuccesses = (int) Math.round(observedRate * baselineTrials);
+        // Resolved sizing against the measured baseline (companion
+        // §5.4.1) — the statistics package owns the search; this bridge
+        // resolves the baseline and delegates.
+        return RegressionSizing.resolvedSizing(
+                        baselineSuccesses, baselineTrials, observedRate - mde,
+                        Methodology.alphaFromConfidence(DEFAULT_CONFIDENCE), power)
+                .map(RegressionSizing.Sized::requiredSamples)
+                .orElseThrow(() -> new IllegalStateException(
+                        "no test of at most " + baselineTrials + " samples — the baseline's "
+                                + "size — detects a drop of " + mde + " with power " + power
+                                + " (BASELINE_TOO_SMALL); measure a larger baseline."));
     }
 
     private static void validate(double mde, double power) {

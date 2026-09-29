@@ -1,6 +1,13 @@
 package org.mavai.punit.internal.runtime;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.stream.Collectors;
 
 import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.api.LatencyResult;
@@ -8,7 +15,15 @@ import org.mavai.punit.api.covariate.CovariateAlignment;
 import org.mavai.punit.api.spec.EngineRunSummary;
 import org.mavai.punit.api.spec.EvaluatedCriterion;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
+import org.mavai.punit.api.PercentileKey;
+import org.mavai.punit.api.spec.CriterionRole;
+import org.mavai.punit.api.spec.PercentileLatency;
 import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.api.spec.VerdictComposition;
+import org.mavai.punit.statistics.DecisionRule;
+import org.mavai.punit.verdict.LatencyEvaluation;
+import org.mavai.punit.verdict.RegressionDisclosure;
+import org.mavai.punit.verdict.TestDecision;
 import org.mavai.punit.verdict.PUnitVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder;
@@ -114,6 +129,10 @@ public final class VerdictAdapter {
                 meta.methodName(),
                 meta.serviceContractId().orElse(null));
 
+        if (result.refused()) {
+            return adaptRefused(result, engine, b);
+        }
+
         // Execution
         double threshold = scanDoubleDetail(result.criterionResults(), "threshold").orElse(0.0);
         double observed = engine.samplesExecuted() == 0
@@ -131,9 +150,13 @@ public final class VerdictAdapter {
 
         // Functional + latency dimensions
         b.functionalDimension(engine.successes(), engine.failures());
-        LatencyInput latencyInput = toLatencyInput(engine);
+        List<LatencyEvaluation> evaluations = latencyEvaluations(result.criterionResults());
+        Optional<Verdict> latencyVerdict = result.composition()
+                .flatMap(VerdictComposition::latencyVerdict);
+        LatencyInput latencyInput = toLatencyInput(engine, !evaluations.isEmpty() || latencyVerdict.isPresent());
         if (latencyInput != null) {
             b.latencyDimension(latencyInput);
+            b.latencyEvaluations(latencyVerdict, evaluations);
         }
 
         // Covariates
@@ -198,7 +221,15 @@ public final class VerdictAdapter {
         // in-memory PerCriterionEvaluation translates row-for-row into
         // the persistence-layer PerCriterionStructure. Empty
         // evaluations leave the field absent.
-        b.perCriterion(translatePerCriterion(result.perCriterionEvaluation()));
+        Map<String, Map<?, ?>> decisions = decisionsByCriterion(result.criterionResults());
+        b.perCriterion(translatePerCriterion(result.perCriterionEvaluation(), decisions));
+
+        // The decision behind the verdict: the rule, what triggered a
+        // FAIL or an INCONCLUSIVE, the envelopes; and what the deciding
+        // regression rule discloses about the design.
+        b.decision(testDecision(result, decisions, evaluations));
+        regressionDisclosure(result.perCriterionEvaluation(), decisions)
+                .ifPresent(b::regressionDisclosure);
 
         // The postcondition standings — descriptive per-(input, check)
         // tallies, stated first-class in the record (and the verdict
@@ -208,8 +239,33 @@ public final class VerdictAdapter {
         return b.build();
     }
 
+    /**
+     * A configuration refused before any sample ran: identity, the
+     * planned execution, the termination and the configuration errors —
+     * no verdict, no dimensions, no statistics.
+     */
+    private static ProbabilisticTestVerdict adaptRefused(
+            ProbabilisticTestResult result, EngineRunSummary engine,
+            ProbabilisticTestVerdictBuilder b) {
+        String detail = result.refusals().stream()
+                .map(r -> r.code().name() + ": " + r.reason())
+                .collect(Collectors.joining("; "));
+        b.execution(engine.plannedSamples(), 0, 0, 0, 0.0, 0.0, 0L);
+        b.intent(result.intent(), engine.confidence());
+        b.cost(0L, 0L, 0L, TokenMode.NONE);
+        result.contractRef().ifPresent(ref -> b.provenance(null, ref, null));
+        b.termination(TerminationReason.CONFIGURATION_REFUSED, detail);
+        b.criterionVerdict(Verdict.INCONCLUSIVE);
+        b.junitPassed(true);
+        b.decision(new TestDecision(
+                result.configurationErrors(), Optional.of(detail), Optional.empty(), List.of(),
+                OptionalDouble.empty(), OptionalDouble.empty()));
+        return b.build();
+    }
+
     private static org.mavai.punit.verdict.PerCriterionStructure translatePerCriterion(
-            org.mavai.punit.api.spec.PerCriterionEvaluation evaluation) {
+            org.mavai.punit.api.spec.PerCriterionEvaluation evaluation,
+            Map<String, Map<?, ?>> decisions) {
         if (evaluation.perCriterionVerdicts().isEmpty()) {
             return null;
         }
@@ -229,10 +285,144 @@ public final class VerdictAdapter {
                     // zero here.
                     0,
                     v.observed(),
-                    v.threshold()));
+                    v.threshold(),
+                    ruleOf(decisions.get(v.criterionId()), "decisionRule")));
         }
         return new org.mavai.punit.verdict.PerCriterionStructure(
                 rows, evaluation.compositeVerdict());
+    }
+
+    /** Each methodology criterion's decision artefacts, from the pass-rate evaluation. */
+    private static Map<String, Map<?, ?>> decisionsByCriterion(List<EvaluatedCriterion> evaluated) {
+        Map<String, Map<?, ?>> out = new LinkedHashMap<>();
+        for (EvaluatedCriterion ec : evaluated) {
+            if (ec.result().detail().get("decisionsByCriterion") instanceof Map<?, ?> raw) {
+                raw.forEach((k, v) -> {
+                    if (k instanceof String id && v instanceof Map<?, ?> m) {
+                        out.putIfAbsent(id, m);
+                    }
+                });
+            }
+        }
+        return out;
+    }
+
+    private static Optional<DecisionRule> ruleOf(Map<?, ?> detail, String key) {
+        if (detail != null && detail.get(key) instanceof String id) {
+            return DecisionRule.fromId(id);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The enforced latency constraints as the verdict records them. A
+     * constraint with no threshold that is not saturated — no successful
+     * latency to rank — has no evaluation row; its INCONCLUSIVE outcome
+     * is carried by the latency dimension's verdict.
+     */
+    private static List<LatencyEvaluation> latencyEvaluations(List<EvaluatedCriterion> evaluated) {
+        List<LatencyEvaluation> out = new java.util.ArrayList<>();
+        for (EvaluatedCriterion ec : evaluated) {
+            if (ec.role() != CriterionRole.REQUIRED
+                    || !PercentileLatency.NAME.equals(ec.result().criterionName())) {
+                continue;
+            }
+            Map<String, Object> d = ec.result().detail();
+            boolean explicit = "explicit".equals(d.get("source"));
+            for (PercentileKey key : PercentileKey.values()) {
+                String k = key.detailKey();
+                if (!(d.get("verdict." + k) instanceof String verdictName)) {
+                    continue;
+                }
+                boolean saturated = Boolean.TRUE.equals(d.get("saturated." + k));
+                OptionalLong threshold = longOf(d.get("threshold." + k));
+                if (threshold.isEmpty() && !saturated) {
+                    continue;
+                }
+                Optional<DecisionRule> rule = ruleOf(d, "decisionRule." + k);
+                if (rule.isEmpty()) {
+                    continue;
+                }
+                LatencyEvaluation.Status status = saturated
+                        ? LatencyEvaluation.Status.SATURATED
+                        : switch (Verdict.valueOf(verdictName)) {
+                            case PASS -> LatencyEvaluation.Status.PASS;
+                            case FAIL -> LatencyEvaluation.Status.STRICT_FAIL;
+                            case INCONCLUSIVE -> LatencyEvaluation.Status.INFEASIBLE;
+                        };
+                out.add(new LatencyEvaluation(
+                        k,
+                        longOf(d.get("observed." + k)),
+                        threshold,
+                        explicit ? LatencyEvaluation.Provenance.EXPLICIT
+                                : LatencyEvaluation.Provenance.BASELINE_DERIVED,
+                        status,
+                        !explicit && d.get("confidence") instanceof Number c
+                                ? OptionalDouble.of(c.doubleValue()) : OptionalDouble.empty(),
+                        intOf(d.get("threshold." + k + ".rank")),
+                        explicit ? OptionalInt.empty() : intOf(d.get("baselineSampleCount")),
+                        rule.get(),
+                        intOf(d.get("withinThreshold." + k)),
+                        intOf(d.get("requiredWithin." + k)),
+                        Boolean.TRUE.equals(d.get("indicative." + k))));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The decision behind the verdict: the rule, when one rule decided
+     * every criterion and constraint; the triggers; the envelopes.
+     */
+    private static TestDecision testDecision(
+            ProbabilisticTestResult result, Map<String, Map<?, ?>> decisions,
+            List<LatencyEvaluation> evaluations) {
+        java.util.Set<DecisionRule> rules = new java.util.LinkedHashSet<>();
+        for (var v : result.perCriterionEvaluation().perCriterionVerdicts()) {
+            ruleOf(decisions.get(v.criterionId()), "decisionRule").ifPresent(rules::add);
+        }
+        evaluations.forEach(e -> rules.add(e.decisionRule()));
+        Optional<DecisionRule> single = rules.size() == 1
+                ? Optional.of(rules.iterator().next()) : Optional.empty();
+        return result.composition()
+                .map(c -> new TestDecision(List.of(), Optional.empty(), single, c.triggering(),
+                        c.falseComplianceEnvelope(), c.falseDegradationSignalEnvelope()))
+                .orElse(new TestDecision(List.of(), Optional.empty(), single, List.of(),
+                        OptionalDouble.empty(), OptionalDouble.empty()));
+    }
+
+    /**
+     * What a single {@code regression/fisher} criterion discloses about
+     * its design; empty unless exactly one criterion was so decided.
+     */
+    private static Optional<RegressionDisclosure> regressionDisclosure(
+            org.mavai.punit.api.spec.PerCriterionEvaluation evaluation,
+            Map<String, Map<?, ?>> decisions) {
+        if (evaluation.perCriterionVerdicts().size() != 1) {
+            return Optional.empty();
+        }
+        Map<?, ?> d = decisions.get(evaluation.perCriterionVerdicts().get(0).criterionId());
+        if (ruleOf(d, "decisionRule").filter(r -> r == DecisionRule.REGRESSION_FISHER).isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new RegressionDisclosure(
+                doubleOf(d.get("sizeAtAssumedCommonRate")),
+                doubleOf(d.get("designAlternativeRate")),
+                doubleOf(d.get("designPower")),
+                doubleOf(d.get("resolvedTestPower")),
+                doubleOf(d.get("minimumDetectableDegradation"))));
+    }
+
+    private static OptionalDouble doubleOf(Object value) {
+        return value instanceof Number n ? OptionalDouble.of(n.doubleValue()) : OptionalDouble.empty();
+    }
+
+    private static OptionalLong longOf(Object value) {
+        return value instanceof Number n ? OptionalLong.of(n.longValue()) : OptionalLong.empty();
+    }
+
+    private static OptionalInt intOf(Object value) {
+        return value instanceof Number n ? OptionalInt.of(n.intValue()) : OptionalInt.empty();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
@@ -264,7 +454,7 @@ public final class VerdictAdapter {
         return null;
     }
 
-    private static LatencyInput toLatencyInput(EngineRunSummary engine) {
+    private static LatencyInput toLatencyInput(EngineRunSummary engine, boolean enforced) {
         // Only samples whose contract evaluated to Outcome.ok
         // contribute to the percentiles. The latency dimension at
         // the verdict layer is purely descriptive — declared
@@ -274,7 +464,7 @@ public final class VerdictAdapter {
         // (the "unavailable" sentinel) when contributingSamples is
         // below the minimum-samples threshold for that percentile.
         LatencyResult lat = engine.passingLatencyResult();
-        if (lat.sampleCount() == 0) {
+        if (lat.sampleCount() == 0 && !enforced) {
             return null;
         }
         int contributing = engine.successes();
@@ -325,6 +515,7 @@ public final class VerdictAdapter {
             case TOKEN_BUDGET -> TerminationReason.METHOD_TOKEN_BUDGET_EXHAUSTED;
             case IMPOSSIBILITY -> TerminationReason.IMPOSSIBILITY;
             case SUCCESS_GUARANTEED -> TerminationReason.SUCCESS_GUARANTEED;
+            case CONFIGURATION_REFUSED -> TerminationReason.CONFIGURATION_REFUSED;
         };
     }
 }

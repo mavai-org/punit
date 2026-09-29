@@ -2,9 +2,11 @@ package org.mavai.punit.verdict;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.OptionalDouble;
 
 import org.mavai.punit.api.ThresholdOrigin;
-import org.mavai.punit.statistics.RiskDrivenSizingCalculator;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.statistics.RegressionSizing;
 import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
@@ -14,8 +16,9 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  * the operator struck when sizing the run: which operational approach
  * shaped the design, what a smaller-than-baseline sample count cost in
  * sensitivity, and what it saved in time and tokens. This class computes
- * those facts at verdict-build time — the sensitivity figure through the
- * statistics package's sizing calculator — and records them as free-form
+ * those facts at verdict-build time — the sensitivity figure is the design
+ * detectable rate of {@code regression/fisher} at the run's size against
+ * the baseline's (Statistical Companion §5.4.1) — and records them as free-form
  * environment entries, so the verdict XML schema is unchanged and every
  * renderer formats already-computed values.
  *
@@ -47,9 +50,6 @@ final class SizingDisclosure {
     static final String SAVED_FRACTION_KEY = "sizing-saved-fraction";
     static final String TIME_SAVED_MS_KEY = "sizing-time-saved-ms";
     static final String TOKENS_SAVED_KEY = "sizing-tokens-saved";
-
-    private static final RiskDrivenSizingCalculator SIZING_CALCULATOR =
-            new RiskDrivenSizingCalculator();
 
     private SizingDisclosure() {
     }
@@ -129,10 +129,15 @@ final class SizingDisclosure {
             entries.put(DECLARED_MIN_PASS_RATE_KEY, Double.toString(minPassRate));
         }
 
-        if (downsized(sizedSamples, baselineSamples, baselineRate) && samplesExecuted > 0) {
+        OptionalDouble detectable = downsized(sizedSamples, baselineSamples, baselineRate)
+                && samplesExecuted > 0
+                ? RegressionSizing.designDetectableRate(
+                        sizedSamples, baselineRate, baselineSamples,
+                        Methodology.alphaFromConfidence(resolvedConfidence), power)
+                : OptionalDouble.empty();
+        if (detectable.isPresent()) {
             double targetPower = power;
-            double detectableRate = SIZING_CALCULATOR.detectableRate(
-                    sizedSamples, baselineRate, resolvedConfidence, targetPower);
+            double detectableRate = detectable.getAsDouble();
             entries.put(SIZED_SAMPLES_KEY, Integer.toString(sizedSamples));
             entries.put(BASELINE_SAMPLES_KEY, Integer.toString(baselineSamples));
             entries.put(DETECTABLE_RATE_KEY, Double.toString(detectableRate));
