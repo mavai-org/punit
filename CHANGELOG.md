@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+**Conformant with the mavai-R v0.11.2 reference data.**
+
+### Added
+
+- **The verdict record states the passing count.** Each verdict-1.7
+  per-criterion row a pass-rate rule decided carries `required-pass`,
+  the smallest passing count under that rule: the Fisher cutoff `c` for
+  `regression/fisher`, `k_min` for `compliance/exact-binomial`, so the
+  row is PASS iff `pass >= required-pass`. It is the count the engine
+  decided with, never recomputed from `threshold`. It is absent when no
+  rule decided the criterion (zero-failures, or a gate that fired
+  first) and when no count of the run's size can pass (a compliance
+  design too small). `CriterionRow` gains a `requiredPass` component
+  (`OptionalInt`); its existing constructors keep working and leave it
+  empty. `VerdictXmlReader` reads the attribute and `VerdictXmlWriter`
+  writes it, so it survives a round trip. The embedded `verdict-1.7.xsd`
+  is the v0.11.2 schema (the attribute is optional, so earlier 1.7
+  records still validate).
+
 ## [0.12.0] - 2026-09-29
 
 **Methodology 1.5.0 (Statistical Companion 1.5.0), conformant with the

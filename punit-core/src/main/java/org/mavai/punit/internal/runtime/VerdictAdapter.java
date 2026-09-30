@@ -286,7 +286,8 @@ public final class VerdictAdapter {
                     0,
                     v.observed(),
                     v.threshold(),
-                    ruleOf(decisions.get(v.criterionId()), "decisionRule")));
+                    ruleOf(decisions.get(v.criterionId()), "decisionRule"),
+                    requiredPassOf(decisions.get(v.criterionId()))));
         }
         return new org.mavai.punit.verdict.PerCriterionStructure(
                 rows, evaluation.compositeVerdict());
@@ -305,6 +306,31 @@ public final class VerdictAdapter {
             }
         }
         return out;
+    }
+
+    /**
+     * The smallest passing count the deciding rule decided with: the
+     * Fisher cutoff {@code c} for {@code regression/fisher}, {@code k_min}
+     * for {@code compliance/exact-binomial} — read from the criterion's
+     * decision artefacts, never recomputed from the threshold. Empty when
+     * no rule decided the criterion, or when the compliance design is too
+     * small for any count to pass (the rule then publishes no
+     * {@code kMin}).
+     */
+    private static java.util.OptionalInt requiredPassOf(Map<?, ?> detail) {
+        Optional<DecisionRule> rule = ruleOf(detail, "decisionRule");
+        if (rule.isEmpty()) {
+            return java.util.OptionalInt.empty();
+        }
+        String key = switch (rule.get()) {
+            case REGRESSION_FISHER -> "cutoff";
+            case COMPLIANCE_EXACT_BINOMIAL -> "kMin";
+            // Latency rules decide constraints, never a pass-rate row.
+            case LATENCY_PRECEDENCE, LATENCY_COMPLIANCE_EXACT_BINOMIAL -> null;
+        };
+        return key != null && detail.get(key) instanceof Number n
+                ? java.util.OptionalInt.of(n.intValue())
+                : java.util.OptionalInt.empty();
     }
 
     private static Optional<DecisionRule> ruleOf(Map<?, ?> detail, String key) {

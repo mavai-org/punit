@@ -203,6 +203,9 @@ public final class VerdictXmlWriter {
                 w.writeAttribute("decision-rule", rule.id());
                 w.writeAttribute("decision-rule-version", Integer.toString(rule.version()));
             }
+            if (row.requiredPass().isPresent()) {
+                w.writeAttribute("required-pass", Integer.toString(row.requiredPass().getAsInt()));
+            }
             w.writeEndElement();
         }
         w.writeStartElement("composite");

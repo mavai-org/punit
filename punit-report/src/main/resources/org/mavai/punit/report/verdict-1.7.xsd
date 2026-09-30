@@ -701,6 +701,15 @@
     <!-- 1.7: the rule that decided this criterion, when one did. -->
     <xs:attribute name="decision-rule"         type="tns:DecisionRuleEnum" use="optional"/>
     <xs:attribute name="decision-rule-version" type="xs:positiveInteger"   use="optional"/>
+    <!-- 1.7 (mavai-R 0.11.2): the smallest passing count under the rule
+         that decided the criterion - the Fisher cutoff c for
+         regression/fisher, k_min for compliance/exact-binomial - so PASS iff
+         @pass >= @required-pass. @threshold is c / @total for regression and
+         the requirement p_req for compliance, which is not the bar: the bar
+         is the count. Absent when no rule decided the criterion or when no
+         count can pass (a compliance design too small). A reader states
+         its absence; it never derives the count from @threshold. -->
+    <xs:attribute name="required-pass"         type="xs:nonNegativeInteger" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="CompositeType">

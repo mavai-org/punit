@@ -33,6 +33,14 @@ import java.util.Objects;
  *                      for a regression criterion the cutoff as a rate,
  *                      {@code c / n_t}
  * @param decisionRule  the rule that decided the criterion, when one did
+ * @param requiredPass  the smallest passing count under the rule that
+ *                      decided the criterion — the Fisher cutoff {@code c}
+ *                      for {@code regression/fisher}, {@code k_min} for
+ *                      {@code compliance/exact-binomial} — so PASS iff
+ *                      {@code pass >= requiredPass}; the count the rule
+ *                      decided with, never derived from {@code threshold}.
+ *                      Empty when no rule decided the criterion or when no
+ *                      count can pass (a compliance design too small)
  */
 // mavai-ref: JVI-8E4WNW5 — do not remove (resolves in mavai-orchestrator)
 public record CriterionRow(
@@ -43,7 +51,22 @@ public record CriterionRow(
         int inconclusive,
         double observedRate,
         double threshold,
-        java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule) {
+        java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule,
+        java.util.OptionalInt requiredPass) {
+
+    /** A row with its deciding rule but no stated passing count. */
+    public CriterionRow(
+            String criterionId,
+            org.mavai.punit.api.spec.Verdict verdict,
+            int pass,
+            int fail,
+            int inconclusive,
+            double observedRate,
+            double threshold,
+            java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule) {
+        this(criterionId, verdict, pass, fail, inconclusive, observedRate, threshold,
+                decisionRule, java.util.OptionalInt.empty());
+    }
 
     /** A row no rule decided (zero-failures, or a gate that fired first). */
     public CriterionRow(
@@ -55,13 +78,18 @@ public record CriterionRow(
             double observedRate,
             double threshold) {
         this(criterionId, verdict, pass, fail, inconclusive, observedRate, threshold,
-                java.util.Optional.empty());
+                java.util.Optional.empty(), java.util.OptionalInt.empty());
     }
 
     public CriterionRow {
         Objects.requireNonNull(criterionId, "criterionId");
         Objects.requireNonNull(verdict, "verdict");
         Objects.requireNonNull(decisionRule, "decisionRule");
+        Objects.requireNonNull(requiredPass, "requiredPass");
+        if (requiredPass.isPresent() && requiredPass.getAsInt() < 0) {
+            throw new IllegalArgumentException(
+                    "requiredPass must be non-negative; got " + requiredPass.getAsInt());
+        }
         if (pass < 0 || fail < 0 || inconclusive < 0) {
             throw new IllegalArgumentException(
                     "counts must be non-negative; got pass=" + pass
