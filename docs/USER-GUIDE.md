@@ -108,11 +108,11 @@ companion where a reader wants the proof.
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("org.mavai.punit") version "0.12.0"
+    id("org.mavai.punit") version "0.12.1"
 }
 
 dependencies {
-    testImplementation("org.mavai:punit-core:0.12.0")
+    testImplementation("org.mavai:punit-core:0.12.1")
 }
 ```
 
@@ -2095,7 +2095,7 @@ Mathematical foundations:
 
 Cross-language conformance: every mavai framework (punit, feotest,
 baseltest) reproduces the R-generated reference data (mavai-R
-v0.11.1) within stated tolerances, the exact-boundary cases
+v0.11.2) within stated tolerances, the exact-boundary cases
 included. The conformance machinery is documented in the
 `mavai-R` project README.
 

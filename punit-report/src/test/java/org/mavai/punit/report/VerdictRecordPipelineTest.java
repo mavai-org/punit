@@ -9,7 +9,13 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import javax.xml.XMLConstants;
@@ -21,6 +27,7 @@ import org.mavai.outcome.Outcome;
 import org.mavai.punit.api.NoFactors;
 import org.mavai.punit.api.PercentileKey;
 import org.mavai.punit.api.Sampling;
+import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.ServiceContract;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
@@ -28,6 +35,9 @@ import org.mavai.punit.api.criterion.LatencyCriterion;
 import org.mavai.punit.api.spec.ConfigurationRefusedException;
 import org.mavai.punit.internal.engine.baseline.BaselineResolver;
 import org.mavai.punit.runtime.PUnit;
+import org.mavai.punit.statistics.ComplianceRule;
+import org.mavai.punit.statistics.Methodology;
+import org.mavai.punit.statistics.RegressionRule;
 import org.mavai.punit.verdict.PUnitVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.junit.jupiter.api.AfterAll;
@@ -122,6 +132,14 @@ class VerdictRecordPipelineTest {
                 .contains("methodology-version=\"1.5.0\"")
                 .contains("decision-rule=\"compliance/exact-binomial\"")
                 .contains("value=\"PASS\"");
+        // required-pass is k_min, the count the compliance rule decided
+        // with, at the row's own total (the run may stop early).
+        Map<String, String> row = criterionRow(xml, "accuracy");
+        OptionalInt kMin = ComplianceRule.minimumPassingCount(
+                0.9, Integer.parseInt(row.get("total")), alphaOf(xml));
+        assertThat(kMin).isPresent();
+        assertThat(row).containsEntry("required-pass", Integer.toString(kMin.getAsInt()));
+        assertRequiredPassConsistent(row);
     }
 
     @Test
@@ -140,6 +158,14 @@ class VerdictRecordPipelineTest {
         String xml = record("record-two");
         assertValidRoundTrip(xml);
         assertThat(xml).contains("\"accuracy\"").contains("\"lenient\"");
+        double alpha = alphaOf(xml);
+        for (var c : List.of(Map.entry("accuracy", 0.9), Map.entry("lenient", 0.5))) {
+            Map<String, String> row = criterionRow(xml, c.getKey());
+            assertThat(row).containsEntry("required-pass", Integer.toString(
+                    ComplianceRule.minimumPassingCount(c.getValue(),
+                            Integer.parseInt(row.get("total")), alpha).getAsInt()));
+            assertRequiredPassConsistent(row);
+        }
     }
 
     @Test
@@ -190,6 +216,120 @@ class VerdictRecordPipelineTest {
         assertThat(read.decision().configurationErrors()).isNotEmpty();
     }
 
+    /** A service whose first {@code passing} invocations return true. */
+    private static Sampling<NoFactors, Integer, Boolean> scripted(
+            String id, int samples, int passing, Criteria<Boolean> criteria) {
+        AtomicInteger invoked = new AtomicInteger();
+        return Sampling.<NoFactors, Integer, Boolean>builder()
+                .serviceContractFactory(f -> new ServiceContract<NoFactors, Integer, Boolean>() {
+                    @Override public Criteria<Boolean> criteria() { return criteria; }
+                    @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+                        return Outcome.ok(invoked.getAndIncrement() < passing);
+                    }
+                    @Override public String id() { return id; }
+                })
+                .inputs(1, 2, 3)
+                .samples(samples)
+                .build();
+    }
+
+    private static Criteria<Boolean> judgedEmpirical() {
+        return Criteria.empirical().<Boolean>passRate()
+                .name("accuracy")
+                .satisfies("output is true", out ->
+                        out ? Outcome.ok(out) : Outcome.fail("record", "scripted failure"));
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("baseline for the regression records: 192 of 200")
+    void measureRegressionBaseline() {
+        PUnit.measuring(scripted("record-regression", 200, 192, judgedEmpirical()))
+                .experimentId("regressionBaseline")
+                .run();
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("a regression row states the Fisher cutoff as required-pass")
+    void regressionRequiredPass() throws Exception {
+        // 88 of 100 against 192 of 200: whatever the verdict, the row
+        // states the cutoff the rule decided with.
+        catchThrowable(() -> PUnit.testing(scripted("record-regression", 100, 88,
+                        judgedEmpirical()))
+                .assertPasses());
+
+        String xml = record("record-regression");
+        assertValidRoundTrip(xml);
+        Map<String, String> row = criterionRow(xml, "accuracy");
+        assertThat(row).containsEntry("decision-rule", "regression/fisher");
+        int cutoff = RegressionRule.cutoff(
+                192, 200, Integer.parseInt(row.get("total")), alphaOf(xml));
+        assertThat(row).containsEntry("required-pass", Integer.toString(cutoff));
+        assertRequiredPassConsistent(row);
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("a compliance design too small for any count to pass omits required-pass")
+    void noCountCanPass() throws Exception {
+        // 5 samples cannot show a 0.99 requirement at any usual alpha.
+        assertThat(ComplianceRule.minimumPassingCount(0.99, 5, 0.05)).isEmpty();
+        catchThrowable(() -> PUnit.testing(scripted("record-too-small", 5, 5,
+                        Criteria.meeting().<Boolean>passRate(0.99).name("accuracy")
+                                .satisfies("output is true", out -> Outcome.ok(out))))
+                .intent(TestIntent.SMOKE)
+                .assertPasses());
+
+        String xml = record("record-too-small");
+        assertValidRoundTrip(xml);
+        Map<String, String> row = criterionRow(xml, "accuracy");
+        assertThat(ComplianceRule.minimumPassingCount(
+                0.99, Integer.parseInt(row.get("total")), alphaOf(xml))).isEmpty();
+        assertThat(row)
+                .containsEntry("decision-rule", "compliance/exact-binomial")
+                .doesNotContainKey("required-pass");
+        assertThat(row.get("verdict")).isNotEqualTo("PASS");
+    }
+
+    /** The per-criterion row for {@code id}, as its attribute map. */
+    private static Map<String, String> criterionRow(String xml, String id) {
+        Matcher m = Pattern.compile("<criterion id=\"" + Pattern.quote(id) + "\"([^>]*)>")
+                .matcher(xml);
+        assertThat(m.find()).as("per-criterion row " + id).isTrue();
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("id", id);
+        Matcher a = Pattern.compile("([\\w-]+)=\"([^\"]*)\"").matcher(m.group(1));
+        while (a.find()) {
+            attrs.put(a.group(1), a.group(2));
+        }
+        return attrs;
+    }
+
+    /** PASS iff pass >= required-pass. */
+    private static void assertRequiredPassConsistent(Map<String, String> row) {
+        int pass = Integer.parseInt(row.get("pass"));
+        int required = Integer.parseInt(row.get("required-pass"));
+        assertThat(row.get("verdict")).isEqualTo(pass >= required ? "PASS" : "FAIL");
+    }
+
+    private static double alphaOf(String xml) {
+        Matcher m = Pattern.compile("<execution [^>]*confidence=\"([^\"]+)\"").matcher(xml);
+        assertThat(m.find()).as("execution confidence").isTrue();
+        return Methodology.alphaFromConfidence(Double.parseDouble(m.group(1)));
+    }
+
+    /** Every row's required-pass, keyed by criterion id, in document order. */
+    private static Map<String, String> requiredPassByCriterion(String xml) {
+        Map<String, String> out = new LinkedHashMap<>();
+        Matcher m = Pattern.compile("<criterion id=\"([^\"]+)\"[^>]*?required-pass=\"(\\d+)\"")
+                .matcher(xml);
+        while (m.find()) {
+            out.put(m.group(1), m.group(2));
+        }
+        return out;
+    }
+
     static Stream<String> publishedExamples() {
         return Stream.of("typical", "two-criteria", "latency-fail",
                 "latency-saturated", "refused");
@@ -208,6 +348,25 @@ class VerdictRecordPipelineTest {
         }
     }
 
+    @Test
+    @DisplayName("the published worked examples state required-pass: 91, 97, 17")
+    void publishedExamplesCarryRequiredPass() throws Exception {
+        assertThat(requiredPassByCriterion(published("typical")))
+                .containsEntry("extraction-matches-reviewed-values", "91");
+        assertThat(requiredPassByCriterion(published("two-criteria")))
+                .containsEntry("extraction-matches-reviewed-values-regression", "91")
+                .containsEntry("extraction-matches-reviewed-values-compliance", "97");
+        assertThat(requiredPassByCriterion(published("latency-saturated")))
+                .containsEntry("extraction-matches-reviewed-values", "17");
+    }
+
+    private String published(String name) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(
+                "/published-interchange/verdict-1.7-" + name + ".xml")) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
     private void assertValidRoundTrip(String xml) throws Exception {
         validate(xml);
         ProbabilisticTestVerdict read = new VerdictXmlReader().read(
@@ -222,6 +381,9 @@ class VerdictRecordPipelineTest {
                 assertThat(rewritten).as("round trip keeps " + marker).contains(marker);
             }
         }
+        assertThat(requiredPassByCriterion(rewritten))
+                .as("round trip keeps every required-pass")
+                .isEqualTo(requiredPassByCriterion(xml));
         assertThat(read.punitVerdict()).isIn((Object[]) PUnitVerdict.values());
     }
 

@@ -710,6 +710,53 @@ class VerdictXmlWriterTest {
         }
 
         @Test
+        @DisplayName("required-pass is written where the row states it, omitted where it does not, and reads back")
+        void requiredPassWrittenAndRead() throws Exception {
+            var fisher = java.util.Optional.of(
+                    org.mavai.punit.statistics.DecisionRule.REGRESSION_FISHER);
+            var exact = java.util.Optional.of(
+                    org.mavai.punit.statistics.DecisionRule.COMPLIANCE_EXACT_BINOMIAL);
+            org.mavai.punit.verdict.PerCriterionStructure pc =
+                    new org.mavai.punit.verdict.PerCriterionStructure(
+                            List.of(
+                                    new org.mavai.punit.verdict.CriterionRow(
+                                            "regression",
+                                            org.mavai.punit.api.spec.Verdict.PASS,
+                                            93, 7, 0, 0.93, 0.91, fisher,
+                                            java.util.OptionalInt.of(91)),
+                                    new org.mavai.punit.verdict.CriterionRow(
+                                            "compliance",
+                                            org.mavai.punit.api.spec.Verdict.FAIL,
+                                            93, 7, 0, 0.93, 0.90, exact,
+                                            java.util.OptionalInt.of(97)),
+                                    new org.mavai.punit.verdict.CriterionRow(
+                                            "too-small",
+                                            org.mavai.punit.api.spec.Verdict.FAIL,
+                                            5, 0, 0, 1.0, 0.99, exact,
+                                            java.util.OptionalInt.empty())),
+                            org.mavai.punit.api.spec.Verdict.FAIL);
+            ProbabilisticTestVerdict verdict = verdictWithPerCriterion(
+                    pc, PUnitVerdict.FAIL);
+
+            String xml = writeToString(verdict);
+            validateAgainstSchema12(xml);
+            Document doc = writeAndParse(verdict);
+            NodeList rows = firstElement(doc, "per-criterion").getElementsByTagNameNS(
+                    VerdictXmlWriter.NAMESPACE, "criterion");
+            assertThat(((Element) rows.item(0)).getAttribute("required-pass")).isEqualTo("91");
+            assertThat(((Element) rows.item(1)).getAttribute("required-pass")).isEqualTo("97");
+            assertThat(((Element) rows.item(2)).hasAttribute("required-pass")).isFalse();
+
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(
+                    new java.io.ByteArrayInputStream(
+                            xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            assertThat(read.perCriterion().orElseThrow().criteria())
+                    .extracting(org.mavai.punit.verdict.CriterionRow::requiredPass)
+                    .containsExactly(java.util.OptionalInt.of(91), java.util.OptionalInt.of(97),
+                            java.util.OptionalInt.empty());
+        }
+
+        @Test
         @DisplayName("absent per-criterion: no <per-criterion> element, version is 1.7")
         void absentPerCriterionStaysAt10() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);

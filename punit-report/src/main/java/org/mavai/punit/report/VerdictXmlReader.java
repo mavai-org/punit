@@ -190,7 +190,11 @@ public final class VerdictXmlReader {
                     .map(Double::parseDouble).orElse(Double.NaN);
             criteria.add(new org.mavai.punit.verdict.CriterionRow(
                     r.getAttribute("id"), v, pass, fail, inc, observed, threshold,
-                    optionalAttribute(r, "decision-rule").flatMap(DecisionRule::fromId)));
+                    optionalAttribute(r, "decision-rule").flatMap(DecisionRule::fromId),
+                    // Read as stated, never derived from the threshold.
+                    optionalAttribute(r, "required-pass")
+                            .map(c -> java.util.OptionalInt.of(Integer.parseInt(c)))
+                            .orElse(java.util.OptionalInt.empty())));
         }
         org.mavai.punit.api.spec.Verdict composite = compositeEl
                 .map(e -> org.mavai.punit.api.spec.Verdict.valueOf(e.getAttribute("value")))
