@@ -108,11 +108,11 @@ companion where a reader wants the proof.
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("org.mavai.punit") version "0.12.0"
+    id("org.mavai.punit") version "0.12.1"
 }
 
 dependencies {
-    testImplementation("org.mavai:punit-core:0.12.0")
+    testImplementation("org.mavai:punit-core:0.12.1")
 }
 ```
 
