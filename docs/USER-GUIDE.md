@@ -1831,7 +1831,7 @@ the environment:
 
 ```kotlin
 punit {
-    mavaiVersion.set("0.21.0")      // the renderer to resolve; default: the version this plugin was built against
+    mavaiVersion.set("0.22.0")      // the renderer to resolve; default: the version this plugin was built against
 }
 
 tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {

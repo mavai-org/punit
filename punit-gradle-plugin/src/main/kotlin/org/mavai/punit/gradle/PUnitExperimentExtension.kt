@@ -12,7 +12,7 @@ import org.gradle.api.provider.Property
  *     optimizationsDir.set(layout.buildDirectory.dir("punit/optimizations").map { it.asFile.absolutePath })
  *     configureTestTask.set(true)
  *     excludeTestSubjects.set(true)
- *     mavaiVersion.set("0.21.0")
+ *     mavaiVersion.set("0.22.0")
  * }
  * ```
  *

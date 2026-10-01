@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-01
+
+**The report renderer is mavai 0.22.0, which reads a verdict as decided by its rules.**
+
+### Changed
+
+- **The Gradle plugin resolves `org.mavai:mavai:0.22.0`** for `punitReport`
+  (`mavaiVersion`; the Maven configuration example names the same
+  version). The verdict page now leads with the rule that decided each
+  criterion and the count it needed, shows a refused test as refused,
+  decides an explicit latency requirement by the count within it, and
+  keeps the Wilson bound as a descriptive figure only. A build that pins
+  `punit { mavaiVersion }` keeps its own choice. Nothing in punit's own
+  behaviour or records changes.
+
 ## [0.12.1] - 2026-09-30
 
 **Conformant with the mavai-R v0.11.2 reference data.**
