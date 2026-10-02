@@ -287,6 +287,19 @@ tasks.register("release") {
             )
         }
 
+        // 1b. Validate the standalone plugin build carries the same version — it
+        // has its own gradle.properties, and a mismatch would ship the plugin as
+        // a SNAPSHOT (or not at all) and corrupt the SNAPSHOT bump below.
+        val pluginVer = Regex("""(?m)^punitVersion=(.*)$""")
+            .find(file("punit-gradle-plugin/gradle.properties").readText())
+            ?.groupValues?.get(1)?.trim()
+        if (pluginVer != ver) {
+            throw GradleException(
+                "punit-gradle-plugin/gradle.properties has punitVersion=$pluginVer, " +
+                "but the root gradle.properties has $ver. Set both to $ver before releasing."
+            )
+        }
+
         // 2. Validate CHANGELOG.md has an entry for this version
         val changelog = file("CHANGELOG.md")
         if (!changelog.exists()) {
