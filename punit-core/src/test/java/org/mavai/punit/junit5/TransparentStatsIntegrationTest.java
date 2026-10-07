@@ -49,7 +49,7 @@ class TransparentStatsIntegrationTest {
         String stderr = capturedErr.toString(StandardCharsets.UTF_8);
         assertThat(stderr)
                 .contains("STATISTICAL ANALYSIS — test verdict: PASS")
-                .contains("Test verdict (methodology 1.5.0)")
+                .contains("Test verdict (methodology 1.6.0)")
                 .contains("[REQUIRED] bernoulli-pass-rate → PASS")
                 .contains("H₀ (null):")
                 .contains("compliance/exact-binomial v1")

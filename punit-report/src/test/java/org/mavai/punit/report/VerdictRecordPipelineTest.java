@@ -32,6 +32,9 @@ import org.mavai.punit.api.ServiceContract;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.api.criterion.LatencyCriterion;
+import org.mavai.punit.api.spec.AssertionEnforcement;
+import org.mavai.punit.api.spec.EnforcementMode;
+import org.mavai.punit.verdict.LatencyEvaluation;
 import org.mavai.punit.api.spec.ConfigurationRefusedException;
 import org.mavai.punit.internal.engine.baseline.BaselineResolver;
 import org.mavai.punit.runtime.PUnit;
@@ -51,19 +54,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * verdict-1.7 records through the full production pipeline
+ * verdict-1.8 records through the full production pipeline
  * ({@code PUnit.testing(...)} → verdict adapter → XML sink), each
- * validated against the published verdict-1.7 schema and round-tripped
+ * validated against the published verdict-1.8 schema and round-tripped
  * through {@link VerdictXmlReader} and {@link VerdictXmlWriter}: a
  * typical single-criterion record, a two-criterion record, a record
  * whose latency constraint is saturated, and refused records. The
  * published worked examples are read and re-written the same way.
  */
-@DisplayName("verdict-1.7 records through the production pipeline")
+@DisplayName("verdict-1.8 records through the production pipeline")
 @TestMethodOrder(OrderAnnotation.class)
 class VerdictRecordPipelineTest {
 
-    private static final Path DIR = Path.of("build/verdict-1.7-records");
+    private static final Path DIR = Path.of("build/verdict-1.8-records");
 
     /** The XML sink is discovered once per JVM and keeps the report
      *  directory it first resolved, so every pipeline test in this module
@@ -129,7 +132,7 @@ class VerdictRecordPipelineTest {
         String xml = record("record-typical");
         assertValidRoundTrip(xml);
         assertThat(xml)
-                .contains("methodology-version=\"1.5.0\"")
+                .contains("methodology-version=\"1.6.0\"")
                 .contains("decision-rule=\"compliance/exact-binomial\"")
                 .contains("value=\"PASS\"");
         // required-pass is k_min, the count the compliance rule decided
@@ -292,6 +295,96 @@ class VerdictRecordPipelineTest {
         assertThat(row.get("verdict")).isNotEqualTo("PASS");
     }
 
+    /** Runs {@code body} with {@code punit.advisory} set to {@code setting}. */
+    private static void advisory(String setting, Runnable body) {
+        System.setProperty(AssertionEnforcement.PROPERTY, setting);
+        try {
+            body.run();
+        } finally {
+            System.clearProperty(AssertionEnforcement.PROPERTY);
+        }
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("latency advisory: the saturated constraint is reported as advisory and the test passes")
+    void latencyAdvisory() throws Exception {
+        advisory("latency", () -> PUnit.testing(sampling("record-latency", 20,
+                        holds(), Criteria.empirical().atMost(PercentileKey.P95)))
+                .assertPasses());
+
+        String xml = record("record-latency");
+        assertValidRoundTrip(xml);
+        assertThat(xml)
+                .contains("verdict=\"INCONCLUSIVE\" mode=\"advisory\"")
+                .contains("status=\"SATURATED\"")
+                .contains("<composite value=\"PASS\" mode=\"enforced\"")
+                .contains("<verdict value=\"PASS\"")
+                .contains("latency advisory");
+    }
+
+    @Test
+    @Order(10)
+    @DisplayName("latency advisory: a test larger than its baseline is still refused")
+    void refusalWhateverTheSwitch() {
+        Throwable thrown = catchThrowable(() -> advisory("latency", () -> PUnit.testing(
+                        sampling("record-latency", 30, holds(), Criteria.empirical().atMost(PercentileKey.P95)))
+                .assertPasses()));
+        assertThat(thrown).isInstanceOf(ConfigurationRefusedException.class);
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("functional advisory: a failing requirement is decided and reported, and the test passes")
+    void functionalAdvisory() throws Exception {
+        advisory("functional", () -> PUnit.testing(scripted("record-functional-advisory", 60, 30,
+                        Criteria.meeting().<Boolean>passRate(0.9).name("accuracy")
+                                .satisfies("output is true", out ->
+                                        out ? Outcome.ok(out) : Outcome.fail("record", "scripted failure"))))
+                .assertPasses());
+
+        String xml = record("record-functional-advisory");
+        assertValidRoundTrip(xml);
+        assertThat(criterionRow(xml, "accuracy"))
+                .containsEntry("verdict", "FAIL")
+                .containsEntry("decision-rule", "compliance/exact-binomial");
+        assertThat(xml)
+                .contains("<composite value=\"FAIL\" mode=\"advisory\"")
+                .contains("<verdict value=\"PASS\"")
+                .contains("functional advisory");
+        // An advisory dimension's rule never decided the test.
+        assertThat(Pattern.compile("<verdict [^>]*decision-rule=").matcher(xml).find()).isFalse();
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("unset, the same failing requirement fails the test")
+    void functionalEnforcedByDefault() throws Exception {
+        Throwable thrown = catchThrowable(() -> PUnit.testing(scripted("record-functional-advisory", 60, 30,
+                        Criteria.meeting().<Boolean>passRate(0.9).name("accuracy")
+                                .satisfies("output is true", out ->
+                                        out ? Outcome.ok(out) : Outcome.fail("record", "scripted failure"))))
+                .assertPasses());
+        assertThat(thrown).isInstanceOf(AssertionError.class);
+
+        String xml = record("record-functional-advisory");
+        assertValidRoundTrip(xml);
+        assertThat(xml)
+                .contains("<composite value=\"FAIL\" mode=\"enforced\"")
+                .contains("<verdict value=\"FAIL\"");
+    }
+
+    @Test
+    @DisplayName("an unknown advisory setting is a configuration error before any sample runs")
+    void unknownSettingRefused() {
+        Throwable thrown = catchThrowable(() -> advisory("everything", () -> PUnit.testing(
+                        sampling("record-unknown-setting", 10, holds(), null))
+                .assertPasses()));
+        assertThat(thrown)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(AssertionEnforcement.PROPERTY);
+    }
+
     /** The per-criterion row for {@code id}, as its attribute map. */
     private static Map<String, String> criterionRow(String xml, String id) {
         Matcher m = Pattern.compile("<criterion id=\"" + Pattern.quote(id) + "\"([^>]*)>")
@@ -332,19 +425,35 @@ class VerdictRecordPipelineTest {
 
     static Stream<String> publishedExamples() {
         return Stream.of("typical", "two-criteria", "latency-fail",
-                "latency-saturated", "refused");
+                "latency-saturated", "refused", "functional-advisory", "latency-advisory",
+                "both-advisory");
     }
 
-    @ParameterizedTest(name = "verdict-1.7-{0}.xml")
+    @ParameterizedTest(name = "verdict-1.8-{0}.xml")
     @MethodSource("publishedExamples")
-    @DisplayName("the published worked examples read and re-write as valid verdict-1.7")
+    @DisplayName("the published worked examples read and re-write as valid verdict-1.8")
     void publishedExampleRoundTrips(String name) throws Exception {
         try (InputStream in = getClass().getResourceAsStream(
-                "/published-interchange/verdict-1.7-" + name + ".xml")) {
+                "/published-interchange/verdict-1.8-" + name + ".xml")) {
             assertThat(in).as("published example " + name).isNotNull();
             String xml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             validate(xml);
             assertValidRoundTrip(xml);
+        }
+    }
+
+    @Test
+    @DisplayName("a released verdict-1.7 record still reads, both dimensions enforced and STRICT_FAIL as FAIL")
+    void verdict17RecordReads() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(
+                "/published-interchange/verdict-1.7-latency-fail.xml")) {
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(in);
+            var latency = read.latency().orElseThrow();
+            assertThat(latency.mode()).contains(EnforcementMode.ENFORCED);
+            assertThat(latency.evaluations())
+                    .extracting(LatencyEvaluation::status)
+                    .contains(LatencyEvaluation.Status.FAIL);
+            assertThat(read.perCriterion().orElseThrow().mode()).isEqualTo(EnforcementMode.ENFORCED);
         }
     }
 
@@ -362,7 +471,7 @@ class VerdictRecordPipelineTest {
 
     private String published(String name) throws Exception {
         try (InputStream in = getClass().getResourceAsStream(
-                "/published-interchange/verdict-1.7-" + name + ".xml")) {
+                "/published-interchange/verdict-1.8-" + name + ".xml")) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
@@ -376,7 +485,7 @@ class VerdictRecordPipelineTest {
         String rewritten = out.toString(StandardCharsets.UTF_8);
         validate(rewritten);
         for (String marker : List.of("status=\"SATURATED\"", "configuration-error=",
-                "decision-rule=\"")) {
+                "decision-rule=\"", "mode=\"advisory\"")) {
             if (xml.contains(marker)) {
                 assertThat(rewritten).as("round trip keeps " + marker).contains(marker);
             }
@@ -390,7 +499,7 @@ class VerdictRecordPipelineTest {
     private void validate(String xml) throws Exception {
         SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         try (InputStream xsd = getClass().getResourceAsStream(
-                "/org/mavai/punit/report/verdict-1.7.xsd")) {
+                "/org/mavai/punit/report/verdict-1.8.xsd")) {
             Schema schema = factory.newSchema(new StreamSource(xsd));
             schema.newValidator().validate(new StreamSource(
                     new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));

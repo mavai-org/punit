@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.api.LatencyResult;
 import org.mavai.punit.api.covariate.CovariateAlignment;
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.EngineRunSummary;
 import org.mavai.punit.api.spec.EvaluatedCriterion;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
@@ -156,7 +157,8 @@ public final class VerdictAdapter {
         LatencyInput latencyInput = toLatencyInput(engine, !evaluations.isEmpty() || latencyVerdict.isPresent());
         if (latencyInput != null) {
             b.latencyDimension(latencyInput);
-            b.latencyEvaluations(latencyVerdict, evaluations);
+            b.latencyEvaluations(latencyVerdict,
+                    result.composition().flatMap(VerdictComposition::latencyMode), evaluations);
         }
 
         // Covariates
@@ -222,7 +224,9 @@ public final class VerdictAdapter {
         // the persistence-layer PerCriterionStructure. Empty
         // evaluations leave the field absent.
         Map<String, Map<?, ?>> decisions = decisionsByCriterion(result.criterionResults());
-        b.perCriterion(translatePerCriterion(result.perCriterionEvaluation(), decisions));
+        b.perCriterion(translatePerCriterion(result.perCriterionEvaluation(), decisions,
+                result.composition().flatMap(VerdictComposition::functionalMode)
+                        .orElse(EnforcementMode.ENFORCED)));
 
         // The decision behind the verdict: the rule, what triggered a
         // FAIL or an INCONCLUSIVE, the envelopes; and what the deciding
@@ -265,7 +269,8 @@ public final class VerdictAdapter {
 
     private static org.mavai.punit.verdict.PerCriterionStructure translatePerCriterion(
             org.mavai.punit.api.spec.PerCriterionEvaluation evaluation,
-            Map<String, Map<?, ?>> decisions) {
+            Map<String, Map<?, ?>> decisions,
+            EnforcementMode mode) {
         if (evaluation.perCriterionVerdicts().isEmpty()) {
             return null;
         }
@@ -290,7 +295,7 @@ public final class VerdictAdapter {
                     requiredPassOf(decisions.get(v.criterionId()))));
         }
         return new org.mavai.punit.verdict.PerCriterionStructure(
-                rows, evaluation.compositeVerdict());
+                rows, evaluation.compositeVerdict(), mode);
     }
 
     /** Each methodology criterion's decision artefacts, from the pass-rate evaluation. */
@@ -341,7 +346,8 @@ public final class VerdictAdapter {
     }
 
     /**
-     * The enforced latency constraints as the verdict records them. A
+     * The latency constraints as the verdict records them, each decided
+     * by its rule whether the dimension is enforced or advisory. A
      * constraint with no threshold that is not saturated — no successful
      * latency to rank — has no evaluation row; its INCONCLUSIVE outcome
      * is carried by the latency dimension's verdict.
@@ -373,7 +379,7 @@ public final class VerdictAdapter {
                         ? LatencyEvaluation.Status.SATURATED
                         : switch (Verdict.valueOf(verdictName)) {
                             case PASS -> LatencyEvaluation.Status.PASS;
-                            case FAIL -> LatencyEvaluation.Status.STRICT_FAIL;
+                            case FAIL -> LatencyEvaluation.Status.FAIL;
                             case INCONCLUSIVE -> LatencyEvaluation.Status.INFEASIBLE;
                         };
                 out.add(new LatencyEvaluation(
@@ -398,16 +404,26 @@ public final class VerdictAdapter {
 
     /**
      * The decision behind the verdict: the rule, when one rule decided
-     * every criterion and constraint; the triggers; the envelopes.
+     * every criterion and constraint of the enforced dimensions (an
+     * advisory dimension's rules do not count); the triggers; the
+     * envelopes.
      */
     private static TestDecision testDecision(
             ProbabilisticTestResult result, Map<String, Map<?, ?>> decisions,
             List<LatencyEvaluation> evaluations) {
         java.util.Set<DecisionRule> rules = new java.util.LinkedHashSet<>();
-        for (var v : result.perCriterionEvaluation().perCriterionVerdicts()) {
-            ruleOf(decisions.get(v.criterionId()), "decisionRule").ifPresent(rules::add);
+        boolean functionalBinds = result.composition()
+                .map(VerdictComposition::functionalEnforced).orElse(true);
+        boolean latencyBinds = result.composition()
+                .map(VerdictComposition::latencyEnforced).orElse(true);
+        if (functionalBinds) {
+            for (var v : result.perCriterionEvaluation().perCriterionVerdicts()) {
+                ruleOf(decisions.get(v.criterionId()), "decisionRule").ifPresent(rules::add);
+            }
         }
-        evaluations.forEach(e -> rules.add(e.decisionRule()));
+        if (latencyBinds) {
+            evaluations.forEach(e -> rules.add(e.decisionRule()));
+        }
         Optional<DecisionRule> single = rules.size() == 1
                 ? Optional.of(rules.iterator().next()) : Optional.empty();
         return result.composition()

@@ -484,7 +484,7 @@ ArchUnit-style architecture test).
   package: org.mavai.punit.report
   role_notes: |
     `punit-report` module. XSD shipped at
-    `punit-report/src/main/resources/.../verdict-1.7.xsd` (earlier
+    `punit-report/src/main/resources/.../verdict-1.8.xsd` (earlier
     revisions bundled beside it). Must
     diff clean against the cross-framework canonical XSD shared
     with feotest and mavai.org sentinels / dashboards.

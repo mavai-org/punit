@@ -1,6 +1,6 @@
 /**
  * Statistical engine for PUnit's probabilistic testing framework: the
- * decision rules of the Statistical Companion's methodology 1.5.0.
+ * decision rules of the Statistical Companion's methodology 1.6.0.
  *
  * <h2>Module Independence</h2>
  * <p>This package is intentionally isolated from the rest of the PUnit

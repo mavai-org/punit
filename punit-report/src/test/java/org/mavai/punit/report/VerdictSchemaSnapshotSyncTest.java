@@ -22,7 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class VerdictSchemaSnapshotSyncTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"verdict-1.0.xsd", "verdict-1.1.xsd", "verdict-1.2.xsd", "verdict-1.3.xsd", "verdict-1.4.xsd", "verdict-1.7.xsd"})
+    @ValueSource(strings = {"verdict-1.0.xsd", "verdict-1.1.xsd", "verdict-1.2.xsd", "verdict-1.3.xsd", "verdict-1.4.xsd", "verdict-1.7.xsd", "verdict-1.8.xsd"})
     @DisplayName("embedded verdict schema is byte-identical to the published family schema")
     void embeddedSchemaMatchesPublished(String schemaFile) throws IOException {
         assertArrayEquals(
@@ -40,7 +40,7 @@ class VerdictSchemaSnapshotSyncTest {
         // The fetch task puts the published set on the test classpath; if the
         // release asset ever stops carrying the XSDs, this fails loudly
         // rather than the parameterized test silently comparing nothing.
-        for (String schemaFile : new String[] {"verdict-1.0.xsd", "verdict-1.1.xsd", "verdict-1.2.xsd", "verdict-1.3.xsd", "verdict-1.4.xsd", "verdict-1.7.xsd"}) {
+        for (String schemaFile : new String[] {"verdict-1.0.xsd", "verdict-1.1.xsd", "verdict-1.2.xsd", "verdict-1.3.xsd", "verdict-1.4.xsd", "verdict-1.7.xsd", "verdict-1.8.xsd"}) {
             assertNotNull(
                     getClass().getResource("/published-interchange/" + schemaFile),
                     "published copy of " + schemaFile + " missing from the fetched release asset");

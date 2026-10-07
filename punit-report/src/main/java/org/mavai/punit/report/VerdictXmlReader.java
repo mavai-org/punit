@@ -35,6 +35,11 @@ import org.w3c.dom.NodeList;
  * to the punit verdict model. PUnit-specific fields not present in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID) receive default values.
  *
+ * <p>Records punit writes are verdict-1.8. A 1.7 record still reads: it
+ * states no dimension mode, so both dimensions read as enforced, which
+ * is what every 1.7 punit record was; its {@code STRICT_FAIL} reads as
+ * {@code FAIL}.
+ *
  * <p>Uses DOM parsing since individual verdict files are small.
  */
 // mavai-ref: JVI-DQWKY4Z — do not remove (resolves in mavai-orchestrator)
@@ -207,8 +212,22 @@ public final class VerdictXmlReader {
                     for (var row : criteria) vs.add(row.verdict());
                     return org.mavai.punit.api.spec.Verdict.aggregate(vs);
                 });
+        org.mavai.punit.api.spec.EnforcementMode mode = compositeEl
+                .flatMap(e -> optionalAttribute(e, "mode"))
+                .map(VerdictXmlReader::enforcementMode)
+                .orElse(org.mavai.punit.api.spec.EnforcementMode.ENFORCED);
         return Optional.of(new org.mavai.punit.verdict.PerCriterionStructure(
-                criteria, composite));
+                criteria, composite, mode));
+    }
+
+    private static org.mavai.punit.api.spec.EnforcementMode enforcementMode(String label) {
+        for (org.mavai.punit.api.spec.EnforcementMode mode
+                : org.mavai.punit.api.spec.EnforcementMode.values()) {
+            if (mode.label().equals(label)) {
+                return mode;
+            }
+        }
+        throw new IllegalArgumentException("unknown enforcement mode '" + label + "'");
     }
 
     private TestIdentity readIdentity(Element el) {
@@ -273,6 +292,10 @@ public final class VerdictXmlReader {
 
         Optional<org.mavai.punit.api.spec.Verdict> verdict = optionalAttribute(el, "verdict")
                 .map(org.mavai.punit.api.spec.Verdict::valueOf);
+        Optional<org.mavai.punit.api.spec.EnforcementMode> mode = verdict.map(v ->
+                optionalAttribute(el, "mode")
+                        .map(VerdictXmlReader::enforcementMode)
+                        .orElse(org.mavai.punit.api.spec.EnforcementMode.ENFORCED));
         List<LatencyEvaluation> evaluations = new ArrayList<>();
         Optional<Element> evaluationsEl = optionalElement(el, "evaluations");
         if (evaluationsEl.isPresent()) {
@@ -285,16 +308,16 @@ public final class VerdictXmlReader {
         return new LatencyDimension(
                 successfulSamples, successfulSamples, false, Optional.empty(),
                 p50, p90, p95, p99, Math.max(Math.max(p95, p99), p50),
-                List.of(), "passing-samples", verdict, evaluations
+                List.of(), "passing-samples", verdict, mode, evaluations
         );
     }
 
     /**
-     * One enforced latency evaluation. Advisory evaluations (which punit
-     * never writes) and evaluations no rule decided are read past.
+     * One latency evaluation, decided by its rule. A 1.7 advisory
+     * evaluation — a raw comparison no rule decided — is read past.
      */
     private Optional<LatencyEvaluation> readEvaluation(Element e) {
-        if (!"strict".equals(e.getAttribute("mode"))) {
+        if ("advisory".equals(e.getAttribute("mode"))) {
             return Optional.empty();
         }
         Optional<DecisionRule> rule = optionalAttribute(e, "decision-rule").flatMap(DecisionRule::fromId);
@@ -308,7 +331,7 @@ public final class VerdictXmlReader {
                 "explicit".equals(e.getAttribute("provenance"))
                         ? LatencyEvaluation.Provenance.EXPLICIT
                         : LatencyEvaluation.Provenance.BASELINE_DERIVED,
-                LatencyEvaluation.Status.valueOf(e.getAttribute("status")),
+                evaluationStatus(e.getAttribute("status")),
                 optionalAttribute(e, "baseline-confidence")
                         .map(v -> java.util.OptionalDouble.of(Double.parseDouble(v)))
                         .orElse(java.util.OptionalDouble.empty()),
@@ -318,6 +341,13 @@ public final class VerdictXmlReader {
                 optionalInt(e, "within-threshold"),
                 optionalInt(e, "required-within"),
                 false));
+    }
+
+    /** A 1.7 {@code STRICT_FAIL} is the 1.8 {@code FAIL}. */
+    private static LatencyEvaluation.Status evaluationStatus(String status) {
+        return "STRICT_FAIL".equals(status)
+                ? LatencyEvaluation.Status.FAIL
+                : LatencyEvaluation.Status.valueOf(status);
     }
 
     private java.util.OptionalLong optionalLong(Element e, String name) {

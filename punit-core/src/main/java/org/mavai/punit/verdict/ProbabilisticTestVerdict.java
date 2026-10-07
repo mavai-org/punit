@@ -279,9 +279,13 @@ public record ProbabilisticTestVerdict(
      * @param basis the latency population: the samples that passed every
      *              functional criterion (Statistical Companion §12.2.1)
      * @param verdict the latency dimension's verdict {@code V_latency}, the
-     *                structural composite of the enforced constraints;
-     *                empty when the test enforces none
-     * @param evaluations the enforced constraints' evaluations
+     *                structural composite of the constraints, each decided
+     *                by its rule; empty when the test asserts none
+     * @param mode the latency dimension's mode, present exactly when
+     *             {@code verdict} is: enforced, or advisory when the run
+     *             made the dimension advisory, so that {@code verdict} is
+     *             reported but does not enter the test verdict
+     * @param evaluations the constraints' evaluations
      */
     public record LatencyDimension(
             int successfulSamples,
@@ -296,6 +300,7 @@ public record ProbabilisticTestVerdict(
             List<String> caveats,
             String basis,
             Optional<org.mavai.punit.api.spec.Verdict> verdict,
+            Optional<org.mavai.punit.api.spec.EnforcementMode> mode,
             List<LatencyEvaluation> evaluations
     ) {
         public LatencyDimension {
@@ -303,12 +308,17 @@ public record ProbabilisticTestVerdict(
             caveats = caveats != null ? List.copyOf(caveats) : List.of();
             basis = basis != null ? basis : "passing-samples";
             verdict = verdict != null ? verdict : Optional.empty();
+            mode = mode != null ? mode : Optional.empty();
             evaluations = evaluations != null ? List.copyOf(evaluations) : List.of();
+            if (verdict.isPresent() != mode.isPresent()) {
+                throw new IllegalArgumentException(
+                        "the latency dimension has a mode exactly when it has a verdict");
+            }
         }
 
         /**
-         * Constructor for a descriptive latency dimension: no enforced
-         * constraint, so no latency verdict and no evaluations.
+         * Constructor for a descriptive latency dimension: no asserted
+         * constraint, so no latency verdict, no mode and no evaluations.
          */
         public LatencyDimension(
                 int successfulSamples,
@@ -324,7 +334,7 @@ public record ProbabilisticTestVerdict(
                 String basis) {
             this(successfulSamples, totalSamples, skipped, skipReason,
                     p50Ms, p90Ms, p95Ms, p99Ms, maxMs, caveats, basis,
-                    Optional.empty(), List.of());
+                    Optional.empty(), Optional.empty(), List.of());
         }
 
         /**

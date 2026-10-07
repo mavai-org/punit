@@ -10,34 +10,46 @@ import org.mavai.punit.statistics.DecisionRule;
 
 /**
  * The test's verdict and the two dimensions it composes (Statistical
- * Companion §1.4.6, §12.3.2).
+ * Companion §1.4.6, §12.3.2, §12.6).
  *
  * <p>The functional dimension {@code V_rate} is the structural composite
  * of the test's functional criteria; the latency dimension
- * {@code V_latency} is the same composite over the enforced latency
- * constraints. The test verdict {@code V_test} composes the dimensions
- * present by the same rule — PASS if every one passes, FAIL if any
- * fails, INCONCLUSIVE otherwise — so a FAIL in either dimension outweighs
- * an INCONCLUSIVE in the other. A FAIL or an INCONCLUSIVE names what
- * decided it.
+ * {@code V_latency} is the same composite over its latency constraints,
+ * each decided by its rule. Each dimension is enforced or advisory as
+ * the run's {@link AssertionEnforcement} says. The test verdict
+ * {@code V_test} composes the enforced dimensions only, by the same rule
+ * — PASS if every one passes, FAIL if any fails, INCONCLUSIVE otherwise
+ * — so a FAIL in either outweighs an INCONCLUSIVE in the other; with no
+ * enforced dimension it is PASS, the composite over no verdict. An
+ * advisory dimension is decided and reported with its verdict, but it
+ * never enters {@code V_test}, never triggers it and adds nothing to the
+ * envelopes. A FAIL or an INCONCLUSIVE names what decided it.
  *
  * @param rateVerdict    {@code V_rate}; empty for a test with no functional criteria
- * @param latencyVerdict {@code V_latency}; empty for a test that enforces no latency constraint
- * @param testVerdict    {@code V_test}
- * @param triggering     for a FAIL or an INCONCLUSIVE, the criteria and latency
- *                       constraints whose verdict is the test's, criteria first
+ * @param latencyVerdict {@code V_latency}; empty for a test with no latency constraint
+ * @param functionalMode the functional dimension's mode; present exactly
+ *                       when {@code rateVerdict} is
+ * @param latencyMode    the latency dimension's mode; present exactly
+ *                       when {@code latencyVerdict} is
+ * @param testVerdict    {@code V_test}, over the enforced dimensions
+ * @param triggering     for a FAIL or an INCONCLUSIVE, the enforced criteria
+ *                       and latency constraints whose verdict is the
+ *                       test's, criteria first
  * @param falseComplianceEnvelope        the union bound on one or more false
- *                       compliance claims: the sum of alpha over the compliance
- *                       decisions (requirements and explicit latency ceilings);
- *                       empty when the test makes none
+ *                       compliance claims: the sum of alpha over the enforced
+ *                       compliance decisions (requirements and explicit
+ *                       latency ceilings); empty when the test makes none
  * @param falseDegradationSignalEnvelope the union bound on one or more false
  *                       degradation signals: the sum of alpha over the
- *                       regression decisions (baseline-derived criteria and
- *                       latency thresholds); empty when the test makes none
+ *                       enforced regression decisions (baseline-derived
+ *                       criteria and latency thresholds); empty when the
+ *                       test makes none
  */
 public record VerdictComposition(
         Optional<Verdict> rateVerdict,
         Optional<Verdict> latencyVerdict,
+        Optional<EnforcementMode> functionalMode,
+        Optional<EnforcementMode> latencyMode,
         Verdict testVerdict,
         List<Trigger> triggering,
         OptionalDouble falseComplianceEnvelope,
@@ -46,6 +58,12 @@ public record VerdictComposition(
     public VerdictComposition {
         Objects.requireNonNull(rateVerdict, "rateVerdict");
         Objects.requireNonNull(latencyVerdict, "latencyVerdict");
+        Objects.requireNonNull(functionalMode, "functionalMode");
+        Objects.requireNonNull(latencyMode, "latencyMode");
+        if (rateVerdict.isPresent() != functionalMode.isPresent()
+                || latencyVerdict.isPresent() != latencyMode.isPresent()) {
+            throw new IllegalArgumentException("a dimension has a mode exactly when it has a verdict");
+        }
         Objects.requireNonNull(testVerdict, "testVerdict");
         Objects.requireNonNull(falseComplianceEnvelope, "falseComplianceEnvelope");
         Objects.requireNonNull(falseDegradationSignalEnvelope, "falseDegradationSignalEnvelope");
@@ -85,43 +103,70 @@ public record VerdictComposition(
 
     /**
      * Composes {@code V_test} from the functional criteria's verdicts and
-     * the enforced latency constraints' verdicts (advisory constraints
-     * never enter).
+     * the latency constraints' verdicts, over the dimensions
+     * {@code enforcement} leaves enforced.
      *
      * @throws IllegalArgumentException when there is neither a criterion
-     *         nor an enforced latency constraint to compose
+     *         nor a latency constraint to compose
      */
-    public static VerdictComposition compose(List<Decided> criteria, List<Decided> latency) {
+    public static VerdictComposition compose(
+            List<Decided> criteria, List<Decided> latency, AssertionEnforcement enforcement) {
         Objects.requireNonNull(criteria, "criteria");
         Objects.requireNonNull(latency, "latency");
+        Objects.requireNonNull(enforcement, "enforcement");
         if (criteria.isEmpty() && latency.isEmpty()) {
             throw new IllegalArgumentException(
-                    "a test verdict needs at least one criterion or enforced latency constraint");
+                    "a test verdict needs at least one criterion or latency constraint");
         }
-        Optional<Verdict> rate = criteria.isEmpty()
-                ? Optional.empty() : Optional.of(Verdict.aggregate(verdicts(criteria)));
-        Optional<Verdict> lat = latency.isEmpty()
-                ? Optional.empty() : Optional.of(Verdict.aggregate(verdicts(latency)));
+        Optional<Verdict> rate = composite(criteria);
+        Optional<Verdict> lat = composite(latency);
+        Optional<EnforcementMode> functionalMode =
+                rate.map(v -> enforcement.mode(AssertionEnforcement.Dimension.FUNCTIONAL));
+        Optional<EnforcementMode> latencyMode =
+                lat.map(v -> enforcement.mode(AssertionEnforcement.Dimension.LATENCY));
+        List<Decided> bindingCriteria = binding(criteria, functionalMode);
+        List<Decided> bindingLatency = binding(latency, latencyMode);
         List<Verdict> dimensions = new ArrayList<>(2);
-        rate.ifPresent(dimensions::add);
-        lat.ifPresent(dimensions::add);
+        composite(bindingCriteria).ifPresent(dimensions::add);
+        composite(bindingLatency).ifPresent(dimensions::add);
         Verdict test = Verdict.aggregate(dimensions);
         List<Trigger> triggering = new ArrayList<>();
         if (test != Verdict.PASS) {
-            for (Decided d : criteria) {
+            for (Decided d : bindingCriteria) {
                 if (d.verdict() == test) {
                     triggering.add(new Trigger(Trigger.Kind.CRITERION, d.id()));
                 }
             }
-            for (Decided d : latency) {
+            for (Decided d : bindingLatency) {
                 if (d.verdict() == test) {
                     triggering.add(new Trigger(Trigger.Kind.LATENCY, d.id()));
                 }
             }
         }
-        return new VerdictComposition(rate, lat, test, triggering,
-                envelope(DecisionRule.Direction.COMPLIANCE, criteria, latency),
-                envelope(DecisionRule.Direction.REGRESSION, criteria, latency));
+        return new VerdictComposition(rate, lat, functionalMode, latencyMode, test, triggering,
+                envelope(DecisionRule.Direction.COMPLIANCE, bindingCriteria, bindingLatency),
+                envelope(DecisionRule.Direction.REGRESSION, bindingCriteria, bindingLatency));
+    }
+
+    /** Whether the functional dimension is present and enforced. */
+    public boolean functionalEnforced() {
+        return functionalMode.filter(m -> m == EnforcementMode.ENFORCED).isPresent();
+    }
+
+    /** Whether the latency dimension is present and enforced. */
+    public boolean latencyEnforced() {
+        return latencyMode.filter(m -> m == EnforcementMode.ENFORCED).isPresent();
+    }
+
+    /** The decisions of a dimension that binds; none of an advisory one. */
+    private static List<Decided> binding(List<Decided> decisions, Optional<EnforcementMode> mode) {
+        return mode.filter(m -> m == EnforcementMode.ENFORCED).isPresent() ? decisions : List.of();
+    }
+
+    private static Optional<Verdict> composite(List<Decided> decisions) {
+        return decisions.isEmpty()
+                ? Optional.empty()
+                : Optional.of(Verdict.aggregate(verdicts(decisions)));
     }
 
     /**

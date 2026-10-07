@@ -13,7 +13,7 @@ public final class Methodology {
      * conformance suite checks it against the version the mavai-R
      * fixtures declare.
      */
-    public static final String VERSION = "1.5.0";
+    public static final String VERSION = "1.6.0";
 
     private Methodology() {
     }

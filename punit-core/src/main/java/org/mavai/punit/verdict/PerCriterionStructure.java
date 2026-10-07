@@ -3,6 +3,7 @@ package org.mavai.punit.verdict;
 import java.util.List;
 import java.util.Objects;
 
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.Verdict;
 
 /**
@@ -16,24 +17,35 @@ import org.mavai.punit.api.spec.Verdict;
  * shape, different abstraction layer. The translation seam is
  * {@code VerdictAdapter}.
  *
- * <p>The composite has been the contract's verdict authority since
- * the step-4 cutover. {@link ProbabilisticTestVerdict#punitVerdict()}
- * and this {@link #composite()} carry the same value on every run
- * where this structure is populated; the structural redundancy is a
- * clarity feature — consumers reading the methodology-level
- * decomposition read {@code composite()}, consumers reading the
- * harness-level signal read {@code punitVerdict()}.
+ * <p>{@link ProbabilisticTestVerdict#punitVerdict()} is the test
+ * verdict, which composes this composite with the latency dimension's
+ * verdict over the enforced dimensions; the two agree only when the
+ * functional dimension alone binds.
+ *
+ * <p>The composite is the functional dimension's verdict {@code V_rate}.
+ * Its {@code mode} says whether it entered the test verdict: enforced,
+ * or advisory when the run made the functional dimension advisory, so
+ * that every row is still decided by its rule and the composite
+ * reported, but neither binds (Statistical Companion §12.6).
  *
  * @param criteria   per-criterion rows in contract declaration order
  * @param composite  the composite verdict over the rows
+ * @param mode       the functional dimension's mode
  */
 public record PerCriterionStructure(
         List<CriterionRow> criteria,
-        Verdict composite) {
+        Verdict composite,
+        EnforcementMode mode) {
 
     public PerCriterionStructure {
         Objects.requireNonNull(criteria, "criteria");
         Objects.requireNonNull(composite, "composite");
+        Objects.requireNonNull(mode, "mode");
         criteria = List.copyOf(criteria);
+    }
+
+    /** An enforced functional dimension: the default. */
+    public PerCriterionStructure(List<CriterionRow> criteria, Verdict composite) {
+        this(criteria, composite, EnforcementMode.ENFORCED);
     }
 }

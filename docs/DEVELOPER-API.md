@@ -392,7 +392,7 @@ empirical().<O>passRate().satisfies("...", ...);
 - **`empirical().passRate()`** — closest-match baseline lookup;
   decided at evaluation time against the resolved baseline's counts
   by Fisher's exact test, `regression/fisher` (Statistical Companion
-  1.5.0); a test larger than its baseline is refused
+  1.6.0); a test larger than its baseline is refused
   (`TEST_LARGER_THAN_BASELINE`). The baseline is
   supplied at the test call site via
   `PUnit.testing(baselineSupplier)` (see
@@ -712,8 +712,8 @@ punit serialises every Verdict to XML using the mavai.org family's
 feotest, mavai.org sentinels and dashboards all read and write this
 format):
 
-- **XSD schema:** punit writes verdict-1.7 records;
-  `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.7.xsd`
+- **XSD schema:** punit writes verdict-1.8 records;
+  `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.8.xsd`
   (earlier revisions are bundled beside it).
 - **Namespace:** `http://mavai.org/verdict/1.0`.
 - **Root element:** `<verdict-record>`.

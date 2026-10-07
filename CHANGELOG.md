@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
+**Every assertion is enforced unless the run makes its dimension
+advisory (methodology 1.6.0, Statistical Companion 1.6.0, conformant
+with the mavai-R v0.12.0 reference data).** Breaking for readers of
+verdict records: punit now writes verdict-1.8.
+
+### Added
+
+- **`punit.advisory` / `PUNIT_ADVISORY`** — a run-time setting naming
+  the dimensions that are advisory on this run: `functional`, `latency`,
+  or both as `functional,latency` (case-insensitive; the system
+  property wins over the environment variable). Unset, every
+  functional criterion and every latency constraint — explicit or
+  baseline-derived — is enforced, as before. An advisory dimension is
+  decided by its own rules on the same samples and reported with its
+  verdict, but never fails the test. An unknown value is a
+  configuration error raised when the test is built, before any sample
+  runs. There is no annotation or builder method for the setting; the
+  Gradle plugin forwards `-Dpunit.advisory` like every `punit.*`
+  property, and sentinel runs honour it too.
+- `AssertionEnforcement` and `EnforcementMode` in
+  `org.mavai.punit.api.spec`; `ProbabilisticTest.enforcement()` reports
+  the setting the test was built with.
+
+### Changed
+
+- **`VerdictComposition` composes the test verdict from the enforced
+  dimensions only**, PASS when none is enforced. It carries both
+  dimension verdicts whatever their mode, with `functionalMode()` and
+  `latencyMode()`; `compose` takes the run's `AssertionEnforcement`.
+  The triggering criteria and constraints and the two Type-I envelopes
+  leave advisory decisions out. `assertPasses()` never throws on an
+  advisory dimension; its failure message labels an advisory
+  criterion's verdict `(advisory)`, and a passing test whose advisory
+  dimension did not pass prints a `[PUNIT-ADVISORY]` line on stderr.
+  Configuration refusals (`TEST_LARGER_THAN_BASELINE`,
+  `COMPLIANCE_INFEASIBLE`) apply whatever the setting. A missing
+  baseline under an advisory dimension no longer skips the run, and an
+  advisory functional dimension never ends a run early while a latency
+  constraint still needs its samples.
+- **Verdict records are verdict-1.8** (`methodology-version="1.6.0"`):
+  `<per-criterion>/<composite>` and `<latency>` state their `mode`
+  (`enforced` or `advisory`); a latency evaluation states its rule's
+  outcome as `status` (`PASS`, `FAIL`, `INFEASIBLE`, `SATURATED`) and
+  carries no `mode`; `STRICT_FAIL` is now `FAIL`
+  (`LatencyEvaluation.Status.FAIL`); `<latency>` no longer carries
+  `strict-violations` or `advisory-violations`; `<verdict>/@value` is
+  composed from the enforced dimensions, and states a rule only when
+  one rule decided every enforced dimension. `verdict-1.8.xsd` is
+  bundled in `punit-report`; the reader still reads 1.7 records.
+  `LatencyDimension` and `PerCriterionStructure` carry the dimension's
+  mode.
+- The latency non-degeneracy gate follows the threshold source and the
+  intent only (`LatencyRules.decideNondegeneracy` loses its `enforced`
+  parameter), and the raw percentile comparison beside an explicit
+  ceiling is reported as `rawPercentilePass` (was
+  `advisoryPercentilePass`); it decides nothing.
+- The conformance suites run against mavai-R v0.12.0 (`mavaiRTag`),
+  including the verdict suite's cases for each advisory setting.
+- **The Gradle plugin resolves `org.mavai:mavai:0.23.0`** for
+  `punitReport`, which reads verdict-1.8 and shows an advisory
+  dimension beside the binding verdict, labelled advisory.
+
+### Removed
+
+- The user guide's `punit.latency.enforcement` /
+  `PUNIT_LATENCY_ENFORCEMENT` setting, which no code read; see
+  `punit.advisory`.
+
 ## [0.12.2] - 2026-10-01
 
 **The report renderer is mavai 0.22.0, which reads a verdict as decided by its rules.**

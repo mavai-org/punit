@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <verdict-record xmlns="http://mavai.org/verdict/1.0"
-                version="1.7"
-                methodology-version="1.5.0"
+                version="1.8"
+                methodology-version="1.6.0"
                 timestamp="2026-05-11T12:00:00Z"
                 generator="punit"
                 correlation-id="v:rp07-pass-1">
@@ -17,9 +17,7 @@
   <functional successes="95"
               failures="5"
               pass-rate="0.9500"/>
-  <latency successful-samples="95"
-           strict-violations="0"
-           advisory-violations="0">
+  <latency successful-samples="95">
     <observed>
       <percentile label="p50" value-ms="120"/>
       <percentile label="p90" value-ms="340"/>

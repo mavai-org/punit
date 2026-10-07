@@ -205,7 +205,7 @@ public final class VerdictTextRenderer {
             Map.entry("Confidence level:", "Probability that the CI method captures the true rate"),
             Map.entry("SE(p\u0302):", "Standard error of the observed proportion — measures sampling noise in p\u0302"),
             Map.entry("Wilson lower bound:", "One-sided Wilson lower bound on the true pass rate — descriptive; it decides nothing"),
-            Map.entry("Decision rule:", "The versioned rule that decided the verdict (Statistical Companion 1.5.0)"),
+            Map.entry("Decision rule:", "The versioned rule that decided the verdict (Statistical Companion 1.6.0)"),
             Map.entry("Size at p\u0302_b:", "The rule's false-alarm probability were the common rate the baseline's observed rate — a property of the procedure, not of this run"),
             Map.entry("Design power:", "Power at the design alternative rate with the baseline and the test both yet to be drawn"),
             Map.entry("Resolved power:", "Power at the design alternative rate of this test, whose cutoff the observed baseline fixed"),

@@ -27,10 +27,10 @@ final class ConformanceFixtures {
 
     /**
      * The oracle release whose fixtures this suite reads (methodology
-     * 1.5.0). Named in the missing-fixture diagnostic so the corrective
+     * 1.6.0). Named in the missing-fixture diagnostic so the corrective
      * action is obvious.
      */
-    static final String MINIMUM_RELEASE = "v0.11.1";
+    static final String MINIMUM_RELEASE = "v0.12.0";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 

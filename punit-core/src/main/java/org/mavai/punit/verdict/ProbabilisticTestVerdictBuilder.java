@@ -9,9 +9,12 @@ import java.util.UUID;
 
 import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.ThresholdOrigin;
+import org.mavai.punit.api.spec.AssertionEnforcement;
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.EvaluatedCriterion;
 import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.InconclusiveReasons;
+import org.mavai.punit.api.spec.PercentileLatency;
 import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.api.ServiceContractAttributes;
 import org.mavai.punit.verdict.TokenMode;
@@ -132,6 +135,7 @@ public class ProbabilisticTestVerdictBuilder {
     private TestDecision decision = TestDecision.NONE;
     private Optional<RegressionDisclosure> regression = Optional.empty();
     private Optional<Verdict> latencyVerdict = Optional.empty();
+    private Optional<EnforcementMode> latencyMode = Optional.empty();
     private List<LatencyEvaluation> latencyEvaluations = List.of();
 
     // ── Builder methods ───────────────────────────────────────────────────
@@ -394,13 +398,16 @@ public class ProbabilisticTestVerdictBuilder {
     }
 
     /**
-     * The latency dimension's verdict {@code V_latency} and the enforced
-     * constraints' evaluations; the verdict is empty when the test
-     * enforces no latency constraint.
+     * The latency dimension's verdict {@code V_latency}, its mode and the
+     * constraints' evaluations; the verdict and the mode are empty when
+     * the test asserts no latency constraint.
      */
     public ProbabilisticTestVerdictBuilder latencyEvaluations(
-            Optional<Verdict> latencyVerdict, List<LatencyEvaluation> evaluations) {
+            Optional<Verdict> latencyVerdict,
+            Optional<EnforcementMode> latencyMode,
+            List<LatencyEvaluation> evaluations) {
         this.latencyVerdict = java.util.Objects.requireNonNull(latencyVerdict, "latencyVerdict");
+        this.latencyMode = java.util.Objects.requireNonNull(latencyMode, "latencyMode");
         this.latencyEvaluations = List.copyOf(evaluations);
         return this;
     }
@@ -420,7 +427,7 @@ public class ProbabilisticTestVerdictBuilder {
         Optional<SpecProvenance> provenance = buildSpecProvenance();
         Termination termination = buildTermination();
         PUnitVerdict punitVerdict = derivePUnitVerdict(covariates);
-        String verdictReason = deriveVerdictReason(punitVerdict, covariates);
+        String verdictReason = verdictReason(punitVerdict, covariates);
         Map<String, String> environment = environmentWithSizingDisclosure();
 
         return new ProbabilisticTestVerdict(
@@ -503,6 +510,7 @@ public class ProbabilisticTestVerdictBuilder {
                 li.caveats() != null ? li.caveats() : List.of(),
                 "passing-samples",
                 latencyVerdict,
+                latencyMode,
                 latencyEvaluations
         ));
     }
@@ -689,12 +697,41 @@ public class ProbabilisticTestVerdictBuilder {
                 : PUnitVerdict.FAIL;
     }
 
-    private String deriveVerdictReason(PUnitVerdict punitVerdict, CovariateStatus covariates) {
+    private String verdictReason(PUnitVerdict punitVerdict, CovariateStatus covariates) {
         if (decision.refused()) {
             return "configuration refused: " + decision.configurationErrors().stream()
                     .map(Enum::name)
                     .collect(java.util.stream.Collectors.joining(" "));
         }
+        return deriveVerdictReason(punitVerdict, covariates) + advisoryNote();
+    }
+
+    /**
+     * "; latency advisory" (or functional, or both) when the run made a
+     * dimension the test carries advisory, so the reason never reads as
+     * though that dimension had bound the verdict.
+     */
+    private String advisoryNote() {
+        List<String> advisory = new java.util.ArrayList<>(2);
+        if (advisory(AssertionEnforcement.Dimension.FUNCTIONAL)) {
+            advisory.add("functional");
+        }
+        if (advisory(AssertionEnforcement.Dimension.LATENCY)) {
+            advisory.add("latency");
+        }
+        return advisory.isEmpty() ? "" : "; " + String.join(" and ", advisory) + " advisory";
+    }
+
+    /** Whether the test carries the dimension and the run made it advisory. */
+    private boolean advisory(AssertionEnforcement.Dimension dimension) {
+        Optional<EnforcementMode> mode =
+                dimension == AssertionEnforcement.Dimension.FUNCTIONAL
+                        ? perCriterion.map(PerCriterionStructure::mode)
+                        : latencyMode;
+        return mode.filter(m -> m == EnforcementMode.ADVISORY).isPresent();
+    }
+
+    private String deriveVerdictReason(PUnitVerdict punitVerdict, CovariateStatus covariates) {
         if (punitVerdict == PUnitVerdict.INCONCLUSIVE) {
             if (!covariates.aligned()) {
                 return InconclusiveReasons.COVARIATE_MISALIGNMENT;
@@ -735,16 +772,22 @@ public class ProbabilisticTestVerdictBuilder {
     }
 
     /**
-     * Scan the criterion results for the first INCONCLUSIVE-reason
-     * discriminant (per {@link InconclusiveReasons#DETAIL_KEY}). The
-     * "first" rule is fine: today's specs carry one criterion, and
-     * when multiple are added the first INCONCLUSIVE criterion is the
-     * one whose reason most narrowly describes the failure (subsequent
-     * criteria run only if earlier ones don't short-circuit).
+     * Scan the criterion results of the enforced dimensions for the first
+     * INCONCLUSIVE-reason discriminant (per
+     * {@link InconclusiveReasons#DETAIL_KEY}); an advisory dimension
+     * never explains the test verdict. The "first" rule is fine: today's
+     * specs carry one criterion, and when multiple are added the first
+     * INCONCLUSIVE criterion is the one whose reason most narrowly
+     * describes the failure (subsequent criteria run only if earlier ones
+     * don't short-circuit).
      */
     private Optional<String> inconclusiveReasonFromCriteria() {
         for (EvaluatedCriterion ec : criterionResults) {
-            if (ec.result().verdict() != Verdict.INCONCLUSIVE) {
+            if (ec.result().verdict() != Verdict.INCONCLUSIVE
+                    || advisory(PercentileLatency.NAME
+                            .equals(ec.result().criterionName())
+                            ? AssertionEnforcement.Dimension.LATENCY
+                            : AssertionEnforcement.Dimension.FUNCTIONAL)) {
                 continue;
             }
             Object marker = ec.result().detail().get(InconclusiveReasons.DETAIL_KEY);

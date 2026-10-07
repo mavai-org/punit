@@ -876,8 +876,11 @@ override what the fixture carries.
 The test verdict composes the functional dimension (the pass-rate
 criteria) and the latency dimension by one structural rule: FAIL if
 either fails, otherwise INCONCLUSIVE if either is inconclusive,
-otherwise PASS. The verdict names the criteria and latency constraints
-that decided a FAIL or an INCONCLUSIVE.
+otherwise PASS. Both dimensions are enforced unless the run makes one
+advisory ([Enforced and advisory assertions](#enforced-and-advisory-assertions)),
+and the test verdict composes the enforced ones only. The verdict
+names the criteria and latency constraints that decided a FAIL or an
+INCONCLUSIVE.
 
 A typical FAIL message:
 
@@ -898,6 +901,73 @@ The verdict carries everything a developer needs to triage: the
 criterion that failed, the count against the rule's cutoff, the
 decision rule and its alpha, the requirement and its provenance, the most-frequent postcondition
 failures with two example inputs each, and the contract reference.
+
+### Enforced and advisory assertions
+
+Every assertion a contract declares is **enforced** by default: the
+functional criteria and the latency constraints, whether a threshold
+is a stated requirement or derived from a baseline. A FAIL in either
+dimension fails the test.
+
+One run-time setting makes a dimension **advisory** instead:
+
+| System property  | Environment variable | Values |
+|------------------|----------------------|--------|
+| `punit.advisory` | `PUNIT_ADVISORY`     | `functional`, `latency`, or both as `functional,latency` |
+
+```bash
+./gradlew test -Dpunit.advisory=latency            # latency decided and reported, never failing the test
+PUNIT_ADVISORY=latency ./gradlew test              # the same, from the environment
+./gradlew test -Dpunit.advisory=functional,latency # neither dimension can fail the test
+```
+
+The system property wins over the environment variable. Values are
+case-insensitive and comma-separated; anything other than
+`functional` and `latency` is a configuration error that stops the
+test before any sample runs, never a value quietly ignored. Unset,
+every assertion is enforced. The Gradle plugin forwards
+`-Dpunit.advisory` to the test JVM like every other `punit.*`
+property, and a sentinel honours the same setting.
+
+**What advisory means.** An advisory dimension is still decided by
+its own rules, on the same samples and with the same checks, as it
+would be if enforced: a requirement by `compliance/exact-binomial`, a
+baseline by `regression/fisher`, a latency ceiling by
+`latency/compliance-exact-binomial`, a baseline-derived latency
+threshold by `latency/precedence`. Its verdict — PASS, FAIL or
+INCONCLUSIVE — is reported beside the test verdict and labelled
+advisory, in the verdict record, the report and the console. It never
+fails the test: the test verdict composes the enforced dimensions
+only, and with no enforced dimension it is PASS. An advisory decision
+is not one of the test's binding decisions, so it is left out of the
+error envelopes and never named as what decided a FAIL or an
+INCONCLUSIVE. A passing test whose advisory dimension did not pass
+says so on stderr (`[PUNIT-ADVISORY]`).
+
+The setting does not relax the configuration checks. A design no
+outcome could decide — `COMPLIANCE_INFEASIBLE`, `TEST_LARGER_THAN_BASELINE`
+— is refused whether its dimension is enforced or advisory; size the
+run instead. SMOKE intent is a different thing from advisory and is
+unaffected by it.
+
+**When to use it.** The usual case is a latency requirement written
+for production, run on a development machine significantly slower
+than production: the requirement refers to its target environment,
+and it is the developer's job to switch latency enforcement off where
+the machine cannot honour it — `-Dpunit.advisory=latency` locally,
+unset in CI and production. There is no per-test annotation or
+builder method for this: the declared assertions are the ones that
+count, and which of them bind on a given run is the operator's
+choice. punit has no notion of environment either; you know which
+environment you are in.
+
+**Environments and baselines.** Declaring no covariates states that
+the service's behaviour does not depend on the environment it runs
+in; if you believe it does, declare the covariate
+([Part 9](#part-9-covariates)). A baseline-derived threshold should
+consume the baseline for where the test runs — your own baseline file
+in development, a production baseline in production — chosen through
+the baseline directory (`punit.baseline.dir`).
 
 ### Early termination
 
@@ -960,7 +1030,7 @@ STATISTICAL ANALYSIS — test verdict: FAIL
 
   shopping-basket
 
-  Test verdict (methodology 1.5.0)
+  Test verdict (methodology 1.6.0)
       Functional:           PASS
       Latency:              FAIL
       Test:                 FAIL
@@ -1358,7 +1428,7 @@ reaches the exact binomial test's `y_min` at `p_j` — the evidence that
 more than a fraction `p_j` of latencies meet the ceiling. With too few
 latencies for any count to pass (59 for p95 at alpha 0.05), the
 constraint is INCONCLUSIVE. The raw comparison `Q(p_j) ≤ τ_j` is still
-shown, labelled advisory; it decides nothing. The overall latency
+shown as a raw figure; it decides nothing. The overall latency
 assertion passes when every constraint passes.
 Declare only the percentiles you care about — others are not asserted.
 Explicitly supplied durations must be monotonically non-decreasing
@@ -1398,13 +1468,17 @@ develops the construction; the implementation lives in
 ### Declared latency is enforced
 
 A latency constraint declared on the contract is enforced: its
-decision is part of the test verdict. Latency profiles are
+decision is part of the test verdict, whether its threshold is a
+stated requirement or baseline-derived. Latency profiles are
 environment-dependent — a baseline recorded on CI hardware may
-legitimately differ from a developer-laptop run — so measure the
-baseline on the hardware the test runs on, or leave latency
-undeclared where the environment is not controlled. The observed
-percentiles are reported for every run whether or not latency is
-declared.
+legitimately differ from a developer-laptop run — so a baseline-derived
+threshold should consume the baseline measured where the test runs.
+Where a machine cannot honour a requirement written for production,
+run with `-Dpunit.advisory=latency`: every constraint is still decided
+and reported, but none fails the test
+([Enforced and advisory assertions](#enforced-and-advisory-assertions)).
+The observed percentiles are reported for every run whether or not
+latency is declared.
 
 ---
 
@@ -1831,7 +1905,7 @@ the environment:
 
 ```kotlin
 punit {
-    mavaiVersion.set("0.22.0")      // the renderer to resolve; default: the version this plugin was built against
+    mavaiVersion.set("0.23.0")      // the renderer to resolve; default: the version this plugin was built against
 }
 
 tasks.named<org.mavai.punit.gradle.PUnitReportTask>("punitReport") {
@@ -1980,14 +2054,15 @@ to the published **mavai verdict schema**:
 
 - Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`
-- Schema: punit writes verdict-1.7 records; the `verdict-1.x.xsd`
+- Schema: punit writes verdict-1.8 records; the `verdict-1.x.xsd`
   revisions bundled in `punit-report` are vendored from the published
   mavai schema releases.
 
 The schema covers identity, verdict, criterion results with their
 versioned decision rules, the methodology version, the latency
-dimension's verdict and per-constraint evaluations, the
-configuration-error list of a refused test, postcondition
+dimension's verdict and per-constraint evaluations, whether each
+dimension was enforced or advisory, the configuration-error list of a
+refused test, postcondition
 standings, sample counts, latency percentiles, baseline expiration,
 environment metadata, contract reference, and correlation id. Because
 the format is versioned and schema-checked, tools downstream of your
@@ -2085,7 +2160,7 @@ Before a probabilistic test runs, the framework checks:
   existence of a precedence rank for the expected number of
   successful samples. These warn; they never refuse.
 
-The methodology version (1.5.0) and each decision rule's identity and
+The methodology version (1.6.0) and each decision rule's identity and
 version are written into every verdict record.
 
 ### Further reading
@@ -2095,7 +2170,7 @@ Mathematical foundations:
 
 Cross-language conformance: every mavai framework (punit, feotest,
 baseltest) reproduces the R-generated reference data (mavai-R
-v0.11.2) within stated tolerances, the exact-boundary cases
+v0.12.0) within stated tolerances, the exact-boundary cases
 included. The conformance machinery is documented in the
 `mavai-R` project README.
 
@@ -2116,7 +2191,7 @@ PUnit resolves configuration in this order (highest priority first):
 | Report directory        | `punit.report.dir`           | `PUNIT_REPORT_DIR`          | `build/reports/punit/xml/` (verdict XML; `punitReport` draws the page from it) |
 | Transparent stats       | `punit.stats.transparent`    | `PUNIT_STATS_TRANSPARENT`   | `false`                                            |
 | Confidence level        | `punit.confidence`           | `PUNIT_CONFIDENCE`          | `0.95`                                             |
-| Latency enforcement     | `punit.latency.enforcement`  | `PUNIT_LATENCY_ENFORCEMENT` | `advisory`                                         |
+| Advisory dimensions     | `punit.advisory`             | `PUNIT_ADVISORY`            | unset: every assertion enforced; `functional`, `latency` or `functional,latency` |
 | Default samples         | `punit.samples`              | `PUNIT_SAMPLES`             | builder-supplied; no global default                |
 
 Gradle plugin configuration in the `punit { }` extension block
