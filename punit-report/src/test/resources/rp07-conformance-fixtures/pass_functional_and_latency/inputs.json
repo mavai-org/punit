@@ -6,7 +6,7 @@
   },
   "criteria": [
     { "kind": "PassRate",          "threshold": 0.9, "origin": "SLA" },
-    { "kind": "PercentileLatency", "spec": { "p95_ms": 500 }, "origin": "SLA", "mode": "strict" }
+    { "kind": "PercentileLatency", "spec": { "p95_ms": 500 }, "origin": "SLA" }
   ],
   "factors": {},
   "covariates": {

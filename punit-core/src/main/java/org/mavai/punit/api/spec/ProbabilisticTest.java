@@ -121,6 +121,14 @@ public final class ProbabilisticTest implements Spec {
      */
     public TestIntent intent() { return internal.intent; }
 
+    /**
+     * Which of the test's assertions bind on this run: the run-time
+     * setting {@link AssertionEnforcement#PROPERTY}, resolved when the
+     * test was built. Every assertion is enforced unless it names the
+     * dimension advisory.
+     */
+    public AssertionEnforcement enforcement() { return internal.enforcement; }
+
     @Override
     public <R> R dispatch(Dispatcher<R> dispatcher) {
         return doDispatch(internal, dispatcher);
@@ -139,15 +147,17 @@ public final class ProbabilisticTest implements Spec {
         private final List<Registered<OT>> registered;
         private final TestIntent intent;
         private final boolean earlyTerminationDisabled;
+        private final AssertionEnforcement enforcement;
 
         private SampleSummary<OT> summary;
 
-        private Internal(Builder<FT, IT, OT> b) {
+        private Internal(Builder<FT, IT, OT> b, AssertionEnforcement enforcement) {
             this.sampling = b.sampling;
             this.factors = b.factors;
             this.registered = List.copyOf(b.registered);
             this.intent = b.intent;
             this.earlyTerminationDisabled = b.earlyTerminationDisabled;
+            this.enforcement = enforcement;
         }
 
         @Override public Function<FT, ServiceContract<FT, IT, OT>> serviceContractFactory() {
@@ -247,7 +257,7 @@ public final class ProbabilisticTest implements Spec {
             PerCriterionEvaluation perCriterionEvaluation =
                     PerCriterionVerdicts.derive(functional, functionalCounts);
             Optional<VerdictComposition> composition =
-                    composeVerdict(functional, latency, perCriterionEvaluation);
+                    composeVerdict(functional, latency, perCriterionEvaluation, enforcement);
             Verdict authoritative = composition.map(VerdictComposition::testVerdict)
                     .orElse(Verdict.PASS);
             // Fail-on-expired policy: an expired baseline always carries
@@ -293,17 +303,19 @@ public final class ProbabilisticTest implements Spec {
 
         /**
          * The test verdict {@code V_test} (Statistical Companion
-         * §12.3.2): the functional criteria — one decision per
+         * §12.3.2, §12.6): the functional criteria — one decision per
          * methodology criterion where the pass-rate evaluation judged
          * them, else the evaluation's own verdict (a gate that fired
-         * before any rule, such as a missing baseline) — and the enforced
-         * latency constraints, composed by the structural rule. Only
-         * REQUIRED criteria enter; empty when none is registered.
+         * before any rule, such as a missing baseline) — and the latency
+         * constraints, composed by the structural rule over the
+         * dimensions the run enforces. Only REQUIRED criteria enter;
+         * empty when none is registered.
          */
         private static Optional<VerdictComposition> composeVerdict(
                 List<EvaluatedCriterion> functional,
                 List<EvaluatedCriterion> latency,
-                PerCriterionEvaluation perCriterion) {
+                PerCriterionEvaluation perCriterion,
+                AssertionEnforcement enforcement) {
             List<VerdictComposition.Decided> criteria = new ArrayList<>();
             for (EvaluatedCriterion ec : functional) {
                 if (ec.role() != CriterionRole.REQUIRED) {
@@ -344,7 +356,7 @@ public final class ProbabilisticTest implements Spec {
             if (criteria.isEmpty() && constraints.isEmpty()) {
                 return Optional.empty();
             }
-            return Optional.of(VerdictComposition.compose(criteria, constraints));
+            return Optional.of(VerdictComposition.compose(criteria, constraints, enforcement));
         }
 
         /**
@@ -557,11 +569,20 @@ public final class ProbabilisticTest implements Spec {
                 return Optional.empty();
             }
             // A required latency constraint is decided after the run on the
-            // successful latencies the run produced; a pass-rate guarantee
-            // must not end the run before that decision has its samples.
-            boolean successStopAllowed = registered.stream().noneMatch(e ->
+            // successful latencies the run produced, enforced or advisory;
+            // a pass-rate guarantee must not end the run before that
+            // decision has its samples.
+            boolean latencyDeclared = registered.stream().anyMatch(e ->
                     e.role() == CriterionRole.REQUIRED
                             && e.criterion() instanceof PercentileLatency);
+            // An advisory functional dimension decides nothing the test
+            // verdict depends on, so neither its guaranteed success nor
+            // its inevitable failure may cut short the latency samples.
+            if (latencyDeclared && enforcement.mode(AssertionEnforcement.Dimension.FUNCTIONAL)
+                    == EnforcementMode.ADVISORY) {
+                return Optional.empty();
+            }
+            boolean successStopAllowed = !latencyDeclared;
             for (Registered<OT> entry : registered) {
                 if (entry.role() != CriterionRole.REQUIRED) {
                     continue;
@@ -648,9 +669,18 @@ public final class ProbabilisticTest implements Spec {
             return this;
         }
 
+        /**
+         * Builds the test. The run-time enforcement setting
+         * ({@link AssertionEnforcement#fromEnvironment()}) is resolved
+         * here, so a misconfigured value fails before any sample runs.
+         *
+         * @throws IllegalArgumentException if {@link AssertionEnforcement#PROPERTY}
+         *         names anything but {@code functional} and {@code latency}
+         */
         public ProbabilisticTest build() {
+            AssertionEnforcement enforcement = AssertionEnforcement.fromEnvironment();
             autoInjectFromContract(sampling, factors, registered);
-            return new ProbabilisticTest(new Internal<>(this));
+            return new ProbabilisticTest(new Internal<>(this, enforcement));
         }
     }
 

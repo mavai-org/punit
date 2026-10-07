@@ -96,6 +96,25 @@ class EarlyTerminationIntegrationTest {
         }
     }
 
+    /**
+     * Passes every other sample against a 0.95 requirement, with a
+     * latency ceiling no sample can breach.
+     */
+    private static class AlternatingWithLatency implements ServiceContract<Factors, Integer, Boolean> {
+        private int seen = 0;
+        @Override public Criteria<Boolean> criteria() {
+            return meeting().passRate(0.95);
+        }
+        @Override public org.mavai.punit.api.criterion.LatencyCriterion latency() {
+            return meeting().atMost(org.mavai.punit.api.PercentileKey.P50, java.time.Duration.ofSeconds(10));
+        }
+        @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+            return ++seen % 2 == 0
+                    ? Outcome.fail("contract_violation", "scripted failure")
+                    : Outcome.ok(Boolean.TRUE);
+        }
+    }
+
     private static Sampling<Factors, Integer, Boolean> sampling(
             java.util.function.Function<Factors, ServiceContract<Factors, Integer, Boolean>> factory,
             int samples) {
@@ -124,6 +143,43 @@ class EarlyTerminationIntegrationTest {
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.IMPOSSIBILITY);
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+    }
+
+    @Test
+    @DisplayName("failure-inevitable with a latency ceiling: the run stops early, the test fails either way")
+    void failureInevitableWithLatencyStops() {
+        ProbabilisticTest spec = ProbabilisticTest
+                .testing(sampling(f -> new AlternatingWithLatency(), 100), new Factors())
+                .build();
+
+        var result = (ProbabilisticTestResult) new Engine().run(spec);
+
+        assertThat(result.engineSummary().terminationReason())
+                .isEqualTo(TerminationReason.IMPOSSIBILITY);
+        assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+    }
+
+    @Test
+    @DisplayName("functional advisory: an inevitable functional failure does not cut short the latency samples")
+    void functionalAdvisoryRunsEverySample() {
+        System.setProperty(org.mavai.punit.api.spec.AssertionEnforcement.PROPERTY, "functional");
+        ProbabilisticTest spec;
+        try {
+            spec = ProbabilisticTest
+                    .testing(sampling(f -> new AlternatingWithLatency(), 100), new Factors())
+                    .build();
+        } finally {
+            System.clearProperty(org.mavai.punit.api.spec.AssertionEnforcement.PROPERTY);
+        }
+
+        var result = (ProbabilisticTestResult) new Engine().run(spec);
+
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(100);
+        assertThat(result.engineSummary().terminationReason()).isEqualTo(TerminationReason.COMPLETED);
+        var composition = result.composition().orElseThrow();
+        assertThat(composition.rateVerdict()).contains(Verdict.FAIL);
+        assertThat(composition.latencyVerdict()).contains(Verdict.PASS);
+        assertThat(result.verdict()).isEqualTo(Verdict.PASS);
     }
 
     @Test

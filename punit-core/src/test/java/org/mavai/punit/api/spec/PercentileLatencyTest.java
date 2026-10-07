@@ -181,8 +181,8 @@ class PercentileLatencyTest {
     }
 
     @Test
-    @DisplayName("meeting() passes the advisory comparison but fails the rule when compliance is not demonstrated")
-    void contractualRawComparisonIsAdvisoryOnly() {
+    @DisplayName("meeting() passes the raw comparison but fails the rule when compliance is not demonstrated")
+    void contractualRawComparisonDecidesNothing() {
         LatencySpec spec = LatencySpec.builder().p95Millis(500).build();
         PercentileLatency<String> criterion = PercentileLatency.meeting(spec, ThresholdOrigin.SLA);
 
@@ -191,7 +191,7 @@ class PercentileLatencyTest {
                 ctx(latencies(concat(repeat(96, 400), repeat(4, 700))), Optional.empty()));
 
         assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
-        assertThat(result.detail()).containsEntry("advisoryPercentilePass.p95", true);
+        assertThat(result.detail()).containsEntry("rawPercentilePass.p95", true);
         assertThat(result.detail()).containsEntry("requiredWithin.p95", 99);
     }
 

@@ -20,12 +20,13 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * interchange format.
  *
  * <p>The output conforms to the {@code http://mavai.org/verdict/1.0}
- * namespace and the {@code verdict-1.7.xsd} schema bundled with this
+ * namespace and the {@code verdict-1.8.xsd} schema bundled with this
  * module: every record states the methodology whose decision rules
  * produced it, the versioned rule on every criterion row and latency
- * evaluation, the latency dimension's verdict, and — for a configuration
- * refused before any sample ran — the configuration errors in place of a
- * verdict value (Statistical Companion 1.5.0).
+ * evaluation, each dimension's verdict and whether it was enforced or
+ * advisory, the test verdict over the enforced dimensions only, and —
+ * for a configuration refused before any sample ran — the configuration
+ * errors in place of a verdict value (Statistical Companion 1.6.0).
  *
  * <p>PUnit-specific extensions not in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID, JUnit pass
@@ -41,7 +42,7 @@ public final class VerdictXmlWriter {
      * standard namespace.
      */
     static final String NAMESPACE = "http://mavai.org/verdict/1.0";
-    static final String VERSION = "1.7";
+    static final String VERSION = "1.8";
 
     private static final XMLOutputFactory OUTPUT_FACTORY = XMLOutputFactory.newFactory();
 
@@ -210,6 +211,7 @@ public final class VerdictXmlWriter {
         }
         w.writeStartElement("composite");
         w.writeAttribute("value", pc.composite().name());
+        w.writeAttribute("mode", pc.mode().label());
         w.writeEndElement();
         w.writeEndElement();
     }
@@ -252,15 +254,9 @@ public final class VerdictXmlWriter {
         }
         w.writeStartElement("latency");
         w.writeAttribute("successful-samples", Integer.toString(lat.successfulSamples()));
-        long strictViolations = lat.evaluations().stream()
-                .filter(e -> e.status() == LatencyEvaluation.Status.STRICT_FAIL)
-                .count();
-        w.writeAttribute("strict-violations", Long.toString(strictViolations));
-        // punit enforces every declared latency constraint; it has no
-        // advisory mode, so no advisory evaluation is ever recorded.
-        w.writeAttribute("advisory-violations", "0");
         if (lat.verdict().isPresent()) {
             w.writeAttribute("verdict", lat.verdict().get().name());
+            w.writeAttribute("mode", lat.mode().orElseThrow().label());
         }
 
         // Observed percentiles
@@ -283,9 +279,11 @@ public final class VerdictXmlWriter {
     }
 
     /**
-     * One enforced latency constraint. A saturated baseline-derived
-     * constraint carries no threshold and no baseline rank: there is no
-     * threshold, and none is manufactured.
+     * One latency constraint, with its rule's outcome; whether that
+     * outcome binds is the latency dimension's mode, never the
+     * evaluation's. A saturated baseline-derived constraint carries no
+     * threshold and no baseline rank: there is no threshold, and none is
+     * manufactured.
      */
     private void writeEvaluation(XMLStreamWriter w, LatencyEvaluation e) throws XMLStreamException {
         w.writeStartElement("evaluation");
@@ -297,7 +295,6 @@ public final class VerdictXmlWriter {
             w.writeAttribute("threshold-ms", Long.toString(e.thresholdMs().getAsLong()));
         }
         w.writeAttribute("provenance", e.provenance().label());
-        w.writeAttribute("mode", "strict");
         w.writeAttribute("status", e.status().name());
         if (e.baselineConfidence().isPresent()) {
             w.writeAttribute("baseline-confidence", formatDouble(e.baselineConfidence().getAsDouble()));

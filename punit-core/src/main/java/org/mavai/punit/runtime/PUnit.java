@@ -22,6 +22,7 @@ import org.mavai.punit.api.FactorBundle;
 import org.mavai.punit.api.NoFactors;
 import org.mavai.punit.api.Sampling;
 import org.mavai.punit.api.ServiceContract;
+import org.mavai.punit.api.spec.AssertionEnforcement;
 import org.mavai.punit.api.spec.BaselineLookup;
 import org.mavai.punit.api.spec.BaselineProvider;
 import org.mavai.punit.api.spec.BaselineStatistics;
@@ -31,6 +32,7 @@ import org.mavai.punit.api.spec.CriterionRole;
 import org.mavai.punit.api.spec.EmpiricalChecks;
 import org.mavai.punit.api.spec.EngineResult;
 import org.mavai.punit.api.spec.EngineRunSummary;
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.EvaluatedCriterion;
 import org.mavai.punit.api.spec.Experiment;
 import org.mavai.punit.api.spec.FactorsStepper;
@@ -39,6 +41,7 @@ import org.mavai.punit.api.spec.FailureExemplar;
 import org.mavai.punit.api.spec.MeasuredBaseline;
 import org.mavai.punit.api.spec.NormativeJudgement;
 import org.mavai.punit.api.spec.PerCriterionEvaluation;
+import org.mavai.punit.api.spec.PercentileLatency;
 import org.mavai.punit.api.spec.ProbabilisticTest;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Scorer;
@@ -490,6 +493,7 @@ public final class PUnit {
         }
         Verdict verdict = result.verdict();
         if (verdict == Verdict.PASS) {
+            emitAdvisoryDiagnostics(result, serviceContractId);
             return;
         }
         String message = formatMessage(result);
@@ -532,6 +536,33 @@ public final class PUnit {
         throw new AssertionFailedError(message);
     }
 
+    /**
+     * A passing test whose advisory dimension did not pass says so on
+     * stderr: the dimension was decided and its verdict is in the record,
+     * but it does not fail the test, so nothing else would surface it on
+     * the build console.
+     */
+    private static void emitAdvisoryDiagnostics(ProbabilisticTestResult result, String serviceContractId) {
+        result.composition().ifPresent(c -> {
+            List<String> notes = new ArrayList<>(2);
+            if (c.functionalMode().filter(m -> m == EnforcementMode.ADVISORY).isPresent()
+                    && c.rateVerdict().filter(v -> v != Verdict.PASS).isPresent()) {
+                notes.add("functional " + c.rateVerdict().get());
+            }
+            if (c.latencyMode().filter(m -> m == EnforcementMode.ADVISORY).isPresent()
+                    && c.latencyVerdict().filter(v -> v != Verdict.PASS).isPresent()) {
+                notes.add("latency " + c.latencyVerdict().get());
+            }
+            if (!notes.isEmpty()) {
+                String header = serviceContractId == null || serviceContractId.isBlank()
+                        ? "[PUNIT-ADVISORY]"
+                        : "[PUNIT-ADVISORY] " + serviceContractId;
+                System.err.println(header + ": " + String.join(", ", notes)
+                        + " (advisory; does not fail the test)");
+            }
+        });
+    }
+
     private static void emitInconclusiveDiagnostics(
             ProbabilisticTestResult result, String serviceContractId, String message) {
         String header = serviceContractId == null || serviceContractId.isBlank()
@@ -551,6 +582,25 @@ public final class PUnit {
     }
 
     // Package-private for direct unit testing; not part of the public API.
+    /** Whether the run makes the criterion's dimension advisory. */
+    private static boolean inAdvisoryDimension(AssertionEnforcement enforcement, Criterion<?, ?> c) {
+        return enforcement.mode(c instanceof PercentileLatency<?>
+                ? AssertionEnforcement.Dimension.LATENCY
+                : AssertionEnforcement.Dimension.FUNCTIONAL) == EnforcementMode.ADVISORY;
+    }
+
+    /**
+     * Whether the criterion belongs to a dimension the run made
+     * advisory: its verdict is listed for context, never as the cause.
+     */
+    private static boolean advisory(ProbabilisticTestResult result, CriterionResult cr) {
+        return result.composition()
+                .flatMap(c -> PercentileLatency.NAME.equals(cr.criterionName())
+                        ? c.latencyMode() : c.functionalMode())
+                .filter(m -> m == EnforcementMode.ADVISORY)
+                .isPresent();
+    }
+
     static String formatMessage(ProbabilisticTestResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append(result.verdict());
@@ -561,7 +611,8 @@ public final class PUnit {
                 CriterionResult cr = entry.result();
                 sb.append("  [").append(entry.role()).append("] ")
                         .append(cr.criterionName()).append(" → ")
-                        .append(cr.verdict()).append(": ")
+                        .append(cr.verdict())
+                        .append(advisory(result, cr) ? " (advisory)" : "").append(": ")
                         .append(cr.explanation()).append('\n');
             }
         }
@@ -1051,7 +1102,7 @@ public final class PUnit {
             // pipeline the post-sampling path uses; the operator-visible
             // diagnostic is byte-equivalent modulo samplesExecuted = 0.
             Optional<ProbabilisticTestResult> shortCircuit =
-                    baselineExistencePreflight(serviceContract, observed, provider);
+                    baselineExistencePreflight(serviceContract, observed, provider, spec.enforcement());
             if (shortCircuit.isPresent()) {
                 ProbabilisticTestResult synthesised = shortCircuit.get();
                 maybeRenderTransparentStats(synthesised);
@@ -1120,14 +1171,18 @@ public final class PUnit {
         private Optional<ProbabilisticTestResult> baselineExistencePreflight(
                 ServiceContract<FT, IT, OT> serviceContract,
                 CovariateProfile observed,
-                BaselineProvider provider) {
+                BaselineProvider provider,
+                AssertionEnforcement enforcement) {
             String serviceContractId = serviceContract.id();
             FactorBundle bundle = FactorBundle.of(factors);
             List<Covariate> declarations = serviceContract.covariates();
             List<EvaluatedCriterion> noBaselineResults = new ArrayList<>();
             List<String> notes = new ArrayList<>();
             for (Criterion<OT, ?> c : requiredCriteria) {
-                if (!c.isEmpirical()) {
+                // A missing baseline under an advisory dimension decides
+                // nothing the test verdict depends on: the run goes ahead
+                // and the criterion reports its INCONCLUSIVE as advisory.
+                if (!c.isEmpirical() || inAdvisoryDimension(enforcement, c)) {
                     continue;
                 }
                 BaselineLookup<?> lookup = probeBaseline(
@@ -1258,7 +1313,7 @@ public final class PUnit {
             // Existence probe runs before sampling: see TestBuilder.assertPasses
             // for the rationale.
             Optional<ProbabilisticTestResult> shortCircuit =
-                    baselineExistencePreflight(ctx);
+                    baselineExistencePreflight(ctx, spec.enforcement());
             if (shortCircuit.isPresent()) {
                 ProbabilisticTestResult synthesised = shortCircuit.get();
                 maybeRenderTransparentStats(ctx, synthesised);
@@ -1344,14 +1399,14 @@ public final class PUnit {
 
         @SuppressWarnings("unchecked")
         private Optional<ProbabilisticTestResult> baselineExistencePreflight(
-                SpecContext ctx) {
+                SpecContext ctx, AssertionEnforcement enforcement) {
             // The preflight short-circuit is an optimisation: when the
             // baseline is missing, skip sampling because the verdict is
             // structurally INCONCLUSIVE. When the author omitted
             // .criterion(...) (auto-injection path), skip the preflight
             // — the engine's evaluation will produce INCONCLUSIVE
             // naturally if the baseline is missing.
-            if (criterion == null) {
+            if (criterion == null || inAdvisoryDimension(enforcement, criterion)) {
                 return Optional.empty();
             }
             Criterion<Object, ?> c = (Criterion<Object, ?>) criterion;

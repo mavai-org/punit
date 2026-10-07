@@ -4,11 +4,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import org.mavai.punit.api.covariate.CovariateAlignment;
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.api.spec.CriterionResult;
 import org.mavai.punit.api.spec.CriterionSampleCounts;
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.EvaluatedCriterion;
 import org.mavai.punit.api.spec.FailureCount;
 import org.mavai.punit.api.spec.FailureExemplar;
@@ -40,7 +42,7 @@ import org.mavai.punit.statistics.Methodology;
  * criterion — hypotheses, the versioned decision rule and its alpha, the
  * observed data, the integer decision artefact, the calibration statement
  * naming its random experiment, and what the design can detect; then one
- * block per enforced latency constraint. A configuration refused before
+ * block per latency constraint. A configuration refused before
  * any sample ran renders its configuration errors instead.
  *
  * <p>Output is plain text — readable in IDE test consoles,
@@ -111,11 +113,21 @@ public final class TransparentStatsRenderer {
      * The test verdict's header: the two dimensions, what decided a FAIL
      * or an INCONCLUSIVE, and the union-bound envelopes by direction.
      */
+    /** " (advisory; does not fail the test)" for an advisory dimension, else nothing. */
+    private static String modeSuffix(Optional<EnforcementMode> mode) {
+        return mode.filter(m -> m == EnforcementMode.ADVISORY).isPresent()
+                ? " (advisory; does not fail the test)" : "";
+    }
+
     private static void renderComposition(StringBuilder sb, VerdictComposition c) {
         sb.append("  Test verdict (methodology ").append(Methodology.VERSION).append(")\n");
-        c.rateVerdict().ifPresent(v -> sb.append(label("Functional:", v.name())));
-        c.latencyVerdict().ifPresent(v -> sb.append(label("Latency:", v.name())));
-        sb.append(label("Test:", c.testVerdict().name()));
+        c.rateVerdict().ifPresent(v -> sb.append(label("Functional:",
+                v.name() + modeSuffix(c.functionalMode()))));
+        c.latencyVerdict().ifPresent(v -> sb.append(label("Latency:",
+                v.name() + modeSuffix(c.latencyMode()))));
+        sb.append(label("Test:", c.testVerdict().name()
+                + (c.functionalEnforced() || c.latencyEnforced()
+                        ? "" : " (no dimension enforced)")));
         if (!c.triggering().isEmpty()) {
             sb.append(label("Decided by:", c.triggering().stream()
                     .map(t -> (t.kind() == VerdictComposition.Trigger.Kind.LATENCY
@@ -252,7 +264,7 @@ public final class TransparentStatsRenderer {
         }
     }
 
-    /** One block per enforced latency constraint. */
+    /** One block per latency constraint. */
     private static void renderLatency(StringBuilder sb, Map<String, Object> d) {
         sb.append(label("Successful:", d.get("successfulSamples") + " latencies"));
         for (PercentileKey key : PercentileKey.values()) {
@@ -270,7 +282,7 @@ public final class TransparentStatsRenderer {
                         : "no count of this size can pass"));
                 if (d.containsKey("observed." + k)) {
                     sb.append(label("Raw percentile:", d.get("observed." + k)
-                            + " ms (advisory; decides nothing)"));
+                            + " ms (raw comparison; decides nothing)"));
                 }
             } else if (Boolean.TRUE.equals(d.get("saturated." + k))) {
                 sb.append(label("Threshold:", "none — saturated: no baseline rank achieves alpha"));

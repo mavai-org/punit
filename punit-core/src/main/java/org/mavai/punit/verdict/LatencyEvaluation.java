@@ -8,8 +8,9 @@ import java.util.OptionalLong;
 import org.mavai.punit.statistics.DecisionRule;
 
 /**
- * One enforced latency constraint as the verdict records it
- * (Statistical Companion §12.3, §12.4; verdict-1.7 {@code <evaluation>}).
+ * One latency constraint as the verdict records it, decided by its rule
+ * whether the latency dimension is enforced or advisory (Statistical
+ * Companion §12.3, §12.4, §12.6; verdict-1.8 {@code <evaluation>}).
  *
  * @param percentile         the percentile label ({@code p50}, {@code p90},
  *                           {@code p95}, {@code p99})
@@ -18,7 +19,7 @@ import org.mavai.punit.statistics.DecisionRule;
  * @param thresholdMs        the explicit ceiling or the derived threshold;
  *                           empty when {@link Status#SATURATED}
  * @param provenance         where the threshold comes from
- * @param status             the evaluation's outcome
+ * @param status             the deciding rule's outcome
  * @param baselineConfidence the confidence a baseline-derived threshold is
  *                           derived at
  * @param baselineRank       the precedence rank; empty when saturated or explicit
@@ -61,12 +62,12 @@ public record LatencyEvaluation(
         }
     }
 
-    /** The outcome of an enforced constraint. */
+    /** The deciding rule's outcome. */
     public enum Status {
         /** Decided and passed. */
         PASS,
-        /** Decided and failed: the test fails. */
-        STRICT_FAIL,
+        /** Decided and failed: the test fails when the latency dimension is enforced. */
+        FAIL,
         /** Too few successful latencies to decide: inconclusive. */
         INFEASIBLE,
         /** No baseline rank achieves alpha: no threshold, inconclusive. */

@@ -25,7 +25,7 @@ import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
  * A percentile-latency criterion: one latency constraint per asserted
- * percentile, each enforced and decided after the run on the
+ * percentile, each decided after the run on the
  * <em>successful</em> latencies — those of the samples that passed every
  * functional criterion (Statistical Companion §12.2.1).
  *
@@ -37,7 +37,8 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  *       count of latencies at or below the ceiling reaches {@code y_min};
  *       INCONCLUSIVE when too few latencies arrived for any count to
  *       pass. The raw comparison of the observed percentile with the
- *       ceiling is reported beside it, as an advisory figure;</li>
+ *       ceiling is reported beside it, as a raw figure that decides
+ *       nothing;</li>
  *   <li>a <b>baseline-derived</b> threshold ({@link #empirical}) by
  *       {@code latency/precedence} (§12.4.2): the threshold is the
  *       baseline latency at the smallest rank an undegraded service would
@@ -371,7 +372,7 @@ public final class PercentileLatency<OT> implements Criterion<OT, LatencyStatist
         c.falseCompliance().ifPresent(f -> detail.put("falseCompliance." + k, f));
         c.clopperPearsonLower().ifPresent(lb -> detail.put("clopperPearsonLower." + k, lb));
         c.observedPercentileMs().ifPresent(o -> detail.put("observed." + k, (long) Math.floor(o)));
-        c.advisoryPercentilePass().ifPresent(pass -> detail.put("advisoryPercentilePass." + k, pass));
+        c.rawPercentilePass().ifPresent(pass -> detail.put("rawPercentilePass." + k, pass));
         Verdict v = verdictOf(c.verdict());
         if (v == Verdict.FAIL) {
             c.observedPercentileMs().ifPresent(o -> detail.put("breach." + k, (long) Math.floor(o)));
@@ -387,7 +388,7 @@ public final class PercentileLatency<OT> implements Criterion<OT, LatencyStatist
         detail.put("decisionRule." + k, DecisionRule.LATENCY_PRECEDENCE.id());
         int n = latencies.length;
         LatencyRules.NondegeneracyDecision nd = LatencyRules.decideNondegeneracy(
-                key.value(), n, underVerification, true, LatencyRules.ThresholdSource.BASELINE_DERIVED);
+                key.value(), n, underVerification, LatencyRules.ThresholdSource.BASELINE_DERIVED);
         if (nd.outcome() == LatencyRules.NondegeneracyOutcome.INDICATIVE) {
             detail.put("indicative." + k, true);
         }

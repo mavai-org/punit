@@ -15,6 +15,8 @@ import org.mavai.punit.api.spec.CriterionResult;
 import org.mavai.punit.api.spec.LatencyStatistics;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.api.spec.AssertionEnforcement;
+import org.mavai.punit.api.spec.EnforcementMode;
 import org.mavai.punit.api.spec.VerdictComposition;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.statistics.BinomialProportionEstimator;
@@ -394,7 +396,6 @@ final class ConformanceCatalog {
                     var d = LatencyRules.decideNondegeneracy(in.get("percentile").asDouble(),
                             in.get("test_samples").asInt(),
                             "VERIFICATION".equals(in.get("intent").asText()),
-                            in.get("enforced").asBoolean(),
                             "explicit".equals(in.get("threshold_source").asText())
                                     ? LatencyRules.ThresholdSource.EXPLICIT
                                     : LatencyRules.ThresholdSource.BASELINE_DERIVED);
@@ -495,7 +496,7 @@ final class ConformanceCatalog {
             assertOracle(recorder, s, c, "false_compliance", d.get("falseCompliance." + k), tol);
             assertOracle(recorder, s, c, "clopper_pearson_lower", d.get("clopperPearsonLower." + k), tol);
             assertOracle(recorder, s, c, "observed_percentile_ms", d.get("observed." + k), tol);
-            assertOracle(recorder, s, c, "advisory_percentile_pass", d.get("advisoryPercentilePass." + k));
+            assertOracle(recorder, s, c, "raw_percentile_pass", d.get("rawPercentilePass." + k));
         });
     }
 
@@ -596,12 +597,11 @@ final class ConformanceCatalog {
     }
 
     /**
-     * {@code V_test}: the functional criterion through the engine, the
-     * enforced latency constraints through the criterion's evaluation,
-     * composed by the rule the engine composes with. punit has no
-     * advisory latency mode; an advisory constraint is judged by the
-     * statistics package's raw comparison, which is what an advisory
-     * constraint is.
+     * {@code V_test}: the functional criterion through the engine, every
+     * latency constraint through the criterion's evaluation, composed by
+     * the rule the engine composes with over the dimensions the case's
+     * {@code advisory} setting leaves enforced. An advisory dimension is
+     * decided exactly as an enforced one.
      */
     private static void testVerdict(ConformanceRecorder recorder, JsonNode c, double tol) {
         String s = "verdict";
@@ -621,66 +621,48 @@ final class ConformanceCatalog {
                     OptionalDouble.of(((Number) d.get("alpha")).doubleValue())));
             criteriaRows.add(Map.of("criterion_id", row.criterionId(), "verdict", row.verdict().name()));
         }
-        List<VerdictComposition.Decided> enforced = new ArrayList<>();
+        List<VerdictComposition.Decided> constraints = new ArrayList<>();
         List<Map<String, Object>> constraintRows = new ArrayList<>();
         for (JsonNode constraint : in.get("latency_constraints")) {
             String id = constraint.get("constraint_id").asText();
             double p = constraint.get("percentile").asDouble();
             double alpha = constraint.get("alpha").asDouble();
             boolean explicit = "explicit".equals(constraint.get("source").asText());
-            boolean isEnforced = "enforced".equals(constraint.get("mode").asText());
             double[] latencies = ConformanceFixtures.toDoubleArray(constraint.get("latencies"));
+            LatencyStatistics baseline = explicit ? null : ProductionPath.latencyBaseline(
+                    ConformanceFixtures.toDoubleArray(constraint.get("baseline_latencies")),
+                    constraint.get("baseline_latencies").size());
+            CriterionResult r = ProductionPath.decide(explicit
+                            ? ProductionPath.explicit(p, constraint.get("threshold_ms").asLong(), alpha)
+                            : ProductionPath.baselineDerived(p, alpha),
+                    latencies, baseline, TestIntent.VERIFICATION);
+            String k = ProductionPath.key(p).detailKey();
+            Verdict v = Verdict.valueOf(String.valueOf(r.detail().get("verdict." + k)));
+            String rule = String.valueOf(r.detail().get("decisionRule." + k));
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("constraint_id", id);
             row.put("source", constraint.get("source").asText());
-            row.put("mode", constraint.get("mode").asText());
-            row.put("participates", isEnforced);
-            if (isEnforced) {
-                LatencyStatistics baseline = explicit ? null : ProductionPath.latencyBaseline(
-                        ConformanceFixtures.toDoubleArray(constraint.get("baseline_latencies")),
-                        constraint.get("baseline_latencies").size());
-                CriterionResult r = ProductionPath.decide(explicit
-                                ? ProductionPath.explicit(p, constraint.get("threshold_ms").asLong(), alpha)
-                                : ProductionPath.baselineDerived(p, alpha),
-                        latencies, baseline, TestIntent.VERIFICATION);
-                String k = ProductionPath.key(p).detailKey();
-                Verdict v = Verdict.valueOf(String.valueOf(r.detail().get("verdict." + k)));
-                String rule = String.valueOf(r.detail().get("decisionRule." + k));
-                row.put("decisionRule", rule);
-                row.put("verdict", v.name());
-                enforced.add(new VerdictComposition.Decided(id, v, DecisionRule.fromId(rule),
-                        OptionalDouble.of(alpha)));
-            } else {
-                row.put("decisionRule", null);
-                row.put("verdict", advisory(constraint, latencies, p, alpha));
-            }
+            row.put("decisionRule", rule);
+            row.put("verdict", v.name());
             constraintRows.add(row);
+            constraints.add(new VerdictComposition.Decided(id, v, DecisionRule.fromId(rule),
+                    OptionalDouble.of(alpha)));
         }
-        VerdictComposition composition = VerdictComposition.compose(criteria, enforced);
+        List<String> advisory = new ArrayList<>();
+        in.get("advisory").forEach(dimension -> advisory.add(dimension.asText()));
+        VerdictComposition composition = VerdictComposition.compose(criteria, constraints,
+                AssertionEnforcement.parse(String.join(",", advisory)));
         assertOracle(recorder, s, c, "criteria", criteriaRows);
         assertOracle(recorder, s, c, "latency_constraints", constraintRows);
         assertOracle(recorder, s, c, "rate_verdict", composition.rateVerdict().map(Enum::name));
         assertOracle(recorder, s, c, "latency_verdict", composition.latencyVerdict().map(Enum::name));
+        assertOracle(recorder, s, c, "functional_mode", composition.functionalMode().map(EnforcementMode::label));
+        assertOracle(recorder, s, c, "latency_mode", composition.latencyMode().map(EnforcementMode::label));
         assertOracle(recorder, s, c, "test_verdict", composition.testVerdict().name());
         assertOracle(recorder, s, c, "triggering", composition.triggering().stream()
                 .map(t -> Map.of("kind", t.kind().name().toLowerCase(java.util.Locale.ROOT),
                         "id", t.id()))
                 .toList());
-    }
-
-    /** An advisory constraint's raw percentile comparison: a pass or a warning, never a verdict. */
-    private static String advisory(JsonNode constraint, double[] latencies, double p, double alpha) {
-        boolean within;
-        double observed = nearestRankPercentile(latencies, p);
-        if ("explicit".equals(constraint.get("source").asText())) {
-            within = observed <= constraint.get("threshold_ms").asDouble();
-        } else {
-            var t = LatencyRules.derivePrecedenceThreshold(
-                    ConformanceFixtures.toDoubleArray(constraint.get("baseline_latencies")),
-                    latencies.length, p, alpha);
-            within = t.threshold().isPresent() && observed <= t.threshold().getAsDouble();
-        }
-        return within ? "ADVISORY_PASS" : "ADVISORY_WARN";
     }
 
     private static double nearestRankPercentile(double[] latencies, double p) {

@@ -8,12 +8,14 @@ reproduces the per-case inputs through its own pipeline, serialises
 the resulting verdict via its own RP07 emitter, and asserts the
 result is semantically equivalent to the case's `expected.xml`.
 
-The schema these documents conform to is verdict-1.7 (the copies
+The schema these documents conform to is verdict-1.8 (the copies
 here were moved from verdict-1.0 when punit adopted methodology
-1.5.0: the root carries `version="1.7"` and `methodology-version`,
-and the statistics element no longer carries the normal-approximation
-`test-statistic` and `p-value`, which decide nothing under the exact
-rules); the prose specification is [`../README.md`](../README.md).
+1.5.0, and to 1.8 with methodology 1.6.0: the root carries
+`version="1.8"` and `methodology-version`, the statistics element no
+longer carries the normal-approximation `test-statistic` and
+`p-value`, which decide nothing under the exact rules, and
+`<latency>` no longer carries the strict and advisory violation
+counts); the prose specification is [`../README.md`](../README.md).
 
 ## Equivalence semantics
 

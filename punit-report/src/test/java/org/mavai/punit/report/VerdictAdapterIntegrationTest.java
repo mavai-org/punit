@@ -51,7 +51,7 @@ class VerdictAdapterIntegrationTest {
     private record Factors() { }
 
     @Test
-    @DisplayName("PASS verdict round-trips and validates against verdict-1.7.xsd")
+    @DisplayName("PASS verdict round-trips and validates against verdict-1.8.xsd")
     void passRoundTrips() throws Exception {
         ProbabilisticTestVerdict verdict = VerdictAdapter.adapt(
                 richResult(Verdict.PASS),
@@ -85,7 +85,7 @@ class VerdictAdapterIntegrationTest {
     }
 
     @Test
-    @DisplayName("FAIL verdict round-trips and validates against verdict-1.7.xsd")
+    @DisplayName("FAIL verdict round-trips and validates against verdict-1.8.xsd")
     void failRoundTrips() throws Exception {
         ProbabilisticTestVerdict verdict = VerdictAdapter.adapt(
                 richResult(Verdict.FAIL),
@@ -165,7 +165,7 @@ class VerdictAdapterIntegrationTest {
 
     private void validateAgainstSchema(String xml) throws Exception {
         SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.7.xsd")) {
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.8.xsd")) {
             assertThat(xsdStream).as("XSD resource must be available").isNotNull();
             Schema schema = factory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();

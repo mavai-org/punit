@@ -32,7 +32,7 @@ import org.apache.commons.numbers.gamma.LogGamma;
  * successful latencies. Before the run the same searches on the
  * <em>expected</em> number give warnings and planning figures (§12.5.3),
  * never a verdict. The raw comparison of the observed percentile with a
- * threshold is an advisory figure: it decides nothing.
+ * threshold is reported as a raw figure: it decides nothing.
  */
 public final class LatencyRules {
 
@@ -238,32 +238,31 @@ public final class LatencyRules {
     public enum NondegeneracyOutcome {
         /** The gate does not apply, or the percentile is not degenerate: decided by its rule. */
         DECIDED,
-        /** An enforced baseline-derived assertion under verification with too few latencies. */
+        /** A baseline-derived assertion under verification with too few latencies. */
         INCONCLUSIVE,
-        /** Too few latencies under smoke intent or in advisory mode: a directional signal only. */
+        /** A baseline-derived assertion under smoke intent with too few latencies: a directional signal only. */
         INDICATIVE
     }
 
     /**
      * The non-degeneracy decision on the actual count of successful
-     * latencies. The gate applies where the decision statistic is the
-     * empirical percentile — a baseline-derived assertion and an advisory
-     * raw comparison — and not to an enforced explicit requirement, which
-     * decides on the within-threshold count and has its own feasibility
-     * condition.
+     * latencies (§12.5.4). The gate applies where the decision statistic
+     * is the empirical percentile — a baseline-derived assertion — and
+     * not to an explicit requirement, which decides on the
+     * within-threshold count and has its own feasibility condition. It
+     * follows the threshold source and the intent, never whether the
+     * latency dimension is enforced or advisory (§12.6).
      *
      * @param underVerification whether the test runs under VERIFICATION intent
-     * @param enforced          whether the constraint is enforced (not advisory)
      */
     public static NondegeneracyDecision decideNondegeneracy(
-            double percentile, int testSamples, boolean underVerification, boolean enforced,
-            ThresholdSource source) {
-        boolean applies = !(source == ThresholdSource.EXPLICIT && enforced);
+            double percentile, int testSamples, boolean underVerification, ThresholdSource source) {
+        boolean applies = source == ThresholdSource.BASELINE_DERIVED;
         boolean degenerate = testSamples < minimumContributingSamples(percentile);
         NondegeneracyOutcome outcome;
         if (!applies || !degenerate) {
             outcome = NondegeneracyOutcome.DECIDED;
-        } else if (underVerification && enforced) {
+        } else if (underVerification) {
             outcome = NondegeneracyOutcome.INCONCLUSIVE;
         } else {
             outcome = NondegeneracyOutcome.INDICATIVE;
@@ -393,8 +392,8 @@ public final class LatencyRules {
      *                               when no count can pass
      * @param falseCompliance        {@code P_p(Y ≥ y_min)}; empty when no count can pass
      * @param clopperPearsonLower    the one-sided lower bound on {@code F(τ)}
-     * @param observedPercentileMs   the raw nearest-rank percentile — advisory
-     * @param advisoryPercentilePass the raw comparison {@code Q(p) ≤ τ}; decides nothing
+     * @param observedPercentileMs   the raw nearest-rank percentile
+     * @param rawPercentilePass      the raw comparison {@code Q(p) ≤ τ}; decides nothing
      */
     public record LatencyCompliance(
             int testSamples,
@@ -404,7 +403,7 @@ public final class LatencyRules {
             OptionalDouble falseCompliance,
             OptionalDouble clopperPearsonLower,
             OptionalDouble observedPercentileMs,
-            Optional<Boolean> advisoryPercentilePass) {
+            Optional<Boolean> rawPercentilePass) {
 
         /** Whether any count of the successful latencies could pass. */
         public boolean passPossible() {

@@ -55,7 +55,7 @@ public enum DecisionRule {
         return id;
     }
 
-    /** The rule's version; every rule is at version 1 under methodology 1.5.0. */
+    /** The rule's version; every rule is at version 1 under methodology 1.6.0. */
     public int version() {
         return 1;
     }
