@@ -173,7 +173,7 @@ Copy the executable into the build and run it after the tests:
                     <artifactItem>
                         <groupId>org.mavai</groupId>
                         <artifactId>mavai</artifactId>
-                        <version>0.22.0</version>
+                        <version>0.23.0</version>
                         <classifier>${os.detected.classifier}</classifier>
                         <type>exe</type>
                         <destFileName>mavai</destFileName>
