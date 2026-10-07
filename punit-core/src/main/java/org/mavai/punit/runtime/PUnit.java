@@ -47,6 +47,7 @@ import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Scorer;
 import org.mavai.punit.api.spec.UnsupportableJudgementException;
 import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.api.spec.VerdictComposition;
 import org.mavai.punit.api.covariate.Covariate;
 import org.mavai.punit.api.covariate.CovariateProfile;
 import org.mavai.punit.internal.engine.Engine;
@@ -92,7 +93,9 @@ import org.opentest4j.TestAbortedException;
  *       {@link AssertionFailedError} on {@link Verdict#FAIL}, and
  *       throws {@link TestAbortedException} on
  *       {@link Verdict#INCONCLUSIVE} (configuration / environment
- *       drift, not service degradation).</li>
+ *       drift, not service degradation). {@code .assertContract()} and
+ *       {@code .assertLatency()} map the functional or the latency
+ *       verdict alone the same way.</li>
  * </ul>
  *
  * <p>A {@code .build()} terminal is also available on every builder
@@ -175,6 +178,22 @@ public final class PUnit {
          * FAIL — and always before any sample runs.
          */
         void assertPasses();
+
+        /**
+         * Runs the declared contract as a probabilistic test and asserts
+         * its functional verdict only, as
+         * {@link TestBuilder#assertContract()} does; refusals as
+         * {@link #assertPasses()}.
+         */
+        void assertContract();
+
+        /**
+         * Runs the declared contract as a probabilistic test and asserts
+         * its latency verdict only, as
+         * {@link TestBuilder#assertLatency()} does; refusals as
+         * {@link #assertPasses()}.
+         */
+        void assertLatency();
 
         /**
          * Runs the declared contract as a measure experiment: every
@@ -482,6 +501,18 @@ public final class PUnit {
     }
 
     static void translate(ProbabilisticTestResult result, String serviceContractId) {
+        translate(result, serviceContractId, Assertion.ALL);
+    }
+
+    /**
+     * Turns the verdict the assertion reads into the test's outcome. A
+     * refused configuration fails every assertion, whatever the run's
+     * advisory setting; otherwise the asserted verdict maps as the
+     * whole-test verdict does — PASS returns, FAIL fails, INCONCLUSIVE
+     * aborts or fails by the covariate-misalignment trichotomy below —
+     * and an assertion nothing binds returns.
+     */
+    static void translate(ProbabilisticTestResult result, String serviceContractId, Assertion assertion) {
         if (result.refused()) {
             // A refused configuration is a configuration problem, not a
             // service failure: its verdict record is already written
@@ -491,12 +522,13 @@ public final class PUnit {
                     result.configurationErrors(),
                     InfeasibilityMessageRenderer.renderRefusal(serviceContractId, result.refusals()));
         }
-        Verdict verdict = result.verdict();
-        if (verdict == Verdict.PASS) {
-            emitAdvisoryDiagnostics(result, serviceContractId);
+        Optional<Verdict> asserted = assertion.binding(result);
+        if (asserted.filter(v -> v != Verdict.PASS).isEmpty()) {
+            emitAdvisoryDiagnostics(result, serviceContractId, assertion);
             return;
         }
-        String message = formatMessage(result);
+        Verdict verdict = asserted.get();
+        String message = formatMessage(result, assertion, verdict);
         if (verdict == Verdict.INCONCLUSIVE) {
             // INCONCLUSIVE diagnostics are echoed to stderr regardless
             // of which JUnit-side throwable the trichotomy below
@@ -540,9 +572,11 @@ public final class PUnit {
      * A passing test whose advisory dimension did not pass says so on
      * stderr: the dimension was decided and its verdict is in the record,
      * but it does not fail the test, so nothing else would surface it on
-     * the build console.
+     * the build console. A per-dimension assertion says the same of the
+     * enforced dimension it leaves out.
      */
-    private static void emitAdvisoryDiagnostics(ProbabilisticTestResult result, String serviceContractId) {
+    private static void emitAdvisoryDiagnostics(
+            ProbabilisticTestResult result, String serviceContractId, Assertion assertion) {
         result.composition().ifPresent(c -> {
             List<String> notes = new ArrayList<>(2);
             if (c.functionalMode().filter(m -> m == EnforcementMode.ADVISORY).isPresent()
@@ -560,7 +594,28 @@ public final class PUnit {
                 System.err.println(header + ": " + String.join(", ", notes)
                         + " (advisory; does not fail the test)");
             }
+            emitUnassertedDiagnostics(c, serviceContractId, assertion);
         });
+    }
+
+    private static void emitUnassertedDiagnostics(
+            VerdictComposition c, String serviceContractId, Assertion assertion) {
+        List<String> notes = new ArrayList<>(1);
+        if (assertion.leavesOut(AssertionEnforcement.Dimension.FUNCTIONAL) && c.functionalEnforced()
+                && c.rateVerdict().filter(v -> v != Verdict.PASS).isPresent()) {
+            notes.add("functional " + c.rateVerdict().get());
+        }
+        if (assertion.leavesOut(AssertionEnforcement.Dimension.LATENCY) && c.latencyEnforced()
+                && c.latencyVerdict().filter(v -> v != Verdict.PASS).isPresent()) {
+            notes.add("latency " + c.latencyVerdict().get());
+        }
+        if (!notes.isEmpty()) {
+            String header = serviceContractId == null || serviceContractId.isBlank()
+                    ? "[PUNIT-UNASSERTED]"
+                    : "[PUNIT-UNASSERTED] " + serviceContractId;
+            System.err.println(header + ": " + String.join(", ", notes)
+                    + " (not asserted by " + assertion.method() + ")");
+        }
     }
 
     private static void emitInconclusiveDiagnostics(
@@ -581,7 +636,6 @@ public final class PUnit {
         return false;
     }
 
-    // Package-private for direct unit testing; not part of the public API.
     /** Whether the run makes the criterion's dimension advisory. */
     private static boolean inAdvisoryDimension(AssertionEnforcement enforcement, Criterion<?, ?> c) {
         return enforcement.mode(c instanceof PercentileLatency<?>
@@ -595,15 +649,41 @@ public final class PUnit {
      */
     private static boolean advisory(ProbabilisticTestResult result, CriterionResult cr) {
         return result.composition()
-                .flatMap(c -> PercentileLatency.NAME.equals(cr.criterionName())
+                .flatMap(c -> dimensionOf(cr) == AssertionEnforcement.Dimension.LATENCY
                         ? c.latencyMode() : c.functionalMode())
                 .filter(m -> m == EnforcementMode.ADVISORY)
                 .isPresent();
     }
 
+    private static AssertionEnforcement.Dimension dimensionOf(CriterionResult cr) {
+        return PercentileLatency.NAME.equals(cr.criterionName())
+                ? AssertionEnforcement.Dimension.LATENCY
+                : AssertionEnforcement.Dimension.FUNCTIONAL;
+    }
+
+    /** The label a criterion's line carries when it did not decide the assertion. */
+    private static String contextLabel(ProbabilisticTestResult result, CriterionResult cr, Assertion assertion) {
+        if (advisory(result, cr)) {
+            return " (advisory)";
+        }
+        return assertion.leavesOut(dimensionOf(cr)) ? " (not asserted)" : "";
+    }
+
     static String formatMessage(ProbabilisticTestResult result) {
+        return formatMessage(result, Assertion.ALL, result.verdict());
+    }
+
+    /**
+     * The failure message: the asserted verdict — naming its dimension
+     * for a per-dimension assertion — then every criterion with its
+     * explanation, those that did not decide it labelled advisory or
+     * not asserted, then the run's diagnostic context.
+     */
+    static String formatMessage(ProbabilisticTestResult result, Assertion assertion, Verdict verdict) {
         StringBuilder sb = new StringBuilder();
-        sb.append(result.verdict());
+        sb.append(verdict);
+        assertion.dimension().ifPresent(d -> sb.append(" (").append(d.token())
+                .append(" dimension, ").append(assertion.method()).append(')'));
         List<EvaluatedCriterion> evaluated = result.criterionResults();
         if (!evaluated.isEmpty()) {
             sb.append('\n');
@@ -612,7 +692,7 @@ public final class PUnit {
                 sb.append("  [").append(entry.role()).append("] ")
                         .append(cr.criterionName()).append(" → ")
                         .append(cr.verdict())
-                        .append(advisory(result, cr) ? " (advisory)" : "").append(": ")
+                        .append(contextLabel(result, cr, assertion)).append(": ")
                         .append(cr.explanation()).append('\n');
             }
         }
@@ -704,6 +784,81 @@ public final class PUnit {
             first = false;
         }
         return sb.toString();
+    }
+
+    /**
+     * What a probabilistic test's terminal asserts: the test verdict
+     * {@code V_test}, or one of the two dimensions it composes
+     * (Statistical Companion §12.3.2, §12.6).
+     *
+     * <p>The terminal chooses what fails the test, never what is decided:
+     * every terminal runs the same test, decides both dimensions and writes
+     * the same verdict record. Which dimensions bind stays the run's
+     * {@link org.mavai.punit.api.spec.AssertionEnforcement} setting; an
+     * advisory dimension binds no terminal.
+     */
+    enum Assertion {
+
+        /** {@code assertPasses()}: the test verdict over the enforced dimensions. */
+        ALL("assertPasses()", null),
+
+        /** {@code assertContract()}: the functional verdict {@code V_rate}. */
+        CONTRACT("assertContract()", AssertionEnforcement.Dimension.FUNCTIONAL),
+
+        /** {@code assertLatency()}: the latency verdict {@code V_latency}. */
+        LATENCY("assertLatency()", AssertionEnforcement.Dimension.LATENCY);
+
+        private final String method;
+        private final AssertionEnforcement.Dimension dimension;
+
+        Assertion(String method, AssertionEnforcement.Dimension dimension) {
+            this.method = method;
+            this.dimension = dimension;
+        }
+
+        /** The terminal's name, as an author calls it. */
+        String method() {
+            return method;
+        }
+
+        /** The asserted dimension; empty for the whole-test assertion. */
+        Optional<AssertionEnforcement.Dimension> dimension() {
+            return Optional.ofNullable(dimension);
+        }
+
+        /**
+         * The verdict this assertion turns into the test's outcome; empty
+         * when nothing binds it — its dimension is advisory, or the test
+         * declares no constraint in it.
+         *
+         * <p>A result without a composition decided no dimension on its own
+         * (a run short-circuited before sampling, for instance on a missing
+         * baseline); every terminal then asserts the result's verdict. A
+         * result verdict that differs from the composed one is a run-level
+         * override (the expired-baseline FAIL policy) and binds every
+         * enforced dimension.
+         */
+        Optional<Verdict> binding(ProbabilisticTestResult result) {
+            Optional<VerdictComposition> composition = result.composition();
+            if (this == ALL || composition.isEmpty()) {
+                return Optional.of(result.verdict());
+            }
+            VerdictComposition c = composition.get();
+            Optional<Verdict> decided = this == CONTRACT
+                    ? c.rateVerdict().filter(v -> c.functionalEnforced())
+                    : c.latencyVerdict().filter(v -> c.latencyEnforced());
+            return c.testVerdict() == result.verdict()
+                    ? decided
+                    : decided.map(v -> result.verdict());
+        }
+
+        /**
+         * Whether this assertion leaves the dimension out: the other
+         * dimension of a per-dimension assertion.
+         */
+        boolean leavesOut(AssertionEnforcement.Dimension other) {
+            return dimension != null && dimension != other;
+        }
     }
 
     // ── Wrapper builders ────────────────────────────────────────────
@@ -1001,7 +1156,11 @@ public final class PUnit {
         }
     }
 
-    /** Wrapper around {@link ProbabilisticTest.Builder} adding {@link #assertPasses}. */
+    /**
+     * Wrapper around {@link ProbabilisticTest.Builder} adding the
+     * asserting terminals {@link #assertPasses}, {@link #assertContract}
+     * and {@link #assertLatency}.
+     */
     public static final class TestBuilder<FT, IT, OT> {
         private final ProbabilisticTest.Builder<FT, IT, OT> delegate;
         private final Sampling<FT, IT, OT> sampling;
@@ -1071,7 +1230,47 @@ public final class PUnit {
             return delegate.build();
         }
 
+        /**
+         * Runs the test and asserts its verdict: returns on PASS, throws
+         * {@link AssertionFailedError} on FAIL and
+         * {@link TestAbortedException} on INCONCLUSIVE (an
+         * {@link AssertionFailedError} when every baseline candidate was
+         * rejected). The test verdict composes the dimensions the run
+         * enforces; an advisory dimension is reported, never failing.
+         * A refused configuration throws
+         * {@link ConfigurationRefusedException}.
+         */
         public void assertPasses() {
+            runAndAssert(Assertion.ALL);
+        }
+
+        /**
+         * Runs the test and asserts its functional verdict only — the
+         * composite of its functional criteria — with
+         * {@link #assertPasses()}'s mapping. Passes when the run makes
+         * the functional dimension advisory (its verdict is reported)
+         * or the test has no functional criterion. Both dimensions are
+         * still decided and recorded; a refused configuration throws
+         * {@link ConfigurationRefusedException} whatever the setting.
+         */
+        public void assertContract() {
+            runAndAssert(Assertion.CONTRACT);
+        }
+
+        /**
+         * Runs the test and asserts its latency verdict only — the
+         * composite of its latency constraints — with
+         * {@link #assertPasses()}'s mapping. Passes when the run makes
+         * the latency dimension advisory (its verdict is reported) or
+         * the test declares no latency constraint. Both dimensions are
+         * still decided and recorded; a refused configuration throws
+         * {@link ConfigurationRefusedException} whatever the setting.
+         */
+        public void assertLatency() {
+            runAndAssert(Assertion.LATENCY);
+        }
+
+        private void runAndAssert(Assertion assertion) {
             ProbabilisticTest spec = build();
             ServiceContract<FT, IT, OT> serviceContract = sampling.serviceContractFactory().apply(factors);
             // When the author registered no explicit .criterion(...) the
@@ -1107,7 +1306,7 @@ public final class PUnit {
                 ProbabilisticTestResult synthesised = shortCircuit.get();
                 maybeRenderTransparentStats(synthesised);
                 emitVerdict(synthesised, serviceContractId);
-                translate(synthesised, serviceContractId);
+                translate(synthesised, serviceContractId, assertion);
                 return;
             }
 
@@ -1127,7 +1326,7 @@ public final class PUnit {
                             observed, typed.covariates().baseline()));
             maybeRenderTransparentStats(stamped);
             emitVerdict(stamped, serviceContractId);
-            translate(stamped, serviceContractId);
+            translate(stamped, serviceContractId, assertion);
         }
 
         private void maybeRenderTransparentStats(ProbabilisticTestResult result) {
@@ -1306,11 +1505,26 @@ public final class PUnit {
             return EmpiricalTestComposer.compose(baseline, samples, criterion, intent);
         }
 
+        /** See {@link TestBuilder#assertPasses()}. */
         public void assertPasses() {
+            runAndAssert(Assertion.ALL);
+        }
+
+        /** See {@link TestBuilder#assertContract()}. */
+        public void assertContract() {
+            runAndAssert(Assertion.CONTRACT);
+        }
+
+        /** See {@link TestBuilder#assertLatency()}. */
+        public void assertLatency() {
+            runAndAssert(Assertion.LATENCY);
+        }
+
+        private void runAndAssert(Assertion assertion) {
             ProbabilisticTest spec = build();
             SpecContext ctx = resolveSpecContext(spec);
 
-            // Existence probe runs before sampling: see TestBuilder.assertPasses
+            // Existence probe runs before sampling: see TestBuilder.runAndAssert
             // for the rationale.
             Optional<ProbabilisticTestResult> shortCircuit =
                     baselineExistencePreflight(ctx, spec.enforcement());
@@ -1318,7 +1532,7 @@ public final class PUnit {
                 ProbabilisticTestResult synthesised = shortCircuit.get();
                 maybeRenderTransparentStats(ctx, synthesised);
                 emitVerdict(synthesised, ctx.serviceContractId);
-                translate(synthesised, ctx.serviceContractId);
+                translate(synthesised, ctx.serviceContractId, assertion);
                 return;
             }
 
@@ -1334,7 +1548,7 @@ public final class PUnit {
                             ctx.profile, typed.covariates().baseline()));
             maybeRenderTransparentStats(ctx, stamped);
             emitVerdict(stamped, ctx.serviceContractId);
-            translate(stamped, ctx.serviceContractId);
+            translate(stamped, ctx.serviceContractId, assertion);
         }
 
         /**

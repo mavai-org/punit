@@ -94,14 +94,31 @@ public final class DeclaredRun implements Declared {
 
     @Override
     public void assertPasses() {
+        test().assertPasses();
+    }
+
+    @Override
+    public void assertContract() {
+        test().assertContract();
+    }
+
+    @Override
+    public void assertLatency() {
+        test().assertLatency();
+    }
+
+    /**
+     * The declared contract compiled onto a test builder, ready for the
+     * asserting terminal the author chose.
+     */
+    private PUnit.TestBuilder<NoFactors, Object, String> test() {
         Instantiated instantiated = instantiate(true);
         Sizing.Sized sized = Sizing.resolve(instantiated.declaration(), samples);
         runPlan(instantiated.declaration(), sized);
-        PUnit.testing(instantiated.sampling(sized.samples()))
+        return PUnit.testing(instantiated.sampling(sized.samples()))
                 .intent(instantiated.declaration().intent() == DeclaredIntent.SMOKE
                         ? TestIntent.SMOKE
-                        : TestIntent.VERIFICATION)
-                .assertPasses();
+                        : TestIntent.VERIFICATION);
     }
 
     @Override
