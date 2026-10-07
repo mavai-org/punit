@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`assertContract()` and `assertLatency()`** — two asserting
+  terminals beside `assertPasses()`, on `PUnit.testing(...)` (both
+  builders) and on `PUnit.declared()`. `assertContract()` asserts the
+  functional verdict alone, `assertLatency()` the latency verdict
+  alone; `assertPasses()` keeps asserting the whole test verdict,
+  unchanged. Each terminal runs the test once and maps its verdict as
+  `assertPasses()` does (FAIL → `AssertionFailedError`, INCONCLUSIVE →
+  `TestAbortedException`, or `AssertionFailedError` when every baseline
+  candidate was rejected). A dimension the run makes advisory
+  (`punit.advisory`) never fails a terminal and is reported as
+  advisory; `assertLatency()` passes on a test with no latency
+  constraint; a refused configuration throws
+  `ConfigurationRefusedException` from every terminal. Both dimensions
+  are decided and the verdict record is written identically whichever
+  terminal is called. The failure message names the asserted dimension
+  and labels the other dimension's criteria advisory or not asserted;
+  a passing per-dimension assertion whose other, enforced dimension did
+  not pass says so on stderr (`[PUNIT-UNASSERTED]`).
+- `PUnit.Declared` gains `assertContract()` and `assertLatency()`; an
+  implementation of that interface outside punit-decl must add them.
+
 ## [0.13.0] - 2026-10-07
 
 **Every assertion is enforced unless the run makes its dimension
