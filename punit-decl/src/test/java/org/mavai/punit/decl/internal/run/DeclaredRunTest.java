@@ -129,6 +129,39 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("per-dimension assertions")
+    class PerDimensionAssertions {
+
+        @Test
+        @DisplayName("assertContract fails a contract whose functional bar is missed")
+        void assertContractFailsOnTheFunctionalDimension() {
+            Declared run = PUnit.declared("rude-service-fails-its-bar").samples(20);
+            assertThatThrownBy(run::assertContract)
+                    .isInstanceOf(AssertionFailedError.class)
+                    .hasMessageStartingWith("FAIL (functional dimension, assertContract())");
+        }
+
+        @Test
+        @DisplayName("assertLatency passes a contract that declares no latency ceiling")
+        void assertLatencyPassesWithoutALatencyConstraint() {
+            assertThatCode(() ->
+                    PUnit.declared("rude-service-fails-its-bar").samples(20).assertLatency())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("both per-dimension terminals pass a contract that meets its bar and its ceiling")
+        void bothTerminalsPassAMetContract() {
+            assertThatCode(() ->
+                    PUnit.declared("latency-block-not-yet-supported").samples(60).assertLatency())
+                    .doesNotThrowAnyException();
+            assertThatCode(() ->
+                    PUnit.declared("latency-block-not-yet-supported").samples(60).assertContract())
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
     @DisplayName("value-comparison forms")
     class ValueComparisonForms {
 

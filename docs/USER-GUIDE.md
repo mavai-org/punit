@@ -331,6 +331,8 @@ family's CLI verbs:
 
 ```java
 PUnit.declared().assertPasses();               // test: judge the declared bars
+PUnit.declared().assertContract();             // test: judge the functional bars only
+PUnit.declared().assertLatency();              // test: judge the latency ceilings only
 PUnit.declared().samples(1000).measure();      // measure: record + persist the baseline
 PUnit.declared().samplesPerConfig(5).explore(); // explore: one recording per grid point
 PUnit.declared().samplesPerIteration(5).optimize("tune"); // optimize: iterate a stepper
@@ -867,11 +869,16 @@ override what the fixture carries.
 - **FAIL** — throws `AssertionFailedError`. The service contract degraded or
   the SLA was breached.
 - **INCONCLUSIVE** — throws `TestAbortedException` (skipped) when
-  the data cannot decide (no baseline yet, baseline rejected as
-  misaligned, too few successful latencies for a latency constraint,
-  or no baseline rank for the test's size — a *saturated* latency
-  constraint). FAIL is the right outcome only when the data shows
-  degradation or non-compliance.
+  the data cannot decide (no baseline yet, too few successful
+  latencies for a latency constraint, or no baseline rank for the
+  test's size — a *saturated* latency constraint). FAIL is the right
+  outcome only when the data shows degradation or non-compliance. The
+  one exception: when baseline files exist but every candidate was
+  rejected as misaligned, the INCONCLUSIVE throws `AssertionFailedError`,
+  because the test asks for a reference that does not exist for its
+  configuration.
+- **Refused** — a configuration no outcome could decide throws
+  `ConfigurationRefusedException` before any sample runs.
 
 The test verdict composes the functional dimension (the pass-rate
 criteria) and the latency dimension by one structural rule: FAIL if
@@ -901,6 +908,53 @@ The verdict carries everything a developer needs to triage: the
 criterion that failed, the count against the rule's cutoff, the
 decision rule and its alpha, the requirement and its provenance, the most-frequent postcondition
 failures with two example inputs each, and the contract reference.
+
+### Asserting one dimension
+
+`assertPasses()` asserts the whole test verdict. Two sibling terminals
+assert one dimension each, on the same builder and on
+`PUnit.declared()`:
+
+| Terminal           | Asserts                                                      | Passes regardless when                                   |
+|--------------------|--------------------------------------------------------------|----------------------------------------------------------|
+| `assertPasses()`   | the test verdict, over the enforced dimensions               | both dimensions are advisory                             |
+| `assertContract()` | the functional verdict: the composite of the criteria        | the functional dimension is advisory, or has no criteria |
+| `assertLatency()`  | the latency verdict: the composite of the latency constraints | the latency dimension is advisory, or the test declares no latency constraint |
+
+```java
+PUnit.testing(sampling, factors).assertContract();   // correctness only
+PUnit.testing(sampling, factors).assertLatency();    // latency only
+```
+
+Each terminal runs the test once, and every terminal runs the same
+test: both dimensions are decided, reported and written to the verdict
+record, whichever one you call. The terminal chooses only what fails
+the test. The asserted verdict maps exactly as in
+[The verdict](#the-verdict) — FAIL fails, INCONCLUSIVE aborts (or fails
+when every baseline candidate was rejected) — and a refused
+configuration throws `ConfigurationRefusedException` from every
+terminal. The failure message names the dimension
+(`FAIL (latency dimension, assertLatency())`), lists the deciding
+criteria or constraints with their rules, observed values, thresholds
+and provenance, and labels the other dimension's lines `(advisory)` or
+`(not asserted)`. When a per-dimension assertion passes while the
+dimension it leaves out did not, stderr says so (`[PUNIT-UNASSERTED]`).
+
+**Which one to use.** The terminal is the test author's statement of
+what the test is about; the advisory setting below is the operator's
+choice for an environment. Use `assertPasses()` unless the test is
+deliberately about one dimension:
+
+- `assertContract()` when a test should judge correctness only — for
+  instance while the service's latency is still being characterised
+  and no latency claim is meant to bind yet.
+- `assertLatency()` for a test whose purpose is the latency claim,
+  such as a latency check kept apart from the correctness suite.
+
+Do not reach for a per-dimension terminal to quieten a dimension on a
+slow machine: that is what `-Dpunit.advisory` is for, and it leaves
+the test's own statement intact for every other environment. The two
+compose — an advisory dimension never fails any terminal.
 
 ### Enforced and advisory assertions
 
