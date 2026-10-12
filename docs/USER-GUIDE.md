@@ -2253,7 +2253,7 @@ mirrors the same settings, and adds the plugin's own:
 
 | Extension property     | Default                                   | Description                                                        |
 |------------------------|-------------------------------------------|--------------------------------------------------------------------|
-| `specsDir`             | `src/test/resources/punit/specs`          | Where MEASURE writes baselines (committed).                        |
+| `baselineDir`          | unset: `punit.baseline.dir`, then `PUNIT_BASELINE_DIR`, then `src/test/resources/punit/baselines` | Where MEASURE writes baselines (committed) and tests read them; fed to `test` and `exp` as `punit.baseline.dir`. A `punit.baseline.dir` the build sets on a task wins. |
 | `explorationsDir`      | `build/punit/explorations`                | Where EXPLORE writes; `punitReport` reads it.                      |
 | `optimizationsDir`     | `build/punit/optimizations`               | Where OPTIMIZE writes; `punitReport` reads it.                     |
 | `configureTestTask`    | `true`                                    | Whether the plugin configures `test` (tag exclusion, properties).  |
@@ -2262,6 +2262,13 @@ mirrors the same settings, and adds the plugin's own:
 
 `punitReport` itself takes `hideScores` and `outputDir`, and honours the
 `MAVAI_BIN` environment variable ([Part 11](#part-11-reports)).
+
+`specsDir` was removed in 0.15.0: punit-core never read the directory
+it named, so a MEASURE run wrote its baseline elsewhere and the `exp`
+summary looked in the wrong place. A build that still sets it fails
+with a pointer to `baselineDir`. After a run, `exp` names each baseline
+it wrote (`MEASURE baseline written to: <path>`), read from the
+directory punit-core resolved.
 
 ### Per-sample progress counter
 

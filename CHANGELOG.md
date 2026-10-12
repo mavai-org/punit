@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `exp` summary reports the baseline a MEASURE run wrote.** It
+  looked for output under `specsDir`, a directory punit-core never
+  writes to, so a successful measure ended with "No output files were
+  written." It now reads the directory punit-core resolves
+  (`punit.baseline.dir`, including one the build sets on the task, then
+  `PUNIT_BASELINE_DIR`, then `src/test/resources/punit/baselines`) and
+  names each file: `MEASURE baseline written to: <path>`. "No output
+  files were written." appears only when that is true; the EXPLORE and
+  OPTIMIZE lines are unchanged.
+- **Output after the progress counter starts on its own line.**
+  `[PUNIT] baseline recorded: …` and mid-run `[PUNIT-FAIL]` lines used
+  to start on the counter's line (`20/20[PUNIT] …`), where Gradle's
+  status lines could draw over them. The bridge now ends the counter's
+  line first; the last count stays visible.
+
+### Changed
+
+- **`punit { specsDir }` is replaced by `punit { baselineDir }`.**
+  `baselineDir` feeds `punit.baseline.dir` to the `test` and `exp`
+  tasks, so tests read where measure wrote; unset, punit-core's own
+  resolution applies, and a `punit.baseline.dir` the build sets on a
+  task takes precedence. A build that sets `specsDir` fails with a
+  message naming `baselineDir`. The plugin no longer passes
+  `punit.specs.outputDir`, which nothing read; the Maven configuration
+  guide now sets `punit.baseline.dir`.
+
 ## [0.14.0] - 2026-10-07
 
 ### Added

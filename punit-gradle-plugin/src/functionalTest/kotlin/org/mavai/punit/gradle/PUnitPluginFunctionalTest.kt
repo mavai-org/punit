@@ -287,7 +287,7 @@ class PUnitPluginFunctionalTest {
         fun customOutputDirs() {
             buildFile.writeText(buildFileWithPlugin("""
                 punit {
-                    specsDir.set("custom/specs")
+                    baselineDir.set("custom/baselines")
                     explorationsDir.set("custom/explorations")
                     optimizationsDir.set("custom/optimizations")
                 }
@@ -296,6 +296,193 @@ class PUnitPluginFunctionalTest {
             val result = runner("tasks", "--all").build()
 
             assertTrue(result.output.contains("BUILD SUCCESSFUL"))
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment summary")
+    inner class ExperimentSummary {
+
+        private val baselineName = "text-to-command.measure-abc.yaml"
+
+        /**
+         * A stand-in for a MEASURE experiment: it resolves the baseline
+         * directory as punit-core's BaselineResolver does, writes a baseline
+         * there and prints what a measure run prints, without needing
+         * punit-core on the test project's classpath.
+         */
+        private fun fakeMeasure() {
+            val testDir = File(projectDir, "src/test/java")
+            testDir.mkdirs()
+            File(testDir, "FakeMeasure.java").writeText("""
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import org.junit.jupiter.api.Tag;
+                import org.junit.jupiter.api.Test;
+                class FakeMeasure {
+                    @Test @Tag("punit-experiment") void measure() throws Exception {
+                        String dir = System.getProperty("punit.baseline.dir");
+                        if (dir == null) dir = System.getenv("PUNIT_BASELINE_DIR");
+                        if (dir == null) dir = "src/test/resources/punit/baselines";
+                        Path target = Paths.get(dir).resolve("$baselineName");
+                        Files.createDirectories(target.getParent());
+                        Files.writeString(target, "schemaVersion: stand-in\n");
+                        System.out.println("[PUNIT-PROGRESS]1/2");
+                        System.out.println("[PUNIT-PROGRESS]2/2");
+                        System.out.println("[PUNIT] baseline recorded: " + target);
+                    }
+                }
+            """.trimIndent())
+        }
+
+        private fun environmentWithout(vararg names: String): Map<String, String> =
+            System.getenv().filterKeys { it !in names }
+
+        private fun runExp() = runner("exp")
+            .withEnvironment(environmentWithout("PUNIT_BASELINE_DIR"))
+            .build()
+
+        @Test
+        @DisplayName("names the baseline written to a punit.baseline.dir the build sets on its Test tasks")
+        fun customBaselineDirFromBuildScript() {
+            buildFile.writeText(buildFileWithPlugin("""
+                tasks.withType<Test>().configureEach {
+                    systemProperty("punit.baseline.dir", file("custom-baselines").absolutePath)
+                }
+            """.trimIndent()))
+            fakeMeasure()
+
+            val output = runExp().output
+
+            assertTrue(output.contains("MEASURE baseline written to: custom-baselines/$baselineName"), output)
+            assertFalse(output.contains("No output files were written."), output)
+        }
+
+        @Test
+        @DisplayName("names the baseline written to the default location when nothing is set")
+        fun defaultBaselineDir() {
+            buildFile.writeText(buildFileWithPlugin())
+            fakeMeasure()
+
+            val output = runExp().output
+
+            assertTrue(output.contains(
+                "MEASURE baseline written to: src/test/resources/punit/baselines/$baselineName"), output)
+            assertFalse(output.contains("No output files were written."), output)
+        }
+
+        @Test
+        @DisplayName("names the baseline written to the directory baselineDir sets")
+        fun baselineDirSetting() {
+            buildFile.writeText(buildFileWithPlugin("""
+                punit {
+                    baselineDir.set("baselines")
+                }
+            """.trimIndent()))
+            fakeMeasure()
+
+            val output = runExp().output
+
+            assertTrue(output.contains("MEASURE baseline written to: baselines/$baselineName"), output)
+            assertTrue(File(projectDir, "baselines/$baselineName").isFile)
+        }
+
+        @Test
+        @DisplayName("a punit.baseline.dir set on the task takes precedence over baselineDir")
+        fun taskPropertyWinsOverBaselineDir() {
+            buildFile.writeText(buildFileWithPlugin("""
+                punit {
+                    baselineDir.set("baselines")
+                }
+                tasks.withType<Test>().configureEach {
+                    systemProperty("punit.baseline.dir", file("custom-baselines").absolutePath)
+                }
+            """.trimIndent()))
+            fakeMeasure()
+
+            val output = runExp().output
+
+            assertTrue(output.contains("MEASURE baseline written to: custom-baselines/$baselineName"), output)
+            assertFalse(File(projectDir, "baselines").exists())
+        }
+
+        @Test
+        @DisplayName("the baseline-recorded line starts on its own line after the progress counter")
+        fun recordedLineOffTheCounter() {
+            buildFile.writeText(buildFileWithPlugin())
+            fakeMeasure()
+
+            val output = runExp().output
+
+            assertTrue(output.contains("[PUNIT] baseline recorded:"), output)
+            assertFalse(output.contains("2/2[PUNIT]"), output)
+        }
+
+        @Test
+        @DisplayName("reports no output only when none was written")
+        fun noOutput() {
+            buildFile.writeText(buildFileWithPlugin())
+            val testDir = File(projectDir, "src/test/java")
+            testDir.mkdirs()
+            File(testDir, "QuietExperiment.java").writeText("""
+                import org.junit.jupiter.api.Tag;
+                import org.junit.jupiter.api.Test;
+                class QuietExperiment {
+                    @Test @Tag("punit-experiment") void run() {}
+                }
+            """.trimIndent())
+
+            val output = runExp().output
+
+            assertTrue(output.contains("No output files were written."), output)
+            assertFalse(output.contains("MEASURE baseline written to"), output)
+        }
+
+        @Test
+        @DisplayName("the explore summary line is unchanged")
+        fun exploreSummaryUnchanged() {
+            buildFile.writeText(buildFileWithPlugin())
+            val testDir = File(projectDir, "src/test/java")
+            testDir.mkdirs()
+            File(testDir, "FakeExplore.java").writeText("""
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import org.junit.jupiter.api.Tag;
+                import org.junit.jupiter.api.Test;
+                class FakeExplore {
+                    @Test @Tag("punit-experiment") void explore() throws Exception {
+                        Path target = Paths.get(System.getProperty("punit.explorations.outputDir")).resolve("svc/a.yaml");
+                        Files.createDirectories(target.getParent());
+                        Files.writeString(target, "x: 1\n");
+                    }
+                }
+            """.trimIndent())
+
+            val output = runExp().output
+
+            // The temporary directory may be reported through a symlinked
+            // path (/var vs /private/var on macOS), so match the line's shape.
+            assertTrue(Regex("""  EXPLORE results written to: /.*/build/punit/explorations/\n""")
+                .containsMatchIn(output), output)
+            assertFalse(output.contains("MEASURE baseline written to"), output)
+            assertFalse(output.contains("No output files were written."), output)
+        }
+
+        @Test
+        @DisplayName("a build that sets the removed specsDir fails, naming baselineDir")
+        fun specsDirRemoved() {
+            buildFile.writeText(buildFileWithPlugin("""
+                punit {
+                    specsDir.set("baselines")
+                }
+            """.trimIndent()))
+
+            val result = runner("tasks").buildAndFail()
+
+            assertTrue(result.output.contains("punit { specsDir } has been removed"), result.output)
+            assertTrue(result.output.contains("punit { baselineDir }"), result.output)
         }
     }
 

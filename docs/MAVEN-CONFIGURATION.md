@@ -48,7 +48,7 @@ Run experiments via a dedicated Maven profile:
                              and are committed to the repo. EXPLORE and OPTIMIZE
                              outputs are human-review artefacts and default to
                              target/punit/ (Maven build output). -->
-                        <punit.specs.outputDir>src/test/resources/punit/baselines</punit.specs.outputDir>
+                        <punit.baseline.dir>src/test/resources/punit/baselines</punit.baseline.dir>
                         <punit.explorations.outputDir>${project.build.directory}/punit/explorations</punit.explorations.outputDir>
                         <punit.optimizations.outputDir>${project.build.directory}/punit/optimizations</punit.optimizations.outputDir>
                     </systemPropertyVariables>
@@ -97,7 +97,7 @@ If you prefer to use Failsafe for experiments (keeping Surefire for unit tests):
     <configuration>
         <groups>punit-experiment</groups>
         <systemPropertyVariables>
-            <punit.specs.outputDir>src/test/resources/punit/baselines</punit.specs.outputDir>
+            <punit.baseline.dir>src/test/resources/punit/baselines</punit.baseline.dir>
             <punit.explorations.outputDir>${project.build.directory}/punit/explorations</punit.explorations.outputDir>
             <punit.optimizations.outputDir>${project.build.directory}/punit/optimizations</punit.optimizations.outputDir>
         </systemPropertyVariables>
