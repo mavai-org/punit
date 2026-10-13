@@ -749,6 +749,31 @@ class DeclaredRunTest {
             return captured.toString();
         }
 
+        private String stderrOf(Runnable run) {
+            java.io.PrintStream stderr = System.err;
+            var captured = new java.io.ByteArrayOutputStream();
+            try {
+                System.setErr(new java.io.PrintStream(captured));
+                run.run();
+            } finally {
+                System.setErr(stderr);
+            }
+            return captured.toString();
+        }
+
+        @Test
+        @DisplayName("the transparent statistics state the declared confidence's alpha")
+        void transparentStatsStateTheAlpha() {
+            System.setProperty("punit.stats.transparent", "true");
+            try {
+                String analysis = stderrOf(() ->
+                        PUnit.declared("sla-judged-at-ninety-nine").assertPasses());
+                assertThat(analysis).contains("[REQUIRED]").contains("alpha 0.01");
+            } finally {
+                System.clearProperty("punit.stats.transparent");
+            }
+        }
+
         @Test
         @DisplayName("a normative contract at 0.99 derives its size and is judged at 0.99")
         void normativeContractAtNinetyNine() {
@@ -775,6 +800,12 @@ class DeclaredRunTest {
             Declared strict = PUnit.declared("polite-enough-at-ninety-nine").samples(100);
             assertThatThrownBy(strict::assertPasses).isInstanceOf(AssertionFailedError.class);
             assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.99);
+            // Early termination decides at the same confidence: the run
+            // stops once 0.99's pass count is out of reach, well before
+            // the hundredth sample.
+            assertThat(lastVerdict().termination().reason())
+                    .isEqualTo(org.mavai.punit.verdict.TerminationReason.IMPOSSIBILITY);
+            assertThat(lastVerdict().execution().samplesExecuted()).isLessThan(100);
         }
 
         @Test
