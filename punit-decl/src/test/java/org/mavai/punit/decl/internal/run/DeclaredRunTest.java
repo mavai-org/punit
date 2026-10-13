@@ -8,8 +8,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mavai.punit.decl.ContractConfigurationException;
+import org.mavai.punit.internal.reporting.VerdictSinkBus;
 import org.mavai.punit.runtime.PUnit.Declared;
 import org.mavai.punit.runtime.PUnit;
+import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.opentest4j.AssertionFailedError;
 
 /**
@@ -705,12 +707,178 @@ class DeclaredRunTest {
         }
 
         @Test
-        @DisplayName("a non-default contract confidence cannot rebind thresholded criteria")
+        @DisplayName("a non-default contract confidence binds thresholded criteria")
         void nonDefaultConfidenceWithThresholds() {
-            Declared run = PUnit.declared("nonstandard-confidence-with-thresholds").samples(20);
+            assertThatCode(() -> PUnit.declared("nonstandard-confidence-with-thresholds")
+                    .samples(20).assertPasses())
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
+    @DisplayName("contract-level confidence")
+    class ContractConfidence {
+
+        /** Every verdict the runs dispatch, in order; cleared per test. */
+        private static final java.util.List<ProbabilisticTestVerdict> VERDICTS =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+        static {
+            VerdictSinkBus.register(VERDICTS::add);
+        }
+
+        @org.junit.jupiter.api.BeforeEach
+        void clearVerdicts() {
+            VERDICTS.clear();
+        }
+
+        private ProbabilisticTestVerdict lastVerdict() {
+            assertThat(VERDICTS).as("dispatched verdicts").isNotEmpty();
+            return VERDICTS.get(VERDICTS.size() - 1);
+        }
+
+        private String stdoutOf(Runnable run) {
+            java.io.PrintStream stdout = System.out;
+            var captured = new java.io.ByteArrayOutputStream();
+            try {
+                System.setOut(new java.io.PrintStream(captured));
+                run.run();
+            } finally {
+                System.setOut(stdout);
+            }
+            return captured.toString();
+        }
+
+        private String stderrOf(Runnable run) {
+            java.io.PrintStream stderr = System.err;
+            var captured = new java.io.ByteArrayOutputStream();
+            try {
+                System.setErr(new java.io.PrintStream(captured));
+                run.run();
+            } finally {
+                System.setErr(stderr);
+            }
+            return captured.toString();
+        }
+
+        @Test
+        @DisplayName("the transparent statistics state the declared confidence's alpha")
+        void transparentStatsStateTheAlpha() {
+            System.setProperty("punit.stats.transparent", "true");
+            try {
+                String analysis = stderrOf(() ->
+                        PUnit.declared("sla-judged-at-ninety-nine").assertPasses());
+                assertThat(analysis).contains("[REQUIRED]").contains("alpha 0.01");
+            } finally {
+                System.clearProperty("punit.stats.transparent");
+            }
+        }
+
+        @Test
+        @DisplayName("a normative contract at 0.99 derives its size and is judged at 0.99")
+        void normativeContractAtNinetyNine() {
+            String output = stdoutOf(() ->
+                    PUnit.declared("sla-judged-at-ninety-nine").assertPasses());
+
+            // The smallest n with 0.95^n ≤ 0.01 is 90 (59 at the default).
+            assertThat(output).contains("90 samples")
+                    .contains("threshold 0.95 at confidence 0.99");
+            assertThat(lastVerdict().execution().plannedSamples()).isEqualTo(90);
+            assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.99);
+        }
+
+        @Test
+        @DisplayName("the contract's confidence moves the bar: 95 of 100 clears 0.89 at 0.95, not at 0.99")
+        void confidenceMovesTheBar() {
+            // The tail P(X ≥ 95 | n = 100, p = 0.89) is 0.030: inside
+            // alpha 0.05, outside alpha 0.01.
+            assertThatCode(() -> PUnit.declared("polite-enough-at-the-default-confidence")
+                    .samples(100).assertPasses())
+                    .doesNotThrowAnyException();
+            assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.95);
+
+            Declared strict = PUnit.declared("polite-enough-at-ninety-nine").samples(100);
+            assertThatThrownBy(strict::assertPasses).isInstanceOf(AssertionFailedError.class);
+            assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.99);
+            // Early termination decides at the same confidence: the run
+            // stops once 0.99's pass count is out of reach, well before
+            // the hundredth sample.
+            assertThat(lastVerdict().termination().reason())
+                    .isEqualTo(org.mavai.punit.verdict.TerminationReason.IMPOSSIBILITY);
+            assertThat(lastVerdict().execution().samplesExecuted()).isLessThan(100);
+        }
+
+        @Test
+        @DisplayName("the derivation gate refuses a size the higher confidence alone pushes past it")
+        void gateAtHigherConfidence() {
+            // 0.97 needs 99 samples at 0.95 (under the gate) but 152 at 0.99.
+            Declared run = PUnit.declared("sla-trips-the-gate-at-ninety-nine");
             assertThatThrownBy(run::assertPasses)
                     .isInstanceOf(ContractConfigurationException.class)
-                    .hasMessageContaining("framework confidence");
+                    .hasMessageContaining("derived minimum is 152")
+                    .hasMessageContaining("confidence 0.99")
+                    .hasMessageContaining(".samples(152)");
+        }
+
+        @Test
+        @DisplayName("a budget below the minimum at 0.99 is refused before any sample runs")
+        void budgetBelowMinimumAtNinetyNine() {
+            Declared run = PUnit.declared("sla-judged-at-ninety-nine").samples(50);
+            assertThatThrownBy(run::assertPasses)
+                    .hasMessageContaining("COMPLIANCE_INFEASIBLE")
+                    .hasMessageContaining("alpha 0.01")
+                    .hasMessageContaining("feasibility minimum 90");
+        }
+
+        @Test
+        @DisplayName("measure records the declared bar's judgement at the contract's confidence")
+        void measureJudgesAtTheContractConfidence(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory)
+                throws java.io.IOException {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                PUnit.declared("polite-enough-at-ninety-nine").samples(100).measure();
+                String baseline;
+                try (var files = java.nio.file.Files.walk(directory)) {
+                    baseline = java.nio.file.Files.readString(files
+                            .filter(java.nio.file.Files::isRegularFile).findFirst().orElseThrow());
+                }
+                assertThat(baseline).contains("normativeJudgement").contains("0.99");
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
+        }
+
+        @Test
+        @DisplayName("an empirical criterion takes the contract's confidence by default")
+        void empiricalTakesTheContractDefault(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                PUnit.declared("empirical-judged-at-ninety-nine").samples(100).measure();
+                assertThatCode(() -> PUnit.declared("empirical-judged-at-ninety-nine")
+                        .samples(100).assertPasses())
+                        .doesNotThrowAnyException();
+                assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.99);
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
+        }
+
+        @Test
+        @DisplayName("an empirical criterion's own confidence overrides the contract's")
+        void criterionConfidenceOverridesTheContract(
+                @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) {
+            System.setProperty("punit.baseline.dir", directory.toString());
+            try {
+                PUnit.declared("empirical-criterion-keeps-its-own-confidence").samples(100).measure();
+                assertThatCode(() -> PUnit.declared("empirical-criterion-keeps-its-own-confidence")
+                        .samples(100).assertPasses())
+                        .doesNotThrowAnyException();
+                assertThat(lastVerdict().execution().resolvedConfidence()).isEqualTo(0.9);
+            } finally {
+                System.clearProperty("punit.baseline.dir");
+            }
         }
     }
 

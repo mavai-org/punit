@@ -87,14 +87,25 @@ final class CriteriaCompiler {
         return Criteria.of(array);
     }
 
+    /**
+     * The confidence a criterion is judged at: its own {@code confidence:}
+     * (an empirical criterion's alone), else the contract's when the file
+     * declares one, else none — punit-core's default then applies. The
+     * contract value binds a declared threshold and defaults every
+     * empirical criterion (MAVAI-CONTRACT-FORMAT §II.4).
+     */
+    private Double effectiveConfidence(CriterionDeclaration criterion) {
+        if (criterion.confidence() != null) {
+            return criterion.confidence();
+        }
+        return declaration.confidenceDeclared() ? declaration.confidence() : null;
+    }
+
     private Decl<String> compileCriterion(CriterionDeclaration criterion) {
         CriterionDecl<String> decl = criterion.threshold() != null
                 ? Criteria.meeting().<String>passRate(criterion.threshold())
                 : Criteria.empirical().passRate();
         decl = decl.name(criterion.name());
-        // A declared threshold is judged at the framework confidence by
-        // punit-core's design; a non-default file-level confidence with
-        // thresholded criteria refuses at run time before compilation.
         Double tolerate = tolerateOverrides.containsKey(criterion.name())
                 ? tolerateOverrides.get(criterion.name())
                 : criterion.tolerate();
@@ -104,8 +115,9 @@ final class CriteriaCompiler {
                 decl = decl.atPower(power);
             }
         }
-        if (criterion.confidence() != null) {
-            decl = decl.atConfidence(criterion.confidence());
+        Double confidence = effectiveConfidence(criterion);
+        if (confidence != null) {
+            decl = decl.atConfidence(confidence);
         }
         if (criterion.contractRef() != null) {
             decl = criterion.thresholdOrigin() != null

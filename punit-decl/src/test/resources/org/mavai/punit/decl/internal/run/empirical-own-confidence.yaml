@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: empirical-criterion-keeps-its-own-confidence
+service: mostly-polite
+confidence: 0.99
+criteria:
+  - name: no-worse-than-measured
+    confidence: 0.9
+    contains: "hello"
+inputs: ["Alice"]

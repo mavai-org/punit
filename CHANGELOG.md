@@ -23,6 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   to start on the counter's line (`20/20[PUNIT] …`), where Gradle's
   status lines could draw over them. The bridge now ends the counter's
   line first; the last count stays visible.
+- **A contract file's `confidence:` now binds its thresholded
+  criteria.** A top-level `confidence:` other than 0.95 used to be
+  refused at run time whenever a criterion declared a `threshold:`, so
+  a normative contract could not be judged at, say, 99 %. It is now
+  applied to every such criterion: the derived sample count, the
+  derivation gate, the decision, early termination, the measure-time
+  normative judgement and the verdict all use it.
+- **A contract file's `confidence:` now reaches its empirical
+  criteria.** It was accepted and silently ignored; it is now the
+  default for every empirical criterion without its own
+  `confidence:`, which still wins. A contract that already declared a
+  non-default top-level confidence over empirical criteria was judged
+  at 0.95 until now, so its verdicts can change.
 
 ### Changed
 
