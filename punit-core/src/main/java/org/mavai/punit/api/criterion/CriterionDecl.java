@@ -258,9 +258,10 @@ public final class CriterionDecl<O> implements Decl<O> {
 
     /**
      * Set the per-criterion confidence floor — the run cannot
-     * loosen it. Composes only with {@code empirical()}; rejected
-     * by the posture machinery on a {@code .meeting(...)} or
-     * zero-failures commitment.
+     * loosen it. Composes with {@code .meeting(...)} (the declared
+     * requirement is demonstrated at {@code 1 − confidence}) and with
+     * {@code empirical()} (the baseline-derived bar is decided at it);
+     * rejected by the posture machinery on a zero-failures commitment.
      */
     public CriterionDecl<O> atConfidence(double confidence) {
         return new CriterionDecl<>(

@@ -1,0 +1,8 @@
+format: mavai-contract/1
+contract: empirical-judged-at-ninety-nine
+service: mostly-polite
+confidence: 0.99
+criteria:
+  - name: no-worse-than-measured
+    contains: "hello"
+inputs: ["Alice"]

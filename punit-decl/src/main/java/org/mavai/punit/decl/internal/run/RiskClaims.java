@@ -8,7 +8,6 @@ import org.mavai.punit.decl.ContractConfigurationException;
 import org.mavai.punit.decl.internal.model.ContractDeclaration;
 import org.mavai.punit.decl.internal.model.CriterionDeclaration;
 import org.mavai.punit.decl.internal.model.DeclaredIntent;
-import org.mavai.punit.statistics.StatisticalDefaults;
 
 /**
  * The invocation's risk-claim surface, resolved and validated: the
@@ -132,18 +131,6 @@ final class RiskClaims {
                             + "baseline; risk-driven derivation arrives with the declarative "
                             + "measure phase — size the run explicitly with .samples(N) or "
                             + "-Dpunit.samples." + contract + "=N meanwhile");
-        }
-
-        double confidence = StatisticalDefaults.DEFAULT_CONFIDENCE;
-        if (declaration.confidenceDeclared()
-                && Math.abs(declaration.confidence() - confidence) > 1e-9
-                && declaration.criteria().stream().anyMatch(c -> c.threshold() != null)) {
-            throw new ContractConfigurationException(
-                    "punit judges declared thresholds at the framework confidence ("
-                            + confidence + ") — a contract-level `confidence: "
-                            + declaration.confidence() + "` cannot rebind thresholded "
-                            + "criteria; per-criterion `confidence:` remains available on "
-                            + "empirical criteria");
         }
 
         return new RiskClaims(merged, power);

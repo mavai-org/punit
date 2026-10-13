@@ -1,0 +1,8 @@
+format: mavai-contract/1
+contract: polite-enough-at-the-default-confidence
+service: mostly-polite
+criteria:
+  - name: polite-enough
+    threshold: 0.89
+    contains: "hello"
+inputs: ["Alice"]

@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: sla-trips-the-gate-at-ninety-nine
+service: greeting-service
+confidence: 0.99
+criteria:
+  - name: nearly-always-polite
+    threshold: 0.97
+    contains: "hello"
+inputs: ["Alice"]

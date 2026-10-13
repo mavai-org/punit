@@ -1,0 +1,10 @@
+format: mavai-contract/1
+contract: sla-judged-at-ninety-nine
+service: greeting-service
+confidence: 0.99
+criteria:
+  - name: greets-politely
+    threshold: 0.95
+    threshold-origin: sla
+    contains: "hello"
+inputs: ["Alice", "Bob"]

@@ -309,6 +309,16 @@ sample count the declared threshold can support, samples the binding
 over the inputs, and judges the criterion with the same exact decision
 rule as every other punit test.
 
+**Confidence.** Every criterion is judged at 95 % confidence unless
+the file says otherwise. A top-level `confidence: 0.99` binds every
+criterion with a `threshold:` — the derived sample count, the decision,
+early termination, the measure-time judgement and the verdict all move
+with it (a 0.95 threshold needs 59 samples at 95 %, 90 at 99 %) — and
+is the default for every empirical criterion. An empirical criterion
+may declare its own `confidence:`, which wins; beside a `threshold:` a
+criterion-level `confidence:` is refused, since one contract states one
+confidence for its stipulated bars.
+
 **Richer contracts.** The same file grows with the claim: named
 transforms (`transforms: {basket: json}`) and per-check subjects
 (`in:`/`path:` with RFC 9535 JSONPath), the full postcondition
