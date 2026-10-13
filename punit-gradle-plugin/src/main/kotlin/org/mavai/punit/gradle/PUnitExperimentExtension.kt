@@ -7,7 +7,7 @@ import org.gradle.api.provider.Property
  *
  * ```kotlin
  * punit {
- *     specsDir.set("src/test/resources/punit/specs")
+ *     baselineDir.set("src/test/resources/punit/baselines")
  *     explorationsDir.set(layout.buildDirectory.dir("punit/explorations").map { it.asFile.absolutePath })
  *     optimizationsDir.set(layout.buildDirectory.dir("punit/optimizations").map { it.asFile.absolutePath })
  *     configureTestTask.set(true)
@@ -16,14 +16,27 @@ import org.gradle.api.provider.Property
  * }
  * ```
  *
- * The three default locations differ deliberately: MEASURE specs are inputs
- * to subsequent `@ProbabilisticTest` runs (kept under source, committed),
+ * The locations differ deliberately: MEASURE baselines are inputs to
+ * subsequent `@ProbabilisticTest` runs (kept under source, committed),
  * while EXPLORE and OPTIMIZE outputs are human-review artefacts (kept under
  * `build/`, not committed). Override any default as shown above.
  */
 abstract class PUnitExperimentExtension {
 
-    /** Output directory for MEASURE specs. Default: `src/test/resources/punit/specs` (tracked in source). */
+    /**
+     * Directory MEASURE writes baselines to and tests read them from, passed
+     * to the `test` and `exp` tasks as `punit.baseline.dir`. Unset by default:
+     * punit-core then resolves `PUNIT_BASELINE_DIR`, else
+     * `src/test/resources/punit/baselines`. A `punit.baseline.dir` the build
+     * sets on a task itself takes precedence.
+     */
+    abstract val baselineDir: Property<String>
+
+    /**
+     * Removed: punit-core never read the directory this named. Setting it
+     * fails the build with a pointer to [baselineDir].
+     */
+    @Deprecated("punit-core never read this directory; use baselineDir", ReplaceWith("baselineDir"))
     abstract val specsDir: Property<String>
 
     /** Output directory for EXPLORE results. Default: `<buildDir>/punit/explorations` (transient, not tracked). */

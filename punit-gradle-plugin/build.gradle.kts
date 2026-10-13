@@ -100,8 +100,12 @@ val functionalTestRuntimeOnly by configurations.getting {
 }
 
 dependencies {
-    functionalTestImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
-    functionalTestRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 // Generate a Kotlin source file with the PUnit version baked in at compile time.

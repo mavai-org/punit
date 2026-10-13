@@ -25,15 +25,9 @@ tasks.test {
     // intentional sample-level failures.
     exclude("**/testsubjects/**")
 
-    // MEASURE specs and baselines in punit-core's own tests are
-    // re-generated as TestKit byproducts. Redirect both to build/ so the
-    // source tree's committed src/test/resources/punit/specs/*.yaml
-    // fixtures are not overwritten and emitted baselines do not pollute
+    // MEASURE baselines in punit-core's own tests are re-generated as
+    // TestKit byproducts. Redirect them to build/ so they do not pollute
     // src/test/resources/punit/baselines/.
-    systemProperty(
-        "punit.specs.outputDir",
-        layout.buildDirectory.dir("punit/specs").get().asFile.absolutePath
-    )
     systemProperty(
         "punit.baseline.dir",
         layout.buildDirectory.dir("punit/baselines").get().asFile.absolutePath

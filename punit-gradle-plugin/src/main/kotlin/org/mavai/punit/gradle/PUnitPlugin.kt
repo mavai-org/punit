@@ -1,10 +1,14 @@
 package org.mavai.punit.gradle
 
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.Directory
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestDescriptor
@@ -12,7 +16,9 @@ import org.gradle.api.tasks.testing.TestOutputEvent
 import org.gradle.api.tasks.testing.TestOutputListener
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
+import java.io.PrintStream
 import java.net.URLClassLoader
 
 /**
@@ -26,7 +32,7 @@ import java.net.URLClassLoader
  * - Registers `experiment` and `exp` tasks for the inverse run —
  *   experiment-tagged methods only, with the cache/failure/output-dir
  *   defaults experiments need (uncacheable, INCONCLUSIVE-tolerant,
- *   spec/exploration/optimization output dirs wired through)
+ *   baseline/exploration/optimization output dirs wired through)
  * - Registers `createSentinel` task to build an executable sentinel JAR
  * - Forwards `punit.*` system properties and supports `-Prun=` filter syntax
  *
@@ -38,12 +44,13 @@ class PUnitPlugin : Plugin<Project> {
 
     override fun apply(project: Project) {
         val extension = project.extensions.create("punit", PUnitExperimentExtension::class.java).apply {
-            // Measure specs are inputs to subsequent @ProbabilisticTest runs
-            // (including in CI), so they live alongside source and are intended
-            // to be committed. Explore and Optimize outputs are human-review
-            // artefacts with no downstream programmatic consumer, so they live
-            // under build/ as transient build output. See CHANGELOG 0.6.0.
-            specsDir.convention("src/test/resources/punit/specs")
+            // Measure baselines are inputs to subsequent @ProbabilisticTest
+            // runs (including in CI), so they live alongside source and are
+            // intended to be committed; their directory is punit-core's to
+            // resolve unless `baselineDir` is set. Explore and Optimize outputs
+            // are human-review artefacts with no downstream programmatic
+            // consumer, so they live under build/ as transient build output.
+            // See CHANGELOG 0.6.0.
             explorationsDir.convention(
                 project.layout.buildDirectory.dir("punit/explorations").map { it.asFile.absolutePath }
             )
@@ -85,6 +92,14 @@ class PUnitPlugin : Plugin<Project> {
         registerPUnitReportTask(project, extension, rendererConfig)
 
         project.afterEvaluate {
+            @Suppress("DEPRECATION")
+            if (extension.specsDir.isPresent) {
+                throw GradleException(
+                    "punit { specsDir } has been removed: punit-core never read the directory it named. " +
+                    "Set punit { baselineDir } instead (it feeds punit.baseline.dir), or drop the line " +
+                    "to keep the default (src/test/resources/punit/baselines).")
+            }
+
             if (extension.configureTestTask.get()) {
                 configureTestTask(project, extension)
             }
@@ -150,6 +165,7 @@ class PUnitPlugin : Plugin<Project> {
             }
 
             forwardPUnitSystemProperties(this)
+            feedBaselineDir(this, extension)
             applyRunFilter(project, this)
             installProgressBridge(this)
         }
@@ -206,12 +222,10 @@ class PUnitPlugin : Plugin<Project> {
                 junitXml.outputLocation.set(project.layout.buildDirectory.dir("experiment-results"))
             }
 
-            val specsDir = extension.specsDir.get()
             val explorationsDir = extension.explorationsDir.get()
             val optimizationsDir = extension.optimizationsDir.get()
 
             systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
-            systemProperty("punit.specs.outputDir", specsDir)
             systemProperty("punit.explorations.outputDir", explorationsDir)
             systemProperty("punit.optimizations.outputDir", optimizationsDir)
 
@@ -221,7 +235,7 @@ class PUnitPlugin : Plugin<Project> {
             ignoreFailures = true
 
             // Experiments are stochastic and side-effecting (they
-            // write spec/exploration/optimization YAML); Gradle's
+            // write baseline/exploration/optimization YAML); Gradle's
             // up-to-date check would otherwise skip a re-run when
             // only the user's intent changed (e.g. a new --tests
             // filter or a new PUNIT_LLM_MODE).
@@ -234,9 +248,11 @@ class PUnitPlugin : Plugin<Project> {
             dependsOn("compileTestJava", "processTestResources")
 
             forwardPUnitSystemProperties(this)
+            feedBaselineDir(this, extension)
             applyRunFilter(project, this)
 
             // Track start time to detect which directories received output
+            val experimentTask = this
             var startTime = 0L
             doFirst {
                 startTime = System.currentTimeMillis()
@@ -245,13 +261,10 @@ class PUnitPlugin : Plugin<Project> {
             doLast {
                 println("\n✓ Experiment complete.")
 
-                val specsFile = project.file(specsDir)
+                val baselinesWritten = filesWrittenSince(resolveBaselineDir(experimentTask, extension), startTime)
                 val explorationsFile = project.file(explorationsDir)
                 val optimizationsFile = project.file(optimizationsDir)
 
-                val specsUpdated = specsFile.exists() && specsFile.walkTopDown()
-                    .filter { f -> f.isFile && f.lastModified() >= startTime }
-                    .any()
                 val explorationsUpdated = explorationsFile.exists() && explorationsFile.walkTopDown()
                     .filter { f -> f.isFile && f.lastModified() >= startTime }
                     .any()
@@ -259,8 +272,8 @@ class PUnitPlugin : Plugin<Project> {
                     .filter { f -> f.isFile && f.lastModified() >= startTime }
                     .any()
 
-                if (specsUpdated) {
-                    println("  MEASURE specs written to: $specsDir/")
+                baselinesWritten.forEach { f ->
+                    println("  MEASURE baseline written to: ${displayPath(project, f)}")
                 }
                 if (explorationsUpdated) {
                     println("  EXPLORE results written to: $explorationsDir/")
@@ -268,7 +281,7 @@ class PUnitPlugin : Plugin<Project> {
                 if (optimizationsUpdated) {
                     println("  OPTIMIZE results written to: $optimizationsDir/")
                 }
-                if (!specsUpdated && !explorationsUpdated && !optimizationsUpdated) {
+                if (baselinesWritten.isEmpty() && !explorationsUpdated && !optimizationsUpdated) {
                     println("  No output files were written.")
                 }
             }
@@ -564,6 +577,49 @@ class PUnitPlugin : Plugin<Project> {
             .forEach { (k, v) -> task.systemProperty(k.toString(), v.toString()) }
     }
 
+    /**
+     * Passes `punit { baselineDir }` to the test JVM as `punit.baseline.dir`,
+     * decided at execution so that a `punit.baseline.dir` the build sets on
+     * the task itself — directly, through `tasks.withType<Test>()`, or
+     * forwarded from `-D` — wins wherever it was configured.
+     */
+    private fun feedBaselineDir(task: Test, extension: PUnitExperimentExtension) {
+        task.jvmArgumentProviders.add(BaselineDirArgument(task, extension.baselineDir))
+    }
+
+    internal class BaselineDirArgument(
+        private val task: Test,
+        @get:Input @get:Optional val baselineDir: Provider<String>
+    ) : CommandLineArgumentProvider {
+        override fun asArguments(): Iterable<String> =
+            if (task.systemProperties.containsKey(BASELINE_DIR_PROPERTY) || !baselineDir.isPresent) emptyList()
+            else listOf("-D$BASELINE_DIR_PROPERTY=${task.workingDir.resolve(baselineDir.get()).absolutePath}")
+    }
+
+    /**
+     * The directory the test JVM's `BaselineResolver` writes MEASURE
+     * baselines to, resolved the way it resolves it: the system property
+     * (set on the task, or fed from `baselineDir`), then the environment
+     * variable, then the convention path, relative to the working directory.
+     */
+    private fun resolveBaselineDir(task: Test, extension: PUnitExperimentExtension): File {
+        val dir = task.systemProperties[BASELINE_DIR_PROPERTY]?.toString()
+            ?: extension.baselineDir.orNull
+            ?: task.environment[BASELINE_DIR_ENV_VAR]?.toString()
+            ?: BASELINE_CONVENTION_PATH
+        return task.workingDir.resolve(dir)
+    }
+
+    private fun filesWrittenSince(dir: File, since: Long): List<File> =
+        if (!dir.exists()) emptyList()
+        else dir.walkTopDown().filter { it.isFile && it.lastModified() >= since }.sortedBy { it.path }.toList()
+
+    /** Relative to the project directory when inside it, absolute otherwise. */
+    private fun displayPath(project: Project, file: File): String {
+        val relative = file.absoluteFile.normalize().relativeTo(project.projectDir.absoluteFile.normalize())
+        return if (relative.path.startsWith("..")) file.absoluteFile.normalize().path else relative.path
+    }
+
     private fun applyRunFilter(project: Project, task: Test) {
         val runFilter = project.findProperty("run") as String?
         if (runFilter != null) {
@@ -618,6 +674,15 @@ class PUnitPlugin : Plugin<Project> {
          * change to both.
          */
         const val SAMPLE_PROGRESS_MARKER = "[PUNIT-PROGRESS]"
+
+        /**
+         * Mirror `BaselineResolver`'s property, environment variable and
+         * convention path in punit-core, for the same reason: the summary
+         * runs in the build process. A change to one is a change to both.
+         */
+        const val BASELINE_DIR_PROPERTY = "punit.baseline.dir"
+        const val BASELINE_DIR_ENV_VAR = "PUNIT_BASELINE_DIR"
+        const val BASELINE_CONVENTION_PATH = "src/test/resources/punit/baselines"
     }
 
     /**
@@ -625,29 +690,39 @@ class PUnitPlugin : Plugin<Project> {
      * progress lines by their marker prefix, strips the marker, and
      * writes the counter to the build's terminal as an in-place
      * `\r`-prefixed update. Non-progress chunks pass through
-     * unmodified.
+     * unmodified, except that one following a counter first ends the
+     * counter's line, so it starts on a line of its own and the last
+     * count stays visible.
      *
      * Made package-private (default Kotlin visibility) so the
      * functional-test module can verify the bridge end-to-end.
      */
-    internal class SampleProgressBridge : TestOutputListener {
+    internal class SampleProgressBridge(
+        private val out: PrintStream = System.out
+    ) : TestOutputListener {
+
+        /** Whether the last write was a counter with no newline after it. */
+        private var counterOpen = false
 
         override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
-            val message = outputEvent.message
+            relay(outputEvent.message)
+        }
+
+        @Synchronized
+        internal fun relay(message: String) {
             // The marker may appear at any byte offset in the chunk —
             // Gradle sometimes batches a leading newline with the
             // following line into one event. Find the marker rather
             // than insisting it sit at column 0.
             val markerIdx = message.indexOf(SAMPLE_PROGRESS_MARKER)
             if (markerIdx < 0) {
-                System.out.print(message)
-                System.out.flush()
+                passThrough(message)
                 return
             }
             // Anything before the marker is non-progress content from
             // the same chunk — pass it through verbatim.
             if (markerIdx > 0) {
-                System.out.print(message.substring(0, markerIdx))
+                passThrough(message.substring(0, markerIdx))
             }
             // Extract the counter content: everything between the
             // marker and the next newline (the executor terminates
@@ -656,14 +731,24 @@ class PUnitPlugin : Plugin<Project> {
             val newlineIdx = message.indexOf('\n', afterMarker)
             val end = if (newlineIdx < 0) message.length else newlineIdx
             val counter = message.substring(afterMarker, end)
-            System.out.print('\r' + counter)
-            System.out.flush()
+            out.print('\r' + counter)
+            out.flush()
+            counterOpen = true
             // If the chunk carried trailing content beyond the line
             // (rare), pass it through too.
             if (newlineIdx >= 0 && newlineIdx + 1 < message.length) {
-                System.out.print(message.substring(newlineIdx + 1))
-                System.out.flush()
+                passThrough(message.substring(newlineIdx + 1))
             }
+        }
+
+        private fun passThrough(text: String) {
+            if (text.isEmpty()) return
+            if (counterOpen && !text.startsWith("\n")) {
+                out.print('\n')
+            }
+            out.print(text)
+            out.flush()
+            counterOpen = false
         }
     }
 }
