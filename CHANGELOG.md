@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-13
+
+0.14.0 was prepared but never published; its changes ship in this
+release.
+
+### Added
+
+- **`assertContract()` and `assertLatency()`** — two asserting
+  terminals beside `assertPasses()`, on `PUnit.testing(...)` (both
+  builders) and on `PUnit.declared()`. `assertContract()` asserts the
+  functional verdict alone, `assertLatency()` the latency verdict
+  alone; `assertPasses()` keeps asserting the whole test verdict,
+  unchanged. Each terminal runs the test once and maps its verdict as
+  `assertPasses()` does (FAIL → `AssertionFailedError`, INCONCLUSIVE →
+  `TestAbortedException`, or `AssertionFailedError` when every baseline
+  candidate was rejected). A dimension the run makes advisory
+  (`punit.advisory`) never fails a terminal and is reported as
+  advisory; `assertLatency()` passes on a test with no latency
+  constraint; a refused configuration throws
+  `ConfigurationRefusedException` from every terminal. Both dimensions
+  are decided and the verdict record is written identically whichever
+  terminal is called. The failure message names the asserted dimension
+  and labels the other dimension's criteria advisory or not asserted;
+  a passing per-dimension assertion whose other, enforced dimension did
+  not pass says so on stderr (`[PUNIT-UNASSERTED]`).
+- `PUnit.Declared` gains `assertContract()` and `assertLatency()`; an
+  implementation of that interface outside punit-decl must add them.
+
+### Changed
+
+- **`punit { specsDir }` is replaced by `punit { baselineDir }`.**
+  `baselineDir` feeds `punit.baseline.dir` to the `test` and `exp`
+  tasks, so tests read where measure wrote; unset, punit-core's own
+  resolution applies, and a `punit.baseline.dir` the build sets on a
+  task takes precedence. A build that sets `specsDir` fails with a
+  message naming `baselineDir`. The plugin no longer passes
+  `punit.specs.outputDir`, which nothing read; the Maven configuration
+  guide now sets `punit.baseline.dir`.
+
 ### Fixed
 
 - **The `exp` summary reports the baseline a MEASURE run wrote.** It
@@ -36,42 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `confidence:`, which still wins. A contract that already declared a
   non-default top-level confidence over empirical criteria was judged
   at 0.95 until now, so its verdicts can change.
-
-### Changed
-
-- **`punit { specsDir }` is replaced by `punit { baselineDir }`.**
-  `baselineDir` feeds `punit.baseline.dir` to the `test` and `exp`
-  tasks, so tests read where measure wrote; unset, punit-core's own
-  resolution applies, and a `punit.baseline.dir` the build sets on a
-  task takes precedence. A build that sets `specsDir` fails with a
-  message naming `baselineDir`. The plugin no longer passes
-  `punit.specs.outputDir`, which nothing read; the Maven configuration
-  guide now sets `punit.baseline.dir`.
-
-## [0.14.0] - 2026-10-07
-
-### Added
-
-- **`assertContract()` and `assertLatency()`** — two asserting
-  terminals beside `assertPasses()`, on `PUnit.testing(...)` (both
-  builders) and on `PUnit.declared()`. `assertContract()` asserts the
-  functional verdict alone, `assertLatency()` the latency verdict
-  alone; `assertPasses()` keeps asserting the whole test verdict,
-  unchanged. Each terminal runs the test once and maps its verdict as
-  `assertPasses()` does (FAIL → `AssertionFailedError`, INCONCLUSIVE →
-  `TestAbortedException`, or `AssertionFailedError` when every baseline
-  candidate was rejected). A dimension the run makes advisory
-  (`punit.advisory`) never fails a terminal and is reported as
-  advisory; `assertLatency()` passes on a test with no latency
-  constraint; a refused configuration throws
-  `ConfigurationRefusedException` from every terminal. Both dimensions
-  are decided and the verdict record is written identically whichever
-  terminal is called. The failure message names the asserted dimension
-  and labels the other dimension's criteria advisory or not asserted;
-  a passing per-dimension assertion whose other, enforced dimension did
-  not pass says so on stderr (`[PUNIT-UNASSERTED]`).
-- `PUnit.Declared` gains `assertContract()` and `assertLatency()`; an
-  implementation of that interface outside punit-decl must add them.
 
 ## [0.13.0] - 2026-10-07
 
@@ -1745,8 +1748,8 @@ unit testing of non-deterministic systems.
 - Verbose statistical explanation output
 - Gradle plugin (`org.javai.punit`) for test/experiment task configuration
 
-[Unreleased]: https://github.com/mavai-org/punit/compare/v0.14.0...HEAD
-[0.14.0]: https://github.com/mavai-org/punit/compare/v0.13.0...v0.14.0
+[Unreleased]: https://github.com/mavai-org/punit/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/mavai-org/punit/compare/v0.13.0...v0.15.0
 [0.13.0]: https://github.com/mavai-org/punit/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/mavai-org/punit/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/mavai-org/punit/compare/v0.12.0...v0.12.1
