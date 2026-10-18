@@ -46,10 +46,29 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # With a prompt the action runs unattended, and any shell command not
+          # allowed here is refused without failing the step. The shallow
+          # checkout cannot diff against the base, so the reviewer reads the PR
+          # through gh and posts its review as a comment. gh pr review is not
+          # allowed: it can approve.
+          claude_args: >-
+            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
           prompt: |
             Read .qa-source/plan/qa/punit/maxims-review-persona.md and follow it
             exactly. The maxims it refers to are in
             .qa-source/.claude-submodules/punit-MAXIMS.md. Review pull
             request ${{ github.repository }}#${{ github.event.pull_request.number }}
-            (its diff only) and post a single advisory review. Do not print the
+            (its diff only) and post a single advisory review as one PR comment
+            with gh pr comment. Do not print the
             maxims file or the persona file into your review or the job log.
+
+      # A refused tool leaves the step green and the review unposted. Name any
+      # refusals in the log — tool and command only; the full execution output
+      # holds the private QA source and is never uploaded.
+      - name: Report refused tools
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$out" ] || { echo "no execution output"; exit 0; }
+          jq -r '.[] | select(.type == "result") | .permission_denials[]?
+                 | "refused: \(.tool_name) \(.tool_input.command // "" | .[0:120])"' "$out"
