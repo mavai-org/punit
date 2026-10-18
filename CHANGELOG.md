@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `regression/fisher` p-value no longer underflows to 0 far above
+  the hypergeometric mode.** The one-sided Fisher p-value summed the
+  lower tail downwards from the test's own count. When that count lay
+  far above the mode, its probability underflowed to 0, and the p-value
+  came back 0 instead of about 1. The cutoff search counted those false
+  zeros as failing counts and pushed the cutoff to the test size, so
+  only a perfect test could pass. That happened at low baseline pass
+  rates with large samples: 100 of 10000 against a test of 10000 gave a
+  cutoff of 10000 instead of 78, and 2000 of 10000 gave 10000 instead
+  of 1907. Design power, design sizing and the minimum detectable
+  degradation inherited those cutoffs. The p-value now sums whichever
+  tail is shorter, and above the mean it is one minus the upper tail.
+  This also removes a loss of about 1e-10 near p = 1 that let the
+  p-value dip as the test count rose. Verdicts and cutoffs change only
+  where they were wrong; the high-pass-rate tests most suites declare
+  are unaffected. No dependency is added, and sizing costs what it did.
+
 ## [0.15.0] - 2026-10-13
 
 0.14.0 was prepared but never published; its changes ship in this
