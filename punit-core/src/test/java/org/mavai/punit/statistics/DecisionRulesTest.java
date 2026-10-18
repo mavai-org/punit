@@ -1,6 +1,7 @@
 package org.mavai.punit.statistics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 import java.util.Arrays;
@@ -78,6 +79,77 @@ class DecisionRulesTest {
             assertThat(RegressionRule.sizeAtAssumedCommonRate(100, 100, 50, 0.05)).isEmpty();
             assertThat(RegressionRule.sizeAtAssumedCommonRate(90, 100, 50, 0.05)
                     .orElseThrow()).isBetween(0.0, 0.05);
+        }
+
+        @Test
+        @DisplayName("the cutoff walked from any guess is the bisected cutoff")
+        void cutoffNearAgreesWithBisection() {
+            Random random = new Random(20261018L);
+            for (int i = 0; i < 300; i++) {
+                int nb = 1 + random.nextInt(400);
+                int kb = random.nextInt(nb + 1);
+                int nt = 1 + random.nextInt(nb);
+                double alpha = 0.01 + 0.19 * random.nextDouble();
+                int expected = RegressionRule.cutoffUnchecked(kb, nb, nt, alpha);
+                for (int guess : new int[] { -5, 0, expected - 3, expected, expected + 3, nt, nt + 10 }) {
+                    assertThat(RegressionRule.cutoffNear(kb, nb, nt, alpha, guess))
+                            .as("kb=%d nb=%d nt=%d alpha=%s guess=%d", kb, nb, nt, alpha, guess)
+                            .isEqualTo(expected);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("the cutoff walked from a guess honours the exact boundary")
+        void cutoffNearAtExactBoundary() {
+            assertThat(RegressionRule.cutoffNear(12, 12, 4, 0.05, 0)).isEqualTo(3);
+            assertThat(RegressionRule.cutoffNear(12, 12, 4, 0.05, 2)).isEqualTo(3);
+            assertThat(RegressionRule.cutoffNear(12, 12, 4, 0.05, 4)).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("a configuration outside the domain is refused")
+        void configurationOutsideDomainIsRefused() {
+            assertThatThrownBy(() -> RegressionRule.cutoff(0, 0, 10, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("baseline trials must be positive");
+            assertThatThrownBy(() -> RegressionRule.cutoff(5, 10, 0, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("test samples must be positive");
+            assertThatThrownBy(() -> RegressionRule.cutoff(-1, 10, 5, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("baseline successes must be in 0..10");
+            assertThatThrownBy(() -> RegressionRule.cutoff(11, 10, 5, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("baseline successes must be in 0..10");
+            for (double alpha : new double[] { 0.0, 1.0, -0.05, 1.5, Double.NaN }) {
+                assertThatThrownBy(() -> RegressionRule.cutoff(5, 10, 5, alpha))
+                        .as("alpha=%s", alpha)
+                        .isInstanceOf(IllegalArgumentException.class)
+                        .hasMessageContaining("alpha must be in (0, 1)");
+            }
+        }
+
+        @Test
+        @DisplayName("a test count outside 0..n is refused before deciding")
+        void testCountOutsideRangeIsRefused() {
+            assertThatThrownBy(() -> RegressionRule.decide(-1, 4, 12, 12, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("test successes must be in 0..4");
+            assertThatThrownBy(() -> RegressionRule.decide(5, 4, 12, 12, 0.05))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("test successes must be in 0..4");
+        }
+
+        @Test
+        @DisplayName("a declared cutoff outside 0..n has no implied alpha")
+        void declaredCutoffOutsideRangeIsRefused() {
+            assertThatThrownBy(() -> RegressionRule.impliedAlpha(12, 12, 4, -1))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("the declared cutoff must be in 0..4");
+            assertThatThrownBy(() -> RegressionRule.impliedAlpha(12, 12, 4, 5))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("the declared cutoff must be in 0..4");
         }
     }
 
