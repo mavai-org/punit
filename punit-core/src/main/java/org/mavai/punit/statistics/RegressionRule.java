@@ -54,13 +54,16 @@ public final class RegressionRule {
     /**
      * The one-sided Fisher p-value {@code P(X ≤ k_t)} of a test count.
      *
-     * <p>The hypergeometric probability of {@code k_t} is taken from the
-     * distribution, and the lower tail is summed downwards by the ratio
-     * of successive probabilities,
-     * {@code P(x − 1) / P(x) = x (N − K − n + x) / ((K − x + 1)(n − x + 1))},
-     * until the terms no longer move the sum. Near a cutoff the tail is
-     * small and the sum takes a handful of terms, which is what makes the
-     * sizing searches affordable.
+     * <p>Whichever tail is shorter is summed, the method of R's
+     * {@code phyper}. At or below the mean the lower tail is summed
+     * downwards from {@code P(k_t)}; above it the p-value is one minus the
+     * upper tail {@code P(X ≥ k_t + 1)}, summed upwards. Each sum starts at
+     * the term nearest the mode and follows the ratio of successive
+     * probabilities until the terms no longer move it, so a starting term
+     * too small for a double means the whole tail is: the p-value is then
+     * 0 or 1 to double precision, never a false 0 far above the mode. Near
+     * a cutoff the tail is small and the sum takes a handful of terms,
+     * which is what makes the sizing searches affordable.
      */
     public static double pValue(
             int testSuccesses, int baselineSuccesses, int baselineTrials, int testSamples) {
@@ -74,15 +77,50 @@ public final class RegressionRule {
         if (testSuccesses >= upper) {
             return 1.0;
         }
-        double term = HypergeometricDistribution.of(population, pooled, testSamples)
-                .probability(testSuccesses);
+        HypergeometricDistribution distribution =
+                HypergeometricDistribution.of(population, pooled, testSamples);
+        boolean lowerTailIsShorter =
+                (long) testSuccesses * population <= (long) testSamples * pooled;
+        if (lowerTailIsShorter) {
+            return Math.min(1.0,
+                    lowerTail(distribution, testSuccesses, lower, population, pooled, testSamples));
+        }
+        return Math.max(0.0, 1.0
+                - upperTail(distribution, testSuccesses + 1, upper, population, pooled, testSamples));
+    }
+
+    /**
+     * {@code P(X ≤ x)}, summed downwards by
+     * {@code P(y − 1) / P(y) = y (N − K − n + y) / ((K − y + 1)(n − y + 1))}.
+     */
+    private static double lowerTail(
+            HypergeometricDistribution distribution, int x, int lower,
+            int population, int pooled, int testSamples) {
+        double term = distribution.probability(x);
         double sum = term;
-        for (int x = testSuccesses; x > lower && term > sum * 1e-18; x--) {
-            term *= (double) x * (population - pooled - testSamples + x)
-                    / ((double) (pooled - x + 1) * (testSamples - x + 1));
+        for (int y = x; y > lower && term > sum * 1e-18; y--) {
+            term *= (double) y * (population - pooled - testSamples + y)
+                    / ((double) (pooled - y + 1) * (testSamples - y + 1));
             sum += term;
         }
-        return Math.min(1.0, sum);
+        return sum;
+    }
+
+    /**
+     * {@code P(X ≥ x)}, summed upwards by
+     * {@code P(y + 1) / P(y) = (K − y)(n − y) / ((y + 1)(N − K − n + y + 1))}.
+     */
+    private static double upperTail(
+            HypergeometricDistribution distribution, int x, int upper,
+            int population, int pooled, int testSamples) {
+        double term = distribution.probability(x);
+        double sum = term;
+        for (int y = x; y < upper && term > sum * 1e-18; y++) {
+            term *= (double) (pooled - y) * (testSamples - y)
+                    / ((double) (y + 1) * (population - pooled - testSamples + y + 1));
+            sum += term;
+        }
+        return sum;
     }
 
     /**
