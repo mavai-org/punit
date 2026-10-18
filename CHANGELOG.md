@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-18
+
 ### Fixed
 
 - **The `regression/fisher` p-value no longer underflows to 0 far above
@@ -25,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   p-value dip as the test count rose. Verdicts and cutoffs change only
   where they were wrong; the high-pass-rate tests most suites declare
   are unaffected. No dependency is added, and sizing costs what it did.
+
+### Changed
+
+- **`org.snakeyaml:snakeyaml-engine` bumped from 3.1.1 to 3.2** in
+  `punit-decl`, the declarative reader's YAML parser. Consumers of
+  `punit-decl` pick it up on their runtime classpath; `punit-core`'s
+  own `org.yaml:snakeyaml` dependency is unchanged.
 
 ## [0.15.0] - 2026-10-13
 
@@ -1767,7 +1776,8 @@ unit testing of non-deterministic systems.
 - Verbose statistical explanation output
 - Gradle plugin (`org.javai.punit`) for test/experiment task configuration
 
-[Unreleased]: https://github.com/mavai-org/punit/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/mavai-org/punit/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/mavai-org/punit/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/mavai-org/punit/compare/v0.13.0...v0.15.0
 [0.13.0]: https://github.com/mavai-org/punit/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/mavai-org/punit/compare/v0.12.1...v0.12.2
