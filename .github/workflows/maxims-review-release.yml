@@ -97,6 +97,12 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # With a prompt the action runs unattended, and any shell command not
+          # allowed here is refused without failing the step. The shallow
+          # checkout cannot diff against the base, so the persona reads the PR
+          # through gh and posts its section the same way.
+          claude_args: >-
+            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
           prompt: |
             Read .qa-source/plan/qa/punit/maxims-review-${{ matrix.persona }}.md and
             follow it exactly. The maxims are in
@@ -104,3 +110,14 @@ jobs:
             PR #${{ github.event.pull_request.number || github.event.inputs.pr }}
             through this persona's lens only, and post one advisory review section
             headed with the persona name. Do not print the maxims or persona files.
+
+      # A refused tool leaves the step green and the review unposted. Name any
+      # refusals in the log — tool and command only; the full execution output
+      # holds the private QA source and is never uploaded.
+      - name: Report refused tools
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$out" ] || { echo "no execution output"; exit 0; }
+          jq -r '.[] | select(.type == "result") | .permission_denials[]?
+                 | "refused: \(.tool_name) \(.tool_input.command // "" | .[0:120])"' "$out"
