@@ -388,11 +388,13 @@ empirical().<O>passRate().satisfies("...", ...);
 - **`meeting().passRate(τ)`** — declared threshold, NORMATIVE origin
   (SLA / SLO / Policy), decided by `compliance/exact-binomial`. With
   VERIFICATION intent a requirement no count of the planned size can
-  demonstrate is refused (`COMPLIANCE_INFEASIBLE`).
+  demonstrate is refused (`COMPLIANCE_INFEASIBLE`). With SMOKE intent
+  it is decided by `compliance/smoke-exact-binomial` at any size: FAIL
+  only on evidence that the service falls short.
 - **`empirical().passRate()`** — closest-match baseline lookup;
   decided at evaluation time against the resolved baseline's counts
   by Fisher's exact test, `regression/fisher` (Statistical Companion
-  1.6.0); a test larger than its baseline is refused
+  1.7.0); a test larger than its baseline is refused
   (`TEST_LARGER_THAN_BASELINE`). The baseline is
   supplied at the test call site via
   `PUnit.testing(baselineSupplier)` (see
@@ -712,8 +714,8 @@ punit serialises every Verdict to XML using the mavai.org family's
 feotest, mavai.org sentinels and dashboards all read and write this
 format):
 
-- **XSD schema:** punit writes verdict-1.8 records;
-  `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.8.xsd`
+- **XSD schema:** punit writes verdict-1.10 records;
+  `punit-report/src/main/resources/org/mavai/punit/report/verdict-1.10.xsd`
   (earlier revisions are bundled beside it).
 - **Namespace:** `http://mavai.org/verdict/1.0`.
 - **Root element:** `<verdict-record>`.

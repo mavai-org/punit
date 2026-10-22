@@ -719,8 +719,35 @@ Two intents shape the framework's tolerance for marginal sample sizes:
   least 59), the configuration is *refused* before any sample runs
   (`COMPLIANCE_INFEASIBLE`).
 - **`TestIntent.SMOKE`** — a lightweight early-warning check. An
-  undersized sample is allowed; the verdict is labelled SMOKE, and a
-  test too small to demonstrate its requirement cannot pass.
+  undersized sample is allowed and the run goes ahead; the verdict is
+  labelled SMOKE. A declared requirement is decided by its own rule,
+  `compliance/smoke-exact-binomial`, which reverses the burden of proof:
+  the test FAILs only on evidence that the service falls short of the
+  requirement, and PASSes otherwise. A SMOKE PASS is therefore never
+  evidence of compliance — it says only that the run found no evidence
+  of falling short — and when the design is too small to demonstrate
+  the requirement, the verdict says so and names the feasibility
+  minimum. Empirical (baseline-derived) criteria are decided as under
+  VERIFICATION.
+
+How SMOKE decides a declared requirement (Statistical Companion
+§5.7.3): a count of `k` passes in `n` FAILs when the probability of so
+few passes, were the service exactly at its requirement, is at most
+alpha. The smallest count that does not fail is the rule's
+*required-pass*; the test PASSes iff its passes reach it. At 0.99,
+alpha 0.05 and 100 samples — a design VERIFICATION refuses, since a
+PASS needs 299 — required-pass is 97: an always-succeeding service
+stops at its 97th pass with success guaranteed, and the fourth miss
+ends the run with failure inevitable. Two misses in 30 samples are
+already evidence of falling short, and at five samples any miss is.
+On the rare design where no count can FAIL (a low requirement over a
+handful of samples, such as 0.5 over one), the result PASSes and says
+that it carries no evidence about the service.
+
+An explicit latency requirement under SMOKE is decided the same way,
+over the count of successful latencies within the threshold
+(`latency/smoke-compliance-exact-binomial`); with no successful latency
+it is INCONCLUSIVE.
 
 A configuration with any invalid part is refused whole: every
 configuration error is reported together, in a fixed order
@@ -1094,7 +1121,7 @@ STATISTICAL ANALYSIS — test verdict: FAIL
 
   shopping-basket
 
-  Test verdict (methodology 1.6.0)
+  Test verdict (methodology 1.7.0)
       Functional:           PASS
       Latency:              FAIL
       Test:                 FAIL
@@ -2118,7 +2145,7 @@ to the published **mavai verdict schema**:
 
 - Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`
-- Schema: punit writes verdict-1.8 records; the `verdict-1.x.xsd`
+- Schema: punit writes verdict-1.10 records; the `verdict-1.x.xsd`
   revisions bundled in `punit-report` are vendored from the published
   mavai schema releases.
 
@@ -2224,7 +2251,7 @@ Before a probabilistic test runs, the framework checks:
   existence of a precedence rank for the expected number of
   successful samples. These warn; they never refuse.
 
-The methodology version (1.6.0) and each decision rule's identity and
+The methodology version (1.7.0) and each decision rule's identity and
 version are written into every verdict record.
 
 ### Further reading
@@ -2382,7 +2409,10 @@ through the engine.
 
 **TestIntent.** `VERIFICATION` (default) requires the configuration
 to be statistically adequate and rejects undersized runs.
-`SMOKE` warns but proceeds; verdicts carry the SMOKE qualifier.
+`SMOKE` runs an undersized design and decides a declared requirement
+by `compliance/smoke-exact-binomial`: FAIL only on evidence that the
+service falls short, PASS otherwise — never evidence of compliance.
+Verdicts carry the SMOKE label and caveat.
 
 **ThresholdOrigin.** The provenance label on a contractual threshold
 (`SLA`, `SLO`, `EMPIRICAL`, `POLICY`, ...). Recorded on the verdict

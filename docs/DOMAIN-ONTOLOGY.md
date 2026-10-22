@@ -329,7 +329,8 @@ ArchUnit-style architecture test).
   package: org.mavai.punit.statistics (evaluator) + org.mavai.punit.internal.engine.criteria (adapter)
   role_notes: |
     The pre-execution gate. Verification + NORMATIVE → reject;
-    Smoke + NORMATIVE → run with caveat; any + EMPIRICAL → run.
+    Smoke + NORMATIVE → run with caveat, decided by
+    compliance/smoke-exact-binomial; any + EMPIRICAL → run.
     SMOKE intent does not produce a warning by design (family
     invariant referenced via memory: `smoke_intent_silent_feasibility`).
 

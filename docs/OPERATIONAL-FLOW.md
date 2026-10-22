@@ -29,7 +29,7 @@ The threshold comes from a **normative origin**—a contract, policy, or SLO.
 
 However, we must distinguish between **compliance** and a **smoke test**. A true compliance test requires a sample size large enough to support an evidential claim (VERIFICATION). For highly reliable services like payment gateways, this sample size can be very large. 
 
-If you want an early-warning check without the cost of a full compliance audit, declare your intent as `SMOKE`.
+If you want an early-warning check without the cost of a full compliance audit, declare your intent as `SMOKE`. The run goes ahead at any size and the requirement is decided by `compliance/smoke-exact-binomial`: it FAILs only on evidence that the service falls short of the requirement, and a PASS is never evidence of compliance.
 
 The service contract declares the contractual posture in its
 `criteria()` method; the test sets the intent:
@@ -162,7 +162,7 @@ void thresholdFirst() {
 - PUnit runs the chosen samples and passes iff the count reaches `k_min` of the exact one-sided binomial test — the sample must provide evidence for the commitment.
 - The threshold's provenance and the optional `contractRef` are recorded on the verdict for audit traceability.
 
-**Trade-off:** Evidence costs samples. A strict threshold needs a sample size that can support it (0.95 at alpha 0.05 needs at least 59 samples, all passing); with a smaller N, declare `.intent(TestIntent.SMOKE)` to run as a sentinel that cannot pass; otherwise the configuration is refused before any sample runs (`COMPLIANCE_INFEASIBLE`).
+**Trade-off:** Evidence costs samples. A strict threshold needs a sample size that can support it (0.95 at alpha 0.05 needs at least 59 samples, all passing); with a smaller N, declare `.intent(TestIntent.SMOKE)` to run as a sentinel that FAILs only on evidence of falling short; otherwise the configuration is refused before any sample runs (`COMPLIANCE_INFEASIBLE`).
 
 **Best for:** SLA-style verification of services with externally-committed reliability targets.
 

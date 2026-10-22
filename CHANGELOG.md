@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+**SMOKE decides a declared requirement by its own rule (methodology
+1.7.0, Statistical Companion 1.7.0, conformant with the mavai-R
+v0.14.0 reference data).** Breaking for SMOKE tests of a declared
+requirement, whose verdicts change, and for readers of verdict
+records: punit now writes verdict-1.10.
+
+### Fixed
+
+- **SMOKE intent had no effect on a test of a declared requirement
+  (regression, v0.10.0 to v0.15.1).** A normative criterion (SLA, SLO
+  or POLICY) under SMOKE was decided by the VERIFICATION rule, so a
+  design too small to demonstrate its requirement could only FAIL, and
+  statistical early termination stopped it after its first sample with
+  "no count of this size can pass". SMOKE only replaced the up-front
+  `COMPLIANCE_INFEASIBLE` refusal with a certain FAIL, unlabelled on
+  the console. It began in v0.10.0, when the declared verdict moved
+  from the point rate to the Wilson bound and the required success
+  count became one more than the planned samples for an infeasible
+  design, and carried over to the exact binomial rule in v0.12.0. On
+  the Java surface (`.intent(TestIntent.SMOKE)`) and the declarative
+  surface (`intent: smoke`) alike, a SMOKE test of a declared
+  requirement now runs and is decided by
+  `compliance/smoke-exact-binomial` (companion §5.7.3), at every size:
+  the burden of proof is reversed, so a count FAILs only when so few
+  passes would be improbable (at most alpha) for a service exactly at
+  its requirement, and PASSes otherwise. Its required-pass is the
+  largest failing count plus one, and early termination reads it: at
+  0.99, alpha 0.05 and 100 samples, an always-succeeding service stops
+  at its 97th pass with success guaranteed, and the fourth miss ends
+  the run with failure inevitable. A SMOKE PASS is not evidence of
+  compliance; it states that the run found no evidence of falling
+  short. VERIFICATION is unchanged and still refuses an undersized
+  design. Empirical (baseline-derived) criteria are unaffected.
+
+### Changed
+
+- **An explicit latency requirement under SMOKE** is decided by
+  `latency/smoke-compliance-exact-binomial`: the same reversed rule
+  over the count of successful latencies within the threshold, at any
+  number of them from one upward, INCONCLUSIVE with none. Its
+  `required-within` is the deciding rule's binding count.
+  `LatencyRules.evaluateCompliance` takes the intent, and
+  `LatencyCompliance` carries the deciding rule, `requiredWithin`
+  beside `minimumWithin` (the VERIFICATION `y_min`), the p-value and,
+  under SMOKE, the false non-compliance probability.
+- **`DecisionRule` gains `COMPLIANCE_SMOKE_EXACT_BINOMIAL` and
+  `LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL`**, with
+  `DecisionRule.compliance(smoke)` and `latencyCompliance(smoke)`
+  selecting by intent; `ComplianceRule` gains `smokeRequiredPass`,
+  `decideSmoke`, `requiredPass(rule, ...)` and the two p-values.
+  A SMOKE decision's alpha bounds a false FAIL, so it enters the
+  false-degradation-signal envelope, not the false-compliance one.
+  `EarlyTerminationContext` carries the test's intent, and
+  `EvaluationContext` the planned sample count.
+- **A run cut short by statistical early termination is decided at its
+  planned size.** Its required-pass is the planned-size count the stop
+  read, under either intent, so a VERIFICATION record that stopped at
+  success guaranteed now states `k_min` of the planned size instead of
+  that of the samples run; verdicts are unchanged.
+- **SMOKE is visible wherever the verdict is shown.** The failure
+  message starts `FAIL (SMOKE)` and names the rule and its
+  required-pass; a passing SMOKE test prints a `[PUNIT-SMOKE]` line on
+  stderr; the sentinel console title reads `VERDICT: PASS (SMOKE)`; the
+  summary, verbose and transparent-statistics renderings state the
+  reversed hypotheses and read a PASS as no evidence of falling short.
+  The SMOKE caveat of an undersized design says that a PASS at this
+  size is not evidence of compliance and names the feasibility
+  minimum, stated for the planned size; a design at which no count
+  can FAIL says that the result carries no evidence about the service.
+  The `COMPLIANCE_INFEASIBLE` remediation no longer says that a SMOKE
+  test cannot pass.
+- **Verdict records are verdict-1.10** (`methodology-version="1.7.0"`),
+  additive over 1.8: a row or latency evaluation may name the two
+  SMOKE rules. `verdict-1.10.xsd` is bundled in `punit-report` beside
+  the earlier revisions; the reader reads 1.10 and 1.8 records.
+- The conformance suites run against mavai-R v0.14.0 (`mavaiRTag`),
+  including its SMOKE cases. The declarative-format corpus has its own
+  pin, `mavaiRFormatsTag`, held at v0.12.0 until the declarative reader
+  implements the run-controls and built-in-stepper amendments of
+  `mavai-services/1` (mavai-R 0.13.0); mavai-R 0.14.0 changes no
+  format.
+
 ## [0.15.1] - 2026-10-18
 
 ### Fixed
