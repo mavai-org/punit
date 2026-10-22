@@ -43,6 +43,13 @@ records: punit now writes verdict-1.10.
 
 ### Changed
 
+- **The Gradle plugin resolves `org.mavai:mavai:0.24.0`** for `punitReport`
+  (`mavaiVersion`; the Maven configuration example names the same
+  version). It reads verdict-1.10 records and words a SMOKE decision by
+  its verdict: a pass reads as no evidence of falling short of the
+  requirement, never as the requirement met. A build that pins
+  `punit { mavaiVersion }` keeps its own choice.
+
 - **An explicit latency requirement under SMOKE** is decided by
   `latency/smoke-compliance-exact-binomial`: the same reversed rule
   over the count of successful latencies within the threshold, at any
