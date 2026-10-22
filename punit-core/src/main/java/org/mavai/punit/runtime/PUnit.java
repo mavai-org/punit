@@ -524,6 +524,7 @@ public final class PUnit {
         }
         Optional<Verdict> asserted = assertion.binding(result);
         if (asserted.filter(v -> v != Verdict.PASS).isEmpty()) {
+            emitSmokeNote(result, serviceContractId, asserted);
             emitAdvisoryDiagnostics(result, serviceContractId, assertion);
             return;
         }
@@ -575,6 +576,23 @@ public final class PUnit {
      * the build console. A per-dimension assertion says the same of the
      * enforced dimension it leaves out.
      */
+    /**
+     * A passing SMOKE test says so on the console: its PASS states only
+     * that the run found no evidence of falling short, and must not read
+     * as an evidential one.
+     */
+    private static void emitSmokeNote(
+            ProbabilisticTestResult result, String serviceContractId, Optional<Verdict> asserted) {
+        if (result.intent() != TestIntent.SMOKE || asserted.isEmpty()) {
+            return;
+        }
+        String header = serviceContractId == null || serviceContractId.isBlank()
+                ? "[PUNIT-SMOKE]"
+                : "[PUNIT-SMOKE] " + serviceContractId;
+        System.err.println(header + ": " + asserted.get() + " (SMOKE) — a sentinel verdict, "
+                + "not evidence of compliance");
+    }
+
     private static void emitAdvisoryDiagnostics(
             ProbabilisticTestResult result, String serviceContractId, Assertion assertion) {
         result.composition().ifPresent(c -> {
@@ -674,14 +692,20 @@ public final class PUnit {
     }
 
     /**
-     * The failure message: the asserted verdict — naming its dimension
-     * for a per-dimension assertion — then every criterion with its
+     * The failure message: the asserted verdict — labelled SMOKE under
+     * that intent, and naming its dimension for a per-dimension
+     * assertion — then every criterion with its
      * explanation, those that did not decide it labelled advisory or
      * not asserted, then the run's diagnostic context.
      */
     static String formatMessage(ProbabilisticTestResult result, Assertion assertion, Verdict verdict) {
         StringBuilder sb = new StringBuilder();
         sb.append(verdict);
+        if (result.intent() == TestIntent.SMOKE) {
+            // A SMOKE verdict is a sentinel's, never evidence of compliance:
+            // the label travels on the line the console shows first.
+            sb.append(" (SMOKE)");
+        }
         assertion.dimension().ifPresent(d -> sb.append(" (").append(d.token())
                 .append(" dimension, ").append(assertion.method()).append(')'));
         List<EvaluatedCriterion> evaluated = result.criterionResults();

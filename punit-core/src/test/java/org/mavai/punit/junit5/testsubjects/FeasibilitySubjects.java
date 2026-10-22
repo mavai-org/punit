@@ -3,6 +3,8 @@ package org.mavai.punit.junit5.testsubjects;
 import static org.mavai.punit.api.criterion.Criteria.empirical;
 import static org.mavai.punit.api.criterion.Criteria.meeting;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.mavai.outcome.Outcome;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.api.ProbabilisticTest;
@@ -27,12 +29,16 @@ public final class FeasibilitySubjects {
 
     public static final String USE_CASE_ID = "feasibility-use-case";
 
+    /** Service invocations across the subjects; the hosting test resets it before each run. */
+    public static final AtomicInteger INVOCATIONS = new AtomicInteger();
+
     private static ServiceContract<NoFactors, Integer, Boolean> alwaysPassesEmpirical() {
         return new ServiceContract<>() {
             @Override public Criteria<Boolean> criteria() {
                 return empirical().passRate();
             }
             @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+                INVOCATIONS.incrementAndGet();
                 return Outcome.ok(true);
             }
             @Override public String id() { return USE_CASE_ID; }
@@ -45,6 +51,7 @@ public final class FeasibilitySubjects {
                 return meeting().passRate(0.9999);
             }
             @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+                INVOCATIONS.incrementAndGet();
                 return Outcome.ok(true);
             }
             @Override public String id() { return USE_CASE_ID; }
@@ -127,8 +134,10 @@ public final class FeasibilitySubjects {
     /**
      * SMOKE + contractual threshold + undersized sample: same
      * configuration as {@link ContractualVerificationInfeasible}
-     * but with explicit SMOKE intent. The framework is silent and
-     * the engine runs to a real verdict.
+     * but with explicit SMOKE intent. The configuration is not refused;
+     * the run is decided by compliance/smoke-exact-binomial, which FAILs
+     * only on evidence of falling short. Its required-pass at 50 samples
+     * is 50, so the always-passing service runs every sample and PASSes.
      */
     public static final class ContractualSmokeInfeasible {
         @ProbabilisticTest

@@ -256,6 +256,28 @@ public final class TransparentStatsRenderer {
             sb.append(label("False compliance:", formatRate(d.get("falseCompliance"))));
             sb.append(label("Clopper–Pearson:", formatRate(d.get("clopperPearsonLower"))
                     + " (one-sided lower bound; reported, decides nothing)"));
+        } else if (DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL.id().equals(rule)) {
+            sb.append(label("H₀ (null):", "p ≥ " + formatRate(d.get("threshold"))
+                    + " (the requirement is met)"));
+            sb.append(label("H₁ (alternative):", "p < " + formatRate(d.get("threshold"))
+                    + " (the service falls short)"));
+            sb.append(label("Decision rule:", rule + " v1, alpha " + alpha + " (SMOKE)"));
+            sb.append(label("Requirement:", formatRate(d.get("threshold"))
+                    + " (origin: " + d.get("origin") + ")"));
+            sb.append(label("Observed:", String.format(Locale.ROOT, "K = %s of n = %s (%s)",
+                    d.get("successes"), d.get("total"), formatRate(d.get("observed")))));
+            sb.append(label("Required pass:", Boolean.TRUE.equals(d.get("failPossible"))
+                    ? "PASS iff K ≥ " + d.get("requiredPass")
+                            + (d.containsKey("plannedSamples")
+                                    ? " of the " + d.get("plannedSamples") + " planned" : "")
+                    : "no count of this size can FAIL; this result carries no evidence"));
+            sb.append(label("Calibration:", String.format(Locale.ROOT,
+                    "were the service exactly at its requirement, the test would falsely "
+                            + "report it falling short with probability at most %s", alpha)));
+            sb.append(label("Reading:", "a PASS is no evidence of falling short, "
+                    + "never evidence of compliance"));
+            sb.append(label("Clopper–Pearson:", formatRate(d.get("clopperPearsonLower"))
+                    + " (one-sided lower bound; reported, decides nothing)"));
         } else {
             sb.append(label("Observed:", String.format(Locale.ROOT, "%s of %s (%s)",
                     d.get("successes"), d.get("total"), formatRate(d.get("observed")))));

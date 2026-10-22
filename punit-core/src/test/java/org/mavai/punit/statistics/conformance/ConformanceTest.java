@@ -65,7 +65,7 @@ class ConformanceTest {
     }
 
     @Nested
-    @DisplayName("compliance_decision — compliance/exact-binomial through the engine")
+    @DisplayName("compliance_decision — compliance/exact-binomial and compliance/smoke-exact-binomial through the engine")
     class ComplianceDecision {
         @TestFactory
         Collection<DynamicTest> cases() {
@@ -128,7 +128,7 @@ class ConformanceTest {
     }
 
     @Nested
-    @DisplayName("latency_compliance_decision — latency/compliance-exact-binomial")
+    @DisplayName("latency_compliance_decision — latency/compliance-exact-binomial and latency/smoke-compliance-exact-binomial")
     class LatencyComplianceDecision {
         @TestFactory
         Collection<DynamicTest> cases() {

@@ -336,7 +336,7 @@ public final class PercentileLatency<OT> implements Criterion<OT, LatencyStatist
         List<String> breached = new ArrayList<>();
         for (PercentileKey key : assertedPercentiles) {
             Verdict v = mode == Mode.CONTRACTUAL
-                    ? decideExplicit(key, latencies, detail)
+                    ? decideExplicit(key, latencies, !underVerification, detail)
                     : decideBaselineDerived(key, latencies, baseline, underVerification, detail);
             detail.put("verdict." + key.detailKey(), v.name());
             verdicts.add(v);
@@ -359,17 +359,25 @@ public final class PercentileLatency<OT> implements Criterion<OT, LatencyStatist
         return new CriterionResult(NAME, verdict, explanation, detail);
     }
 
-    /** {@code latency/compliance-exact-binomial} on one explicit ceiling. */
-    private Verdict decideExplicit(PercentileKey key, double[] latencies, Map<String, Object> detail) {
+    /**
+     * One explicit ceiling, by the rule the intent selects:
+     * {@code latency/compliance-exact-binomial} under VERIFICATION,
+     * {@code latency/smoke-compliance-exact-binomial} under SMOKE.
+     */
+    private Verdict decideExplicit(
+            PercentileKey key, double[] latencies, boolean smoke, Map<String, Object> detail) {
         String k = key.detailKey();
         long ceiling = key.ceilingMillis(declaredSpec).getAsLong();
         LatencyRules.LatencyCompliance c =
-                LatencyRules.evaluateCompliance(latencies, ceiling, key.value(), alpha());
+                LatencyRules.evaluateCompliance(latencies, ceiling, key.value(), alpha(), smoke);
         detail.put("threshold." + k, ceiling);
-        detail.put("decisionRule." + k, DecisionRule.LATENCY_COMPLIANCE_EXACT_BINOMIAL.id());
+        detail.put("decisionRule." + k, c.decisionRule().id());
         detail.put("withinThreshold." + k, c.withinThreshold());
-        c.minimumWithin().ifPresent(y -> detail.put("requiredWithin." + k, y));
+        c.minimumWithin().ifPresent(y -> detail.put("minimumWithin." + k, y));
+        c.requiredWithin().ifPresent(y -> detail.put("requiredWithin." + k, y));
+        c.pValue().ifPresent(pv -> detail.put("pValue." + k, pv));
         c.falseCompliance().ifPresent(f -> detail.put("falseCompliance." + k, f));
+        c.falseNonCompliance().ifPresent(f -> detail.put("falseNonCompliance." + k, f));
         c.clopperPearsonLower().ifPresent(lb -> detail.put("clopperPearsonLower." + k, lb));
         c.observedPercentileMs().ifPresent(o -> detail.put("observed." + k, (long) Math.floor(o)));
         c.rawPercentilePass().ifPresent(pass -> detail.put("rawPercentilePass." + k, pass));

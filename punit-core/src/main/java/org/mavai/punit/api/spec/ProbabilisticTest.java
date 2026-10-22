@@ -483,6 +483,7 @@ public final class ProbabilisticTest implements Spec {
                     return criterionPostures;
                 }
                 @Override public TestIntent intent() { return testIntent; }
+                @Override public int plannedSamples() { return sampling.samples(); }
             };
             return (CriterionResult) raw.evaluate(ctx);
         }
@@ -596,7 +597,7 @@ public final class ProbabilisticTest implements Spec {
                             .orElse(org.mavai.punit.statistics.StatisticalDefaults
                                     .DEFAULT_CONFIDENCE);
                     return Optional.of(new EarlyTerminationContext(
-                            threshold.getAsDouble(), confidence, successStopAllowed));
+                            threshold.getAsDouble(), confidence, successStopAllowed, intent));
                 }
             }
             return Optional.empty();

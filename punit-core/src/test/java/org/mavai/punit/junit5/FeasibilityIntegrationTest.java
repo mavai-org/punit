@@ -28,7 +28,7 @@ import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.testkit.engine.EngineTestKit;
 import org.junit.platform.testkit.engine.Events;
 
-@DisplayName("Configuration refusal — invalid designs are refused before any sample, SMOKE proceeds")
+@DisplayName("Configuration refusal — invalid designs are refused before any sample, SMOKE runs to its verdict")
 class FeasibilityIntegrationTest {
 
     private static final String JUNIT_ENGINE_ID = "junit-jupiter";
@@ -38,6 +38,7 @@ class FeasibilityIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        FeasibilitySubjects.INVOCATIONS.set(0);
         savedProperty = System.getProperty(BaselineResolver.BASELINE_DIR_PROPERTY);
         System.setProperty(BaselineResolver.BASELINE_DIR_PROPERTY, baselineDir.toString());
     }
@@ -88,23 +89,18 @@ class FeasibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("SMOKE + undersized sample — engine runs silently; verdict produced")
+    @DisplayName("SMOKE + small empirical test — runs all 10 samples and PASSes")
     void smokeInfeasibleAllowed() throws IOException {
         // An empirical test of 10 against a baseline of 1000 is a valid
         // design under either intent: the regression rule has no
-        // feasibility minimum. The run proceeds to a verdict.
+        // feasibility minimum, and the run has no early termination.
         writeBaselineAt(0.95, 1000);
 
         Events events = run(FeasibilitySubjects.SmokeInfeasible.class);
-        // The point of this test is the run wasn't *aborted* — it
-        // executed and produced a real verdict.
-        events.assertStatistics(stats -> stats.started(1));
-        // It's either succeeded or failed; not aborted (which would mean
-        // INCONCLUSIVE), and not skipped (which would mean discovery filter).
-        long failedOrSucceeded = events.failed().count() + events.succeeded().count();
-        assertThat(failedOrSucceeded)
-                .as("SMOKE-intent test runs to verdict; not aborted/skipped")
-                .isEqualTo(1);
+        events.assertStatistics(stats -> stats.started(1).succeeded(1).failed(0).aborted(0));
+        assertThat(FeasibilitySubjects.INVOCATIONS)
+                .as("every planned sample runs")
+                .hasValue(10);
     }
 
     @Test
@@ -112,9 +108,10 @@ class FeasibilityIntegrationTest {
     void contractualVerificationInfeasibleFailsFast() {
         // No baseline written — contractual targets do not consult one.
         // n=50 against a contractual 99.99% target at default 95%
-        // confidence is infeasible (Wilson at observed=1.0, n=50 ≈
-        // 0.949 < 0.9999). The pre-flight gate must abort before any
-        // samples execute.
+        // confidence is infeasible: no count of 50 can pass the exact
+        // binomial test (0.9999^50 > 0.05; the feasibility minimum is
+        // 29,956). The pre-flight gate must abort before any samples
+        // execute.
         Events events = run(FeasibilitySubjects.ContractualVerificationInfeasible.class);
         events.assertStatistics(stats -> stats.started(1).failed(1));
         events.failed()
@@ -137,17 +134,19 @@ class FeasibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("SMOKE + contractual SLA threshold + undersized sample — engine runs silently")
+    @DisplayName("SMOKE + contractual SLA threshold + undersized sample — runs all 50 samples and PASSes")
     void contractualSmokeInfeasibleAllowed() {
         Events events = run(FeasibilitySubjects.ContractualSmokeInfeasible.class);
-        // Subject's service contract always passes; contractual evaluator does
-        // observed >= threshold, so observed=1.0 >= 0.9999 → PASS.
-        // The point of this test is the run wasn't *aborted*.
-        events.assertStatistics(stats -> stats.started(1));
-        long failedOrSucceeded = events.failed().count() + events.succeeded().count();
-        assertThat(failedOrSucceeded)
-                .as("contractual SMOKE-intent test runs to verdict; not aborted/skipped")
-                .isEqualTo(1);
+        // Not refused under SMOKE: compliance/smoke-exact-binomial decides,
+        // FAIL only on evidence of falling short of 0.9999. At 50 samples
+        // its required-pass is 50 (49 of 50 is already evidence, at
+        // alpha 0.05), so the always-passing service runs every sample and
+        // PASSes: no stop after the first sample, as no rule makes the
+        // outcome certain from the outset.
+        events.assertStatistics(stats -> stats.started(1).succeeded(1).failed(0).aborted(0));
+        assertThat(FeasibilitySubjects.INVOCATIONS)
+                .as("every planned sample runs")
+                .hasValue(50);
     }
 
     private void writeBaselineAt(double rate, int sampleCount) throws IOException {

@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+import org.apache.commons.numbers.fraction.BigFraction;
 import org.apache.commons.statistics.distribution.BetaDistribution;
 import org.apache.commons.statistics.distribution.BinomialDistribution;
 
@@ -28,6 +29,12 @@ import org.apache.commons.statistics.distribution.BinomialDistribution;
  * <p>{@code latency/compliance-exact-binomial} applies the same test to
  * the count of latencies within an explicit threshold
  * ({@link LatencyRules#evaluateCompliance}).
+ *
+ * <p>Under SMOKE intent a requirement is decided by
+ * {@code compliance/smoke-exact-binomial} (companion §5.7.3) at every
+ * size: the burden of proof reversed, FAIL iff
+ * {@code P_{p_req}(K ≤ k) ≤ alpha}, PASS iff {@code K ≥ required-pass}
+ * ({@link #decideSmoke}). It needs no feasibility minimum.
  */
 public final class ComplianceRule {
 
@@ -152,6 +159,107 @@ public final class ComplianceRule {
                 successes, samples, requirement, alpha, kMin,
                 falseCompliance(requirement, samples, kMin),
                 clopperPearsonLower(successes, samples, alpha));
+    }
+
+    // ── compliance/smoke-exact-binomial (§5.7.3) ────────────────────
+
+    /**
+     * {@code required-pass} of {@code compliance/smoke-exact-binomial}: the
+     * largest failing count plus one, 0 when no count of this size can
+     * FAIL. Under SMOKE the burden of proof is reversed —
+     * {@code H0: p ≥ p_req} against {@code H1: p < p_req} — and a count
+     * {@code k} FAILs iff {@code P_{p_req}(K ≤ k) ≤ alpha} (inclusive,
+     * under the exact-boundary convention). The lower tail rises with
+     * {@code k}, so the failing counts are {@code 0..f}; the result is
+     * at most {@code samples}, since {@code P(K ≤ n) = 1}.
+     */
+    public static int smokeRequiredPass(double requirement, int samples, double alpha) {
+        if (samples <= 0) {
+            throw new IllegalArgumentException("samples must be positive, got " + samples);
+        }
+        validate(requirement, alpha);
+        if (!smokeFails(0, samples, requirement, alpha)) {
+            return 0;
+        }
+        int low = 0;          // fails
+        int high = samples;   // never fails: P(K ≤ n) = 1 > alpha
+        while (high - low > 1) {
+            int mid = (low + high) >>> 1;
+            if (smokeFails(mid, samples, requirement, alpha)) {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+        return low + 1;
+    }
+
+    /**
+     * The binding count of the compliance rule an identifier names:
+     * {@code k_min} for {@code compliance/exact-binomial} (empty when no
+     * count of this size can pass), {@code required-pass} for
+     * {@code compliance/smoke-exact-binomial} (always present).
+     */
+    public static OptionalInt requiredPass(
+            DecisionRule rule, double requirement, int samples, double alpha) {
+        return switch (rule) {
+            case COMPLIANCE_EXACT_BINOMIAL -> minimumPassingCount(requirement, samples, alpha);
+            case COMPLIANCE_SMOKE_EXACT_BINOMIAL ->
+                    OptionalInt.of(smokeRequiredPass(requirement, samples, alpha));
+            default -> throw new IllegalArgumentException(
+                    "not a pass-rate compliance rule: " + rule.id());
+        };
+    }
+
+    /** Whether a count FAILs under the SMOKE rule. */
+    static boolean smokeFails(int count, int samples, double requirement, double alpha) {
+        return ExactBoundary.atMostAlpha(
+                lowerTail(count, samples, requirement),
+                alpha,
+                () -> BigFraction.ONE.subtract(
+                        ExactBoundary.binomialUpperTail(count + 1, samples, requirement)));
+    }
+
+    /** {@code P_{rate}(K ≤ count)}. */
+    private static double lowerTail(int count, int samples, double rate) {
+        if (count < 0) {
+            return 0.0;
+        }
+        if (count >= samples) {
+            return 1.0;
+        }
+        return BinomialDistribution.of(samples, rate).cumulativeProbability(count);
+    }
+
+    /**
+     * Decides a criterion under SMOKE intent by
+     * {@code compliance/smoke-exact-binomial}: PASS iff
+     * {@code K ≥ required-pass}. A PASS states that the run found no
+     * evidence of non-compliance; it is never evidence of compliance.
+     */
+    public static SmokeDecision decideSmoke(int successes, int samples, double requirement, double alpha) {
+        if (successes < 0 || successes > samples) {
+            throw new IllegalArgumentException(
+                    "successes must be in 0.." + samples + ", got " + successes);
+        }
+        int required = smokeRequiredPass(requirement, samples, alpha);
+        return new SmokeDecision(
+                successes >= required ? RuleVerdict.PASS : RuleVerdict.FAIL,
+                successes, samples, requirement, alpha, required,
+                minimumPassingCount(requirement, samples, alpha),
+                lowerTail(successes, samples, requirement),
+                required == 0 ? 0.0 : lowerTail(required - 1, samples, requirement),
+                clopperPearsonLower(successes, samples, alpha));
+    }
+
+    /** {@code P_{p_req}(K ≤ successes)}, the p-value of {@code compliance/smoke-exact-binomial}. */
+    public static double smokeP(int successes, int samples, double requirement) {
+        return lowerTail(successes, samples, requirement);
+    }
+
+    /** {@code P_{p_req}(K ≥ successes)}, the p-value of {@code compliance/exact-binomial}. */
+    public static double complianceP(int successes, int samples, double requirement) {
+        return upperTail(successes, samples, requirement);
     }
 
     // ── Sizing (§5.5) ───────────────────────────────────────────────
@@ -281,6 +389,45 @@ public final class ComplianceRule {
         /** The rule that decided. */
         public DecisionRule rule() {
             return DecisionRule.COMPLIANCE_EXACT_BINOMIAL;
+        }
+    }
+
+    /**
+     * A criterion decided by {@code compliance/smoke-exact-binomial}.
+     *
+     * @param verdict              PASS iff {@code K ≥ requiredPass}
+     * @param requiredPass         the largest failing count plus one; 0 when
+     *                             no count of this size can FAIL
+     * @param minimumPassing       {@code k_min} of {@code compliance/exact-binomial}
+     *                             at this size, reported beside the decision;
+     *                             empty when no count could demonstrate compliance
+     * @param pValue               {@code P_{p_req}(K ≤ k)}, the lower tail
+     * @param falseNonCompliance   {@code P_{p_req}(K < requiredPass)}, the
+     *                             probability of a FAIL when the service
+     *                             exactly meets its requirement; 0 when no
+     *                             count can FAIL
+     * @param clopperPearsonLower  the one-sided lower bound, reported beside the verdict
+     */
+    public record SmokeDecision(
+            RuleVerdict verdict,
+            int successes,
+            int samples,
+            double requirement,
+            double alpha,
+            int requiredPass,
+            OptionalInt minimumPassing,
+            double pValue,
+            double falseNonCompliance,
+            double clopperPearsonLower) {
+
+        /** Whether any outcome of this size could FAIL. */
+        public boolean failPossible() {
+            return requiredPass > 0;
+        }
+
+        /** The rule that decided. */
+        public DecisionRule rule() {
+            return DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL;
         }
     }
 

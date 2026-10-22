@@ -200,6 +200,73 @@ class DecisionRulesTest {
     }
 
     @Nested
+    @DisplayName("compliance/smoke-exact-binomial")
+    class SmokeCompliance {
+
+        @Test
+        @DisplayName("required-pass is the largest failing count plus one (the companion's worked values)")
+        void workedValues() {
+            Object[][] cases = {
+                    {0.99, 100, 0.05, 97}, {0.99, 30, 0.05, 29}, {0.99, 20, 0.05, 19},
+                    {0.99, 5, 0.05, 5}, {0.9, 5, 0.05, 3}, {0.5, 1, 0.05, 0},
+                    {0.995, 477, 0.05, 472}, {0.95, 150, 0.05, 138}, {0.95, 50, 0.05, 45},
+                    {0.95, 58, 0.05, 52}, {0.5, 5, 1.0 / 32, 1}};
+            for (Object[] c : cases) {
+                assertThat(ComplianceRule.smokeRequiredPass((double) c[0], (int) c[1], (double) c[2]))
+                        .as("p_req %s, n %s, alpha %s", c[0], c[1], c[2])
+                        .isEqualTo((int) c[3]);
+            }
+        }
+
+        @Test
+        @DisplayName("the exact boundary P(K <= k) = alpha FAILs")
+        void exactBoundaryFails() {
+            // P(K <= 0 | 5, 0.5) = 1/32 exactly.
+            ComplianceRule.SmokeDecision d = ComplianceRule.decideSmoke(0, 5, 0.5, 1.0 / 32);
+            assertThat(d.verdict()).isEqualTo(RuleVerdict.FAIL);
+            assertThat(d.pValue()).isCloseTo(1.0 / 32, within(1e-15));
+        }
+
+        @Test
+        @DisplayName("PASS iff K >= required-pass; every count PASSes when none can FAIL")
+        void decides() {
+            assertThat(ComplianceRule.decideSmoke(97, 100, 0.99, 0.05).verdict()).isEqualTo(RuleVerdict.PASS);
+            assertThat(ComplianceRule.decideSmoke(96, 100, 0.99, 0.05).verdict()).isEqualTo(RuleVerdict.FAIL);
+            ComplianceRule.SmokeDecision none = ComplianceRule.decideSmoke(0, 1, 0.5, 0.05);
+            assertThat(none.failPossible()).isFalse();
+            assertThat(none.verdict()).isEqualTo(RuleVerdict.PASS);
+            assertThat(none.falseNonCompliance()).isZero();
+        }
+
+        @Test
+        @DisplayName("the intent selects the rule; VERIFICATION keeps compliance/exact-binomial")
+        void selectedByIntent() {
+            assertThat(DecisionRule.compliance(true)).isEqualTo(DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL);
+            assertThat(DecisionRule.compliance(false)).isEqualTo(DecisionRule.COMPLIANCE_EXACT_BINOMIAL);
+            assertThat(ComplianceRule.requiredPass(DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL, 0.99, 100, 0.05))
+                    .isEqualTo(OptionalInt.of(97));
+            assertThat(ComplianceRule.requiredPass(DecisionRule.COMPLIANCE_EXACT_BINOMIAL, 0.99, 100, 0.05))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("an explicit latency requirement under SMOKE decides on the within-threshold count")
+        void latencyUnderSmoke() {
+            double[] fiftyEight = new double[58];
+            Arrays.fill(fiftyEight, 100);
+            LatencyRules.LatencyCompliance pass =
+                    LatencyRules.evaluateCompliance(fiftyEight, 500, 0.95, 0.05, true);
+            assertThat(pass.decisionRule()).isEqualTo(DecisionRule.LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL);
+            assertThat(pass.requiredWithin()).isEqualTo(OptionalInt.of(52));
+            assertThat(pass.minimumWithin()).isEmpty();
+            assertThat(pass.verdict()).isEqualTo(RuleVerdict.PASS);
+
+            assertThat(LatencyRules.evaluateCompliance(new double[0], 500, 0.95, 0.05, true).verdict())
+                    .isEqualTo(RuleVerdict.INCONCLUSIVE);
+        }
+    }
+
+    @Nested
     @DisplayName("latency rules")
     class Latency {
 
@@ -260,9 +327,9 @@ class DecisionRulesTest {
     class MethodologyFacts {
 
         @Test
-        @DisplayName("the methodology version is 1.6.0")
+        @DisplayName("the methodology version is 1.7.0")
         void version() {
-            assertThat(Methodology.VERSION).isEqualTo("1.6.0");
+            assertThat(Methodology.VERSION).isEqualTo("1.7.0");
         }
 
         @Test

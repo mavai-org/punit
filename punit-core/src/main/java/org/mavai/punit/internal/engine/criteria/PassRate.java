@@ -13,6 +13,7 @@ import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.api.criterion.CriterionPosture;
 import org.mavai.punit.api.spec.ConfigurationCheck;
+import org.mavai.punit.api.spec.TerminationReason;
 import org.mavai.punit.api.spec.ConfigurationRefusal;
 import org.mavai.punit.api.spec.Criterion;
 import org.mavai.punit.api.spec.CriterionResult;
@@ -361,11 +362,16 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         }
 
         boolean isK1 = methodologyCriteria.size() == 1;
+        // A single criterion whose run statistical early termination cut
+        // short is decided at the planned size: the stop read that size's
+        // required-pass, and the verdict states the requirement the run
+        // met or could no longer meet.
+        int plannedSize = isK1 && stoppedByDeterminacy(summary) ? ctx.plannedSamples() : 0;
         List<Judged> judged = new ArrayList<>(methodologyCriteria.size());
         for (CriterionSampleCounts counts : methodologyCriteria) {
             CriterionPosture posture = ctx.criterionPostures().getOrDefault(
                     counts.criterionId(), CriterionPosture.implicit());
-            Optional<Judged> j = judge(counts, posture, baselineMap, isK1);
+            Optional<Judged> j = judge(counts, posture, baselineMap, isK1, ctx.intent(), plannedSize);
             if (j.isEmpty()) {
                 // A single criterion with no matching baseline entry: the
                 // criterion has no baseline to compare against.
@@ -432,7 +438,9 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             CriterionSampleCounts counts,
             CriterionPosture posture,
             PerCriterionPassRateStatistics baselineMap,
-            boolean isK1) {
+            boolean isK1,
+            TestIntent intent,
+            int plannedSize) {
         String id = counts.criterionId();
         int successes = counts.pass();
         int total = counts.pass() + counts.fail();
@@ -462,14 +470,20 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         decision.put("alpha", alpha);
 
         if (kind == Kind.COMPLIANCE) {
-            return Optional.of(judgeCompliance(id, successes, total, posture, alpha, decision));
+            return Optional.of(judgeCompliance(id, successes, total, Math.max(total, plannedSize),
+                    posture, alpha, intent, decision));
         }
         return judgeRegression(id, successes, total, posture, alpha, baselineMap, isK1, decision);
     }
 
+    /**
+     * A declared requirement, by the rule the intent selects:
+     * {@code compliance/exact-binomial} under VERIFICATION,
+     * {@code compliance/smoke-exact-binomial} under SMOKE (companion §5.7.3).
+     */
     private Judged judgeCompliance(
-            String id, int successes, int total, CriterionPosture posture, double alpha,
-            Map<String, Object> decision) {
+            String id, int successes, int total, int size, CriterionPosture posture, double alpha,
+            TestIntent intent, Map<String, Object> decision) {
         double requirement = requirementOf(posture);
         ThresholdOrigin reqOrigin = posture.origin().orElse(origin);
         decision.put("origin", reqOrigin.name());
@@ -483,19 +497,54 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             return new Judged(id, Verdict.PASS, requirement, decision,
                     id + ": requirement 0 is met by any outcome → PASS");
         }
-        ComplianceRule.Decision d = ComplianceRule.decide(successes, total, requirement, alpha);
+        if (size != total) {
+            decision.put("plannedSamples", size);
+        }
+        if (intent == TestIntent.SMOKE) {
+            return judgeSmokeCompliance(id, successes, total, size, requirement, alpha, reqOrigin, decision);
+        }
+        ComplianceRule.Decision d = ComplianceRule.decide(successes, size, requirement, alpha);
         Verdict v = verdictOf(d.verdict());
         decision.put("decisionRule", d.rule().id());
         d.minimumPassing().ifPresent(k -> decision.put("kMin", k));
+        d.minimumPassing().ifPresent(k -> decision.put("requiredPass", k));
         decision.put("passPossible", d.passPossible());
+        decision.put("pValue", ComplianceRule.complianceP(successes, total, requirement));
         decision.put("falseCompliance", d.falseCompliance());
-        decision.put("clopperPearsonLower", d.clopperPearsonLower());
+        decision.put("clopperPearsonLower", ComplianceRule.clopperPearsonLower(successes, total, alpha));
         String artefact = d.passPossible()
                 ? "k_min=" + d.minimumPassing().getAsInt()
                 : "no count of this size can pass";
         return new Judged(id, v, requirement, decision, String.format(
                 "%s: successes=%d of %d vs %s (compliance/exact-binomial, requirement=%.4f, "
                         + "alpha=%s, origin=%s) → %s",
+                id, successes, total, artefact, requirement, alpha, reqOrigin, v));
+    }
+
+    /**
+     * {@code compliance/smoke-exact-binomial}: FAIL only on evidence that
+     * the service falls short of its requirement. {@code k_min} of the
+     * verification rule is reported beside it, deciding nothing.
+     */
+    private static Judged judgeSmokeCompliance(
+            String id, int successes, int total, int size, double requirement, double alpha,
+            ThresholdOrigin reqOrigin, Map<String, Object> decision) {
+        ComplianceRule.SmokeDecision d = ComplianceRule.decideSmoke(successes, size, requirement, alpha);
+        Verdict v = verdictOf(d.verdict());
+        decision.put("decisionRule", d.rule().id());
+        decision.put("requiredPass", d.requiredPass());
+        d.minimumPassing().ifPresent(k -> decision.put("kMin", k));
+        decision.put("passPossible", d.minimumPassing().isPresent());
+        decision.put("failPossible", d.failPossible());
+        decision.put("pValue", ComplianceRule.smokeP(successes, total, requirement));
+        decision.put("falseNonCompliance", d.falseNonCompliance());
+        decision.put("clopperPearsonLower", ComplianceRule.clopperPearsonLower(successes, total, alpha));
+        String artefact = d.failPossible()
+                ? "required-pass=" + d.requiredPass()
+                : "no count of this size can fail";
+        return new Judged(id, v, requirement, decision, String.format(
+                "%s: successes=%d of %d vs %s (compliance/smoke-exact-binomial, intent=SMOKE, "
+                        + "requirement=%.4f, alpha=%s, origin=%s) → %s",
                 id, successes, total, artefact, requirement, alpha, reqOrigin, v));
     }
 
@@ -585,6 +634,12 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             return OptionalDouble.of(baselineRate - posture.mde().getAsDouble());
         }
         return OptionalDouble.empty();
+    }
+
+    /** Whether statistical early termination ended the run: success guaranteed or failure inevitable. */
+    private static boolean stoppedByDeterminacy(SampleSummary<?> summary) {
+        return summary.terminationReason() == TerminationReason.SUCCESS_GUARANTEED
+                || summary.terminationReason() == TerminationReason.IMPOSSIBILITY;
     }
 
     private Kind kindOf(CriterionPosture posture) {

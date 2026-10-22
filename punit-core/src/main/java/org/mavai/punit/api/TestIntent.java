@@ -21,15 +21,19 @@ package org.mavai.punit.api;
  * <p><strong>Sentinel.</strong> This mode is a lightweight early-warning check.
  *
  * <ul>
- *   <li>PUnit does not enforce feasibility. Undersized configurations are allowed.</li>
- *   <li>PASS is not proof of meeting the target; it simply means no obvious regression was
- *       detected at the chosen sample size.</li>
- *   <li>FAIL is a signal to investigate (e.g., a likely regression), not a strong statistical
- *       conclusion at small sample sizes.</li>
+ *   <li>PUnit does not enforce feasibility. Undersized configurations are allowed and run.</li>
+ *   <li>A declared (normative) requirement is decided by {@code compliance/smoke-exact-binomial}
+ *       (Statistical Companion §5.7.3), which reverses the burden of proof: FAIL only on
+ *       evidence that the service falls short of the requirement, PASS otherwise.</li>
+ *   <li>PASS is not proof of meeting the target; it means only that the run found no evidence
+ *       of falling short (or, for an empirical criterion, of regression) at the chosen sample
+ *       size.</li>
+ *   <li>FAIL is a signal to investigate: evidence of a shortfall, or a likely regression.</li>
  * </ul>
  *
- * <p>When the threshold origin is normative (for example SLA/SLO/policy), SMOKE verdicts include
- * an explicit caveat such as "sample not sized for verification" to prevent misinterpretation.
+ * <p>When the threshold origin is normative (for example SLA/SLO/policy), SMOKE verdicts are
+ * labelled SMOKE and carry a caveat — for an undersized design, that a PASS at this size is not
+ * evidence of compliance, with the feasibility minimum — to prevent misinterpretation.
  *
  * <p>The default intent is {@link #VERIFICATION}. Developers must explicitly opt into SMOKE when
  * they want a lightweight check rather than an evidential claim.

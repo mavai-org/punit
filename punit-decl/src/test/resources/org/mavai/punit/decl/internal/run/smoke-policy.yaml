@@ -1,0 +1,10 @@
+format: mavai-contract/1
+contract: smoke-guards-a-policy-requirement
+service: greeting-service
+intent: smoke
+criteria:
+  - name: greets-politely
+    threshold: 0.99
+    threshold-origin: policy
+    contains: "hello"
+inputs: ["Alice", "Bob"]

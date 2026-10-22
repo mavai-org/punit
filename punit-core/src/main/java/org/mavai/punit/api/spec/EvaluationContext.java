@@ -78,4 +78,17 @@ public interface EvaluationContext<OT, S extends BaselineStatistics> {
     default TestIntent intent() {
         return TestIntent.VERIFICATION;
     }
+
+    /**
+     * The number of samples the test planned. A run that statistical
+     * early termination cut short is decided at this size: the decision
+     * rule's required-pass is the planned-size requirement, which the
+     * stop already showed to be met (success guaranteed) or out of reach
+     * (failure inevitable). Defaults to the samples the summary recorded,
+     * for hand-built test fixtures; production code paths propagate the
+     * spec's planned size.
+     */
+    default int plannedSamples() {
+        return summary().total();
+    }
 }

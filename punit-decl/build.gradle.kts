@@ -30,12 +30,12 @@ dependencies {
 // ---------------------------------------------------------------------------------
 // Published declarative-format corpus (mavai-R releases): the conformance
 // oracle for the contract and services formats. Fetched from the release
-// pinned by `mavaiRTag` (gradle.properties), mirroring punit-core's fetch;
+// pinned by `mavaiRFormatsTag` (gradle.properties), mirroring punit-core's fetch;
 // -PformatsDir=/path/to/mavai-R/inst/formats sources a local checkout
 // instead (for working against merged-but-untagged corpus content).
 
 val publishedFormatsDir = layout.buildDirectory.dir("published-formats")
-val mavaiRTag = providers.gradleProperty("mavaiRTag")
+val mavaiRFormatsTag = providers.gradleProperty("mavaiRFormatsTag")
 
 val fetchPublishedFormats by tasks.registering {
     description = "Fetches the pinned mavai-R declarative-format corpus"
@@ -63,9 +63,9 @@ val fetchPublishedFormats by tasks.registering {
             logger.lifecycle("Using local declarative-format corpus: $srcDir")
             return@doLast
         }
-        val tag = mavaiRTag.get()
+        val tag = mavaiRFormatsTag.get()
         require(tag.matches(Regex("^v\\d+\\.\\d+\\.\\d+$"))) {
-            "mavaiRTag must name a mavai-R release tag (vX.Y.Z), got '$tag'"
+            "mavaiRFormatsTag must name a mavai-R release tag (vX.Y.Z), got '$tag'"
         }
 
         val cacheZip = layout.buildDirectory
