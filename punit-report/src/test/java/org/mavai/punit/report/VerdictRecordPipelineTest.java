@@ -54,19 +54,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * verdict-1.8 records through the full production pipeline
+ * verdict-1.10 records through the full production pipeline
  * ({@code PUnit.testing(...)} → verdict adapter → XML sink), each
- * validated against the published verdict-1.8 schema and round-tripped
+ * validated against the published verdict-1.10 schema and round-tripped
  * through {@link VerdictXmlReader} and {@link VerdictXmlWriter}: a
  * typical single-criterion record, a two-criterion record, a record
  * whose latency constraint is saturated, and refused records. The
  * published worked examples are read and re-written the same way.
  */
-@DisplayName("verdict-1.8 records through the production pipeline")
+@DisplayName("verdict-1.10 records through the production pipeline")
 @TestMethodOrder(OrderAnnotation.class)
 class VerdictRecordPipelineTest {
 
-    private static final Path DIR = Path.of("build/verdict-1.8-records");
+    private static final Path DIR = Path.of("build/verdict-1.10-records");
 
     /** The XML sink is discovered once per JVM and keeps the report
      *  directory it first resolved, so every pipeline test in this module
@@ -132,14 +132,14 @@ class VerdictRecordPipelineTest {
         String xml = record("record-typical");
         assertValidRoundTrip(xml);
         assertThat(xml)
-                .contains("methodology-version=\"1.6.0\"")
+                .contains("methodology-version=\"1.7.0\"")
                 .contains("decision-rule=\"compliance/exact-binomial\"")
                 .contains("value=\"PASS\"");
-        // required-pass is k_min, the count the compliance rule decided
-        // with, at the row's own total (the run may stop early).
+        // required-pass is k_min at the planned size: the count the
+        // compliance rule decided with, and the one early termination
+        // read when it stopped the run at success guaranteed.
         Map<String, String> row = criterionRow(xml, "accuracy");
-        OptionalInt kMin = ComplianceRule.minimumPassingCount(
-                0.9, Integer.parseInt(row.get("total")), alphaOf(xml));
+        OptionalInt kMin = ComplianceRule.minimumPassingCount(0.9, 60, alphaOf(xml));
         assertThat(kMin).isPresent();
         assertThat(row).containsEntry("required-pass", Integer.toString(kMin.getAsInt()));
         assertRequiredPassConsistent(row);
@@ -274,25 +274,27 @@ class VerdictRecordPipelineTest {
 
     @Test
     @Order(8)
-    @DisplayName("a compliance design too small for any count to pass omits required-pass")
-    void noCountCanPass() throws Exception {
-        // 5 samples cannot show a 0.99 requirement at any usual alpha.
+    @DisplayName("a SMOKE design too small to demonstrate its requirement names the SMOKE rule and its required-pass")
+    void smokeDesignTooSmallToDemonstrate() throws Exception {
+        // 5 samples cannot demonstrate a 0.99 requirement at alpha 0.05;
+        // under SMOKE the run is decided by compliance/smoke-exact-binomial,
+        // whose required-pass at 5 samples is 5 (one miss is evidence).
         assertThat(ComplianceRule.minimumPassingCount(0.99, 5, 0.05)).isEmpty();
-        catchThrowable(() -> PUnit.testing(scripted("record-too-small", 5, 5,
+        PUnit.testing(scripted("record-too-small", 5, 5,
                         Criteria.meeting().<Boolean>passRate(0.99).name("accuracy")
                                 .satisfies("output is true", out -> Outcome.ok(out))))
                 .intent(TestIntent.SMOKE)
-                .assertPasses());
+                .assertPasses();
 
         String xml = record("record-too-small");
         assertValidRoundTrip(xml);
+        assertThat(xml).contains("intent=\"SMOKE\"");
         Map<String, String> row = criterionRow(xml, "accuracy");
-        assertThat(ComplianceRule.minimumPassingCount(
-                0.99, Integer.parseInt(row.get("total")), alphaOf(xml))).isEmpty();
         assertThat(row)
-                .containsEntry("decision-rule", "compliance/exact-binomial")
-                .doesNotContainKey("required-pass");
-        assertThat(row.get("verdict")).isNotEqualTo("PASS");
+                .containsEntry("decision-rule", "compliance/smoke-exact-binomial")
+                .containsEntry("required-pass", "5")
+                .containsEntry("verdict", "PASS");
+        assertRequiredPassConsistent(row);
     }
 
     /** Runs {@code body} with {@code punit.advisory} set to {@code setting}. */
@@ -431,7 +433,7 @@ class VerdictRecordPipelineTest {
 
     @ParameterizedTest(name = "verdict-1.8-{0}.xml")
     @MethodSource("publishedExamples")
-    @DisplayName("the published worked examples read and re-write as valid verdict-1.8")
+    @DisplayName("the published 1.8 worked examples read and re-write as valid verdict-1.10")
     void publishedExampleRoundTrips(String name) throws Exception {
         try (InputStream in = getClass().getResourceAsStream(
                 "/published-interchange/verdict-1.8-" + name + ".xml")) {
@@ -440,6 +442,30 @@ class VerdictRecordPipelineTest {
             validate(xml);
             assertValidRoundTrip(xml);
         }
+    }
+
+    @ParameterizedTest(name = "verdict-1.10-{0}.xml")
+    @MethodSource("publishedSmokeExamples")
+    @DisplayName("the published SMOKE worked examples read and re-write as valid verdict-1.10")
+    void publishedSmokeExampleRoundTrips(String name) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(
+                "/published-interchange/verdict-1.10-" + name + ".xml")) {
+            assertThat(in).as("published example " + name).isNotNull();
+            String xml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            assertValidRoundTrip(xml);
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(
+                    new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            assertThat(read.execution().intent()).isEqualTo(org.mavai.punit.api.TestIntent.SMOKE);
+            assertThat(read.perCriterion().orElseThrow().criteria())
+                    .allSatisfy(row -> assertThat(row.decisionRule())
+                            .contains(org.mavai.punit.statistics.DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL));
+            assertThat(requiredPassByCriterion(xml))
+                    .containsEntry("harmful-advice-is-rejected", "97");
+        }
+    }
+
+    static Stream<String> publishedSmokeExamples() {
+        return Stream.of("smoke-pass", "smoke-fail");
     }
 
     @Test
@@ -499,7 +525,7 @@ class VerdictRecordPipelineTest {
     private void validate(String xml) throws Exception {
         SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         try (InputStream xsd = getClass().getResourceAsStream(
-                "/org/mavai/punit/report/verdict-1.8.xsd")) {
+                "/org/mavai/punit/report/verdict-1.10.xsd")) {
             Schema schema = factory.newSchema(new StreamSource(xsd));
             schema.newValidator().validate(new StreamSource(
                     new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));

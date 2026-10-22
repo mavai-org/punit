@@ -20,13 +20,17 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * interchange format.
  *
  * <p>The output conforms to the {@code http://mavai.org/verdict/1.0}
- * namespace and the {@code verdict-1.8.xsd} schema bundled with this
+ * namespace and the {@code verdict-1.10.xsd} schema bundled with this
  * module: every record states the methodology whose decision rules
  * produced it, the versioned rule on every criterion row and latency
  * evaluation, each dimension's verdict and whether it was enforced or
  * advisory, the test verdict over the enforced dimensions only, and —
  * for a configuration refused before any sample ran — the configuration
- * errors in place of a verdict value (Statistical Companion 1.6.0).
+ * errors in place of a verdict value (Statistical Companion 1.7.0). A
+ * normative criterion decided under SMOKE intent names
+ * {@code compliance/smoke-exact-binomial} (or, for an explicit latency
+ * requirement, {@code latency/smoke-compliance-exact-binomial}), whose
+ * {@code required-pass} is the largest failing count plus one.
  *
  * <p>PUnit-specific extensions not in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID, JUnit pass
@@ -42,7 +46,7 @@ public final class VerdictXmlWriter {
      * standard namespace.
      */
     static final String NAMESPACE = "http://mavai.org/verdict/1.0";
-    static final String VERSION = "1.8";
+    static final String VERSION = "1.10";
 
     private static final XMLOutputFactory OUTPUT_FACTORY = XMLOutputFactory.newFactory();
 

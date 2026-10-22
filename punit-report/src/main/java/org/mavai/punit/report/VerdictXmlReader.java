@@ -35,7 +35,9 @@ import org.w3c.dom.NodeList;
  * to the punit verdict model. PUnit-specific fields not present in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID) receive default values.
  *
- * <p>Records punit writes are verdict-1.8. A 1.7 record still reads: it
+ * <p>Records punit writes are verdict-1.10; a 1.8 record reads unchanged,
+ * 1.10 being additive over it (it names the two SMOKE decision rules). A
+ * 1.7 record still reads: it
  * states no dimension mode, so both dimensions read as enforced, which
  * is what every 1.7 punit record was; its {@code STRICT_FAIL} reads as
  * {@code FAIL}.
