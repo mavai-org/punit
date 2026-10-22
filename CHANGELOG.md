@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 **SMOKE decides a declared requirement by its own rule (methodology
-1.7.0, Statistical Companion 1.7.0, conformant with the mavai-R
-v0.14.0 reference data).** Breaking for SMOKE tests of a declared
+1.7.1, Statistical Companion 1.7.1, conformant with the mavai-R
+v0.15.0 reference data).** Breaking for SMOKE tests of a declared
 requirement, whose verdicts change, and for readers of verdict
 records: punit now writes verdict-1.10.
 
@@ -57,8 +57,10 @@ records: punit now writes verdict-1.10.
   `DecisionRule.compliance(smoke)` and `latencyCompliance(smoke)`
   selecting by intent; `ComplianceRule` gains `smokeRequiredPass`,
   `decideSmoke`, `requiredPass(rule, ...)` and the two p-values.
-  A SMOKE decision's alpha bounds a false FAIL, so it enters the
-  false-degradation-signal envelope, not the false-compliance one.
+  A SMOKE decision enters neither Type-I envelope (companion §1.4.6):
+  its alpha bounds a false FAIL of a service that meets its
+  requirement, and its PASS claims no compliance
+  (`DecisionRule.Direction.NONE`).
   `EarlyTerminationContext` carries the test's intent, and
   `EvaluationContext` the planned sample count.
 - **A run cut short by statistical early termination is decided at its
@@ -78,16 +80,18 @@ records: punit now writes verdict-1.10.
   can FAIL says that the result carries no evidence about the service.
   The `COMPLIANCE_INFEASIBLE` remediation no longer says that a SMOKE
   test cannot pass.
-- **Verdict records are verdict-1.10** (`methodology-version="1.7.0"`),
+- **Verdict records are verdict-1.10** (`methodology-version="1.7.1"`),
   additive over 1.8: a row or latency evaluation may name the two
   SMOKE rules. `verdict-1.10.xsd` is bundled in `punit-report` beside
   the earlier revisions; the reader reads 1.10 and 1.8 records.
-- The conformance suites run against mavai-R v0.14.0 (`mavaiRTag`),
-  including its SMOKE cases. The declarative-format corpus has its own
+- The conformance suites run against mavai-R v0.15.0 (`mavaiRTag`),
+  including its SMOKE cases, and now cover the `composite_verdict`
+  suite: the composite rule and the envelopes, with a criterion's
+  optional deciding rule. The declarative-format corpus has its own
   pin, `mavaiRFormatsTag`, held at v0.12.0 until the declarative reader
   implements the run-controls and built-in-stepper amendments of
-  `mavai-services/1` (mavai-R 0.13.0); mavai-R 0.14.0 changes no
-  format.
+  `mavai-services/1` (mavai-R 0.13.0); mavai-R 0.14.0 and 0.15.0
+  change no format.
 
 ## [0.15.1] - 2026-10-18
 

@@ -77,6 +77,7 @@ final class ConformanceCatalog {
         checks.addAll(latencyThreshold());
         checks.addAll(latencyComplianceDecision());
         checks.addAll(verdict());
+        checks.addAll(compositeVerdict());
         return checks;
     }
 
@@ -669,6 +670,45 @@ final class ConformanceCatalog {
                 .map(t -> Map.of("kind", t.kind().name().toLowerCase(java.util.Locale.ROOT),
                         "id", t.id()))
                 .toList());
+    }
+
+    /**
+     * The composite rule and the two Type-I envelopes over given
+     * per-criterion decisions. A criterion's rule is its
+     * {@code decision_rule} where the case names one, else the rule of
+     * its procedure; an observational criterion has none and no alpha.
+     */
+    static List<CaseCheck> compositeVerdict() {
+        String s = "composite_verdict";
+        return suite(s, (recorder, c, tol) -> {
+            List<VerdictComposition.Decided> criteria = new ArrayList<>();
+            for (JsonNode criterion : c.get("inputs").get("criteria")) {
+                String id = criterion.get("criterion_id").asText();
+                Verdict v = Verdict.valueOf(criterion.get("verdict").asText());
+                if (!"inferential".equals(criterion.get("mode").asText())) {
+                    criteria.add(new VerdictComposition.Decided(id, v));
+                    continue;
+                }
+                JsonNode named = criterion.get("decision_rule");
+                Optional<DecisionRule> rule = named != null && !named.isNull()
+                        ? DecisionRule.fromId(named.asText())
+                        : Optional.of("REGRESSION".equals(criterion.get("procedure").asText())
+                                ? DecisionRule.REGRESSION_FISHER
+                                : DecisionRule.COMPLIANCE_EXACT_BINOMIAL);
+                assertThat(rule).as("known decision rule").isPresent();
+                criteria.add(new VerdictComposition.Decided(id, v, rule,
+                        OptionalDouble.of(criterion.get("alpha").asDouble())));
+            }
+            VerdictComposition composition = VerdictComposition.compose(
+                    criteria, List.of(), AssertionEnforcement.parse(""));
+            assertOracle(recorder, s, c, "composite_verdict", composition.testVerdict().name());
+            assertOracle(recorder, s, c, "triggering_criteria", composition.triggering().stream()
+                    .map(VerdictComposition.Trigger::id).toList());
+            assertOracle(recorder, s, c, "false_compliance_envelope",
+                    composition.falseComplianceEnvelope(), tol);
+            assertOracle(recorder, s, c, "false_degradation_signal_envelope",
+                    composition.falseDegradationSignalEnvelope(), tol);
+        });
     }
 
     private static double nearestRankPercentile(double[] latencies, double p) {

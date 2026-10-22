@@ -132,7 +132,7 @@ class VerdictRecordPipelineTest {
         String xml = record("record-typical");
         assertValidRoundTrip(xml);
         assertThat(xml)
-                .contains("methodology-version=\"1.7.0\"")
+                .contains("methodology-version=\"1.7.1\"")
                 .contains("decision-rule=\"compliance/exact-binomial\"")
                 .contains("value=\"PASS\"");
         // required-pass is k_min at the planned size: the count the

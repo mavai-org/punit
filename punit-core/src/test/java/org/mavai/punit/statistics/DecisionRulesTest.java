@@ -327,9 +327,9 @@ class DecisionRulesTest {
     class MethodologyFacts {
 
         @Test
-        @DisplayName("the methodology version is 1.7.0")
+        @DisplayName("the methodology version is 1.7.1")
         void version() {
-            assertThat(Methodology.VERSION).isEqualTo("1.7.0");
+            assertThat(Methodology.VERSION).isEqualTo("1.7.1");
         }
 
         @Test

@@ -56,7 +56,7 @@
          whenever the run produced standings). -->
     <!-- 1.10 changes (mavai-R 0.14.0; Statistical Companion 1.7.0), which
          name the SMOKE rules. Additive: a 1.9 record whose version reads
-         "1.10" and whose @methodology-version reads "1.7.0" is a 1.10
+         "1.10" and whose @methodology-version reads "1.7.0" or later is a 1.10
          record when it carries no SMOKE normative decision.
 
          DecisionRuleEnum gains compliance/smoke-exact-binomial and
@@ -601,7 +601,7 @@
     <xs:attribute name="on-exhausted" type="tns:OnExhaustedEnum" use="optional"/>
   </xs:complexType>
 
-  <!-- 1.9: the exhaustion behaviours (mavai-services/1 §II.8, catalog RC05). -->
+  <!-- 1.9: the exhaustion behaviours (mavai-services/1 §II.8). -->
   <xs:simpleType name="OnExhaustedEnum">
     <xs:restriction base="xs:string">
       <xs:enumeration value="INCONCLUSIVE"/>

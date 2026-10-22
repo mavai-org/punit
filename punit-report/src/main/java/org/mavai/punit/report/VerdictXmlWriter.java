@@ -26,7 +26,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * evaluation, each dimension's verdict and whether it was enforced or
  * advisory, the test verdict over the enforced dimensions only, and —
  * for a configuration refused before any sample ran — the configuration
- * errors in place of a verdict value (Statistical Companion 1.7.0). A
+ * errors in place of a verdict value (Statistical Companion 1.7.1). A
  * normative criterion decided under SMOKE intent names
  * {@code compliance/smoke-exact-binomial} (or, for an explicit latency
  * requirement, {@code latency/smoke-compliance-exact-binomial}), whose

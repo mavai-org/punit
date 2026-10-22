@@ -89,16 +89,6 @@ class RequirementCodeIsolationTest {
             "RequirementCodeIsolationTest.java");
 
     /**
-     * Vendored family schemas whose published text carries a code. They
-     * must stay byte-identical to the mavai-R release they were synced
-     * from ({@code VerdictSchemaSnapshotSyncTest}), so the code cannot be
-     * edited out here; it is removed upstream, and the entry with it when
-     * the corrected schema is re-vendored.
-     */
-    private static final List<String> VENDORED_FILES = List.of(
-            "verdict-1.10.xsd");
-
-    /**
      * Source roots, relative to the project root the Gradle test task
      * runs in (the per-module dir: this test lives in punit-core, so
      * its CWD is .../punit/punit-core). Walk up one level to reach the
@@ -184,7 +174,7 @@ class RequirementCodeIsolationTest {
 
     private static boolean isSelfReferencing(Path file) {
         String name = file.getFileName().toString();
-        return SELF_REFERENCING_FILES.contains(name) || VENDORED_FILES.contains(name);
+        return SELF_REFERENCING_FILES.contains(name);
     }
 
     private static void scanFile(Path file, List<String> hits) {

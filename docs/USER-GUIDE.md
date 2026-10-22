@@ -1121,7 +1121,7 @@ STATISTICAL ANALYSIS — test verdict: FAIL
 
   shopping-basket
 
-  Test verdict (methodology 1.7.0)
+  Test verdict (methodology 1.7.1)
       Functional:           PASS
       Latency:              FAIL
       Test:                 FAIL
@@ -2251,7 +2251,7 @@ Before a probabilistic test runs, the framework checks:
   existence of a precedence rank for the expected number of
   successful samples. These warn; they never refuse.
 
-The methodology version (1.7.0) and each decision rule's identity and
+The methodology version (1.7.1) and each decision rule's identity and
 version are written into every verdict record.
 
 ### Further reading

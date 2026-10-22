@@ -5,6 +5,7 @@
     "risk_driven_sizing",
     "latency_percentile",
     "latency_percentile_minimums",
-    "latency_compliance_decision"
+    "latency_compliance_decision",
+    "composite_verdict"
   ]
 }

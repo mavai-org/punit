@@ -41,8 +41,8 @@ public enum DecisionRule {
     COMPLIANCE_EXACT_BINOMIAL("compliance/exact-binomial", Direction.COMPLIANCE),
     LATENCY_PRECEDENCE("latency/precedence", Direction.REGRESSION),
     LATENCY_COMPLIANCE_EXACT_BINOMIAL("latency/compliance-exact-binomial", Direction.COMPLIANCE),
-    COMPLIANCE_SMOKE_EXACT_BINOMIAL("compliance/smoke-exact-binomial", Direction.REGRESSION),
-    LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL("latency/smoke-compliance-exact-binomial", Direction.REGRESSION);
+    COMPLIANCE_SMOKE_EXACT_BINOMIAL("compliance/smoke-exact-binomial", Direction.NONE),
+    LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL("latency/smoke-compliance-exact-binomial", Direction.NONE);
 
     /**
      * The error event a rule's alpha bounds, which decides the Type-I
@@ -51,11 +51,14 @@ public enum DecisionRule {
     public enum Direction {
         /** A false claim of compliance. */
         COMPLIANCE,
+        /** A false degradation signal. */
+        REGRESSION,
         /**
-         * A false degradation signal: a FAIL raised against a service that
-         * has not got worse — or, under SMOKE, that meets its requirement.
+         * Neither envelope: a SMOKE rule's alpha bounds a false FAIL of a
+         * service that meets its requirement, and its PASS claims no
+         * compliance (companion §1.4.6).
          */
-        REGRESSION
+        NONE
     }
 
     private final String id;
@@ -71,12 +74,12 @@ public enum DecisionRule {
         return id;
     }
 
-    /** The rule's version; every rule is at version 1 under methodology 1.7.0. */
+    /** The rule's version; every rule is at version 1 under methodology 1.7.1. */
     public int version() {
         return 1;
     }
 
-    /** The envelope direction the rule's decisions enter. */
+    /** The envelope direction the rule's decisions enter; {@link Direction#NONE} for neither. */
     public Direction direction() {
         return direction;
     }

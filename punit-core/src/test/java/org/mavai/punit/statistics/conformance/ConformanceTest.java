@@ -144,4 +144,13 @@ class ConformanceTest {
             return dynamicTests(ConformanceCatalog.verdict());
         }
     }
+
+    @Nested
+    @DisplayName("composite_verdict — the composite rule and the Type-I envelopes")
+    class CompositeVerdictSuite {
+        @TestFactory
+        Collection<DynamicTest> cases() {
+            return dynamicTests(ConformanceCatalog.compositeVerdict());
+        }
+    }
 }
