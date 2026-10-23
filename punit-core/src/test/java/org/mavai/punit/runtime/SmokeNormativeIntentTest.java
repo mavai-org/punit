@@ -21,6 +21,7 @@ import org.mavai.punit.api.ThresholdOrigin;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
 import org.mavai.punit.api.spec.ConfigurationRefusedException;
+import org.mavai.punit.api.spec.Verdict;
 import org.mavai.punit.internal.reporting.VerdictSinkBus;
 import org.mavai.punit.statistics.DecisionRule;
 import org.mavai.punit.verdict.CriterionRow;
@@ -114,10 +115,14 @@ class SmokeNormativeIntentTest {
         assertThat(row.decisionRule()).contains(DecisionRule.COMPLIANCE_SMOKE_EXACT_BINOMIAL);
         assertThat(row.decisionRule().orElseThrow().id()).isEqualTo("compliance/smoke-exact-binomial");
         assertThat(row.requiredPass()).isEqualTo(OptionalInt.of(97));
+        assertThat(verdict.statistics().caveats())
+                .anySatisfy(c -> assertThat(c)
+                        .contains("cannot demonstrate compliance")
+                        .contains("need at least 299"));
     }
 
     @Test
-    @DisplayName("the fourth miss makes failure inevitable: FAIL")
+    @DisplayName("the fourth miss makes failure inevitable: FAIL labelled SMOKE")
     void fourMissesFail() {
         AtomicInteger invocations = new AtomicInteger();
 
@@ -126,6 +131,7 @@ class SmokeNormativeIntentTest {
 
         assertThat(thrown).isInstanceOf(AssertionFailedError.class);
         assertThat(thrown.getMessage())
+                .startsWith(Verdict.FAIL + " (SMOKE)")
                 .contains("compliance/smoke-exact-binomial")
                 .contains("required-pass=97");
         ProbabilisticTestVerdict verdict = onlyRecord();

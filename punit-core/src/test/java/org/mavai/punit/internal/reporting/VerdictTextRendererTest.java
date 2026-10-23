@@ -339,15 +339,20 @@ class VerdictTextRendererTest {
         }
 
         @Test
-        @DisplayName("SMOKE keeps the hypotheses and softens the verdict's wording")
-        void usesSoftenedFramingForSmoke() {
+        @DisplayName("SMOKE on a declared requirement reverses the hypotheses and reads a PASS as no evidence of falling short")
+        void usesSmokeFramingForNormativeRequirement() {
             ProbabilisticTestVerdict verdict = verdictWithSmokeIntent("SLA");
 
             var result = renderer.renderForReporter(verdict);
 
-            assertThat(result.body()).contains("the SLA requirement is not met");
-            assertThat(result.body()).containsAnyOf(
-                    "consistent with the target", "inconsistent with the target");
+            // The interpretation wraps; compare on single-spaced text.
+            assertThat(result.body().replaceAll("\\s+", " "))
+                    .contains("(the requirement is met)")
+                    .contains("(the service falls short)")
+                    .contains("compliance/smoke-exact-binomial")
+                    .contains("No evidence that the service falls short of its requirement")
+                    .contains("not evidence of compliance")
+                    .doesNotContain("Evidence supports compliance");
         }
     }
 

@@ -166,12 +166,13 @@ class DeclaredRunTest {
         }
 
         @Test
-        @DisplayName("a failing service FAILs at the fourth miss")
+        @DisplayName("a failing service FAILs at the fourth miss, labelled SMOKE")
         void smokeFailsOnEvidenceOfShortfall() {
             ProbabilisticTestVerdict verdict = runCapturing(() ->
                     assertThatThrownBy(() -> PUnit.declared("smoke-catches-a-policy-shortfall")
                             .samples(100).assertPasses())
                             .isInstanceOf(AssertionFailedError.class)
+                            .hasMessageStartingWith("FAIL (SMOKE)")
                             .hasMessageContaining("compliance/smoke-exact-binomial"));
 
             assertThat(verdict.termination().reason())

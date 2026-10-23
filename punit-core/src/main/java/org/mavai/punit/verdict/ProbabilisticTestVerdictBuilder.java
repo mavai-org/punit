@@ -27,7 +27,6 @@ import org.mavai.punit.internal.engine.spec.expiration.ExpirationEvaluator;
 import org.mavai.punit.internal.engine.spec.model.ExecutionSpecification;
 import org.mavai.punit.statistics.BinomialProportionEstimator;
 import org.mavai.punit.statistics.ComplianceEvidenceEvaluator;
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
 import org.mavai.punit.statistics.transparent.BaselineData;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
 
@@ -587,24 +586,12 @@ public class ProbabilisticTestVerdictBuilder {
         }
 
         // Intent-aware caveats for a SMOKE test against a normative
-        // requirement (Statistical Companion §5.7.3, §5.7.4).
+        // requirement (Statistical Companion §5.7.3, §5.7.4), stated for
+        // the planned design size the SMOKE rule decides at.
         if (isSmoke && samplesExecuted > 0
                 && thresholdOrigin != null && thresholdOrigin.isNormative()) {
-            double target = minPassRate;
-            if (!Double.isNaN(target) && target > 0.0 && target < 1.0) {
-                var result = VerificationFeasibilityEvaluator.evaluate(
-                        samplesExecuted, target, resolvedConfidence);
-                if (!result.feasible()) {
-                    caveats.add(String.format(
-                            "PASS not possible at this size (N = %d, need at least %d). "
-                                    + "This result carries no evidence about the service.",
-                            samplesExecuted, result.minimumSamples()));
-                } else {
-                    caveats.add("PASS is possible at this size. Consider setting "
-                            + "intent = VERIFICATION for evidential strength, and check the "
-                            + "power statement.");
-                }
-            }
+            caveats.addAll(SmokeCaveats.forNormative(
+                    plannedSamples, minPassRate, resolvedConfidence));
         }
 
         return List.copyOf(caveats);

@@ -43,7 +43,8 @@ public final class InfeasibilityMessageRenderer {
         }
         if (infeasible) {
             sb.append("  • Increase samples to at least the feasibility minimum\n");
-            sb.append("  • Set intent = SMOKE to run as a sentinel test (a pass is then not possible)\n");
+            sb.append("  • Set intent = SMOKE to run as a sentinel test: it then FAILs only on "
+                    + "evidence of falling short, and a PASS is not evidence of compliance\n");
         }
         return sb.toString().stripTrailing();
     }
