@@ -12,10 +12,10 @@ import org.mavai.punit.verdict.TerminationReason;
 import org.mavai.punit.internal.reporting.PUnitReporter;
 import org.mavai.punit.internal.reporting.RateFormat;
 import org.mavai.punit.statistics.ComplianceEvidenceEvaluator;
-import org.mavai.punit.statistics.VerificationFeasibilityEvaluator;
 import org.mavai.punit.statistics.transparent.StatisticalVocabulary;
 import org.mavai.punit.statistics.transparent.TransparentStatsConfig;
 import org.mavai.punit.verdict.PUnitVerdict;
+import org.mavai.punit.verdict.SmokeCaveats;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict.BaselineSummary;
 import org.mavai.punit.verdict.ProbabilisticTestVerdict.ExecutionSummary;
@@ -108,6 +108,11 @@ public final class VerdictTextRenderer {
         }
 
         appendDimensionBreakdown(sb, verdict);
+
+        if (exec.intent() == TestIntent.SMOKE) {
+            sb.append(PUnitReporter.labelValueLn("Intent:",
+                    "SMOKE (a sentinel verdict, not evidence of compliance)"));
+        }
 
         if (verdict.punitVerdict() == PUnitVerdict.INCONCLUSIVE) {
             sb.append(PUnitReporter.labelValueLn("Verdict:",
@@ -308,6 +313,20 @@ public final class VerdictTextRenderer {
         boolean regression = "EMPIRICAL".equalsIgnoreCase(originName);
 
         HypothesisFraming framing = getHypothesisFraming(originName, isSmoke);
+
+        if (isSmoke && isNormative(originName)) {
+            sb.append("HYPOTHESIS TEST\n");
+            sb.append(statLabel(symbols.h0() + " (null):", String.format(
+                    "True success rate %s %s %s (the requirement is met)",
+                    StatisticalVocabulary.PI, symbols.geq(), RateFormat.format(threshold))));
+            sb.append(statLabel(symbols.h1() + " (alternative):", String.format(
+                    "True success rate %s < %s (the service falls short)",
+                    StatisticalVocabulary.PI, RateFormat.format(threshold))));
+            sb.append(statLabel("Test type:",
+                    "Exact one-sided binomial test, burden reversed (compliance/smoke-exact-binomial)"));
+            sb.append("\n");
+            return;
+        }
 
         String h0 = regression
                 ? String.format("baseline and test share one success probability (%s)", framing.h0Text)
@@ -529,6 +548,19 @@ public final class VerdictTextRenderer {
 
         VerdictFraming framing = getVerdictFraming(originName, isSmoke);
 
+        if (isSmoke && isNormative(originName) && verdict.statistics().baseline().isEmpty()) {
+            return passed
+                    ? String.format("No evidence that the service falls short of its requirement "
+                            + "of %s at this size (observed %s). A SMOKE PASS is not evidence of "
+                            + "compliance.",
+                            RateFormat.format(exec.minPassRate()),
+                            RateFormat.format(exec.observedPassRate()))
+                    : String.format("Evidence that the service falls short of its requirement "
+                            + "of %s (observed %s).",
+                            RateFormat.format(exec.minPassRate()),
+                            RateFormat.format(exec.observedPassRate()));
+        }
+
         if (verdict.statistics().baseline().isPresent()) {
             return passed
                     ? String.format("No degradation signal at the configured cutoff: the observed "
@@ -622,8 +654,10 @@ public final class VerdictTextRenderer {
             }
         }
 
-        // Compliance evidence caveat
-        if (ComplianceEvidenceEvaluator.hasComplianceContext(originName, contractRef)) {
+        // Compliance evidence caveat — VERIFICATION only: a SMOKE test of
+        // a requirement is decided by its own rule, which can PASS at any
+        // size, and carries the SMOKE caveats below instead.
+        if (!isSmoke && ComplianceEvidenceEvaluator.hasComplianceContext(originName, contractRef)) {
             double alpha = org.mavai.punit.statistics.Methodology.alphaFromConfidence(confidenceLevel);
             if (ComplianceEvidenceEvaluator.isUndersized(samples, threshold, alpha)) {
                 caveats.add(String.format(
@@ -635,26 +669,20 @@ public final class VerdictTextRenderer {
             }
         }
 
-        // Smoke intent sizing caveats
-        if (isSmoke) {
-            boolean isNormative = originName.equalsIgnoreCase("SLA")
-                    || originName.equalsIgnoreCase("SLO")
-                    || originName.equalsIgnoreCase("POLICY");
-            if (isNormative && !Double.isNaN(threshold) && threshold > 0.0 && threshold < 1.0) {
-                var result = VerificationFeasibilityEvaluator.evaluate(samples, threshold, confidenceLevel);
-                if (!result.feasible()) {
-                    caveats.add(String.format(
-                            "PASS not possible at this size (N = %d, need at least %d). " +
-                            "This result carries no evidence about the service.",
-                            samples, result.minimumSamples()));
-                } else {
-                    caveats.add("PASS is possible at this size. Consider setting " +
-                            "intent = VERIFICATION for evidential strength, and check the power statement.");
-                }
-            }
+        // Smoke intent caveats on a declared requirement (§5.7.4), stated
+        // for the planned design size the SMOKE rule decides at.
+        if (isSmoke && isNormative(originName)) {
+            caveats.addAll(SmokeCaveats.forNormative(
+                    exec.plannedSamples(), threshold, confidenceLevel));
         }
 
         return caveats;
+    }
+
+    private static boolean isNormative(String originName) {
+        return originName != null && (originName.equalsIgnoreCase("SLA")
+                || originName.equalsIgnoreCase("SLO")
+                || originName.equalsIgnoreCase("POLICY"));
     }
 
     private record HypothesisFraming(String h0Text, String h1Text) {}
@@ -688,8 +716,8 @@ public final class VerdictTextRenderer {
         if (isSmoke) {
             return switch (originName.toUpperCase()) {
                 case "SLA", "SLO", "POLICY" -> new VerdictFraming(
-                        "The observed rate is consistent with the target.",
-                        "The observed rate is inconsistent with the target.");
+                        "No evidence it falls short of its requirement.",
+                        "Falls short of its requirement.");
                 case "EMPIRICAL" -> new VerdictFraming(
                         "No degradation from baseline detected.",
                         "This suggests potential degradation from the established baseline.");

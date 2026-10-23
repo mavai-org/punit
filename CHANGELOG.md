@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   verdicts are unchanged, but an early-stopped VERIFICATION record now
   reports `k_min` at its planned size.
 
+### Changed
+
+- **SMOKE verdicts say what they are.** The failure message reads
+  `FAIL (SMOKE)` and the sentinel console `VERDICT: PASS (SMOKE)`. An
+  undersized SMOKE design's caveat says a PASS is not evidence of
+  compliance and names the feasibility minimum; a size at which no
+  count can FAIL says the result carries no evidence.
+
 ## [0.15.1] - 2026-10-18
 
 ### Fixed

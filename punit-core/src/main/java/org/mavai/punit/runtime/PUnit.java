@@ -674,14 +674,20 @@ public final class PUnit {
     }
 
     /**
-     * The failure message: the asserted verdict — naming its dimension
-     * for a per-dimension assertion — then every criterion with its
+     * The failure message: the asserted verdict — labelled SMOKE under
+     * that intent, and naming its dimension for a per-dimension
+     * assertion — then every criterion with its
      * explanation, those that did not decide it labelled advisory or
      * not asserted, then the run's diagnostic context.
      */
     static String formatMessage(ProbabilisticTestResult result, Assertion assertion, Verdict verdict) {
         StringBuilder sb = new StringBuilder();
         sb.append(verdict);
+        if (result.intent() == TestIntent.SMOKE) {
+            // A SMOKE verdict is a sentinel's, never evidence of compliance:
+            // the label travels on the line the console shows first.
+            sb.append(" (SMOKE)");
+        }
         assertion.dimension().ifPresent(d -> sb.append(" (").append(d.token())
                 .append(" dimension, ").append(assertion.method()).append(')'));
         List<EvaluatedCriterion> evaluated = result.criterionResults();
