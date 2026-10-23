@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   undersized SMOKE design's caveat says a PASS is not evidence of
   compliance and names the feasibility minimum; a size at which no
   count can FAIL says the result carries no evidence.
+- **Verdict records are verdict-1.10** (`methodology-version="1.7.1"`),
+  additive over 1.8: a row or latency evaluation may name the two
+  SMOKE rules. `verdict-1.10.xsd` is bundled in `punit-report`.
 
 ## [0.15.1] - 2026-10-18
 

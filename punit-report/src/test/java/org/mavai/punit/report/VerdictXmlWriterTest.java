@@ -59,7 +59,7 @@ class VerdictXmlWriterTest {
             Element root = doc.getDocumentElement();
 
             assertThat(root.getLocalName()).isEqualTo("verdict-record");
-            assertThat(root.getAttribute("version")).isEqualTo("1.8");
+            assertThat(root.getAttribute("version")).isEqualTo("1.10");
             assertThat(root.hasAttribute("generator")).isTrue();
             assertThat(root.getAttribute("generator")).startsWith("punit");
         }
@@ -181,7 +181,7 @@ class VerdictXmlWriterTest {
 
             assertThat(lat.getAttribute("successful-samples")).isEqualTo("90");
             // A descriptive latency dimension carries no verdict, so no
-            // mode; verdict-1.8 has no violation counts.
+            // mode; verdict-1.10 has no violation counts.
             assertThat(lat.hasAttribute("verdict")).isFalse();
             assertThat(lat.hasAttribute("mode")).isFalse();
             assertThat(lat.hasAttribute("strict-violations")).isFalse();
@@ -544,7 +544,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("verdict with postcondition failures validates against verdict-1.8 XSD")
+        @DisplayName("verdict with postcondition failures validates against verdict-1.10 XSD")
         void validatesAgainstXsd() throws Exception {
             LinkedHashMap<String, FailureCount> hist = new LinkedHashMap<>();
             hist.put("Response not empty", new FailureCount(3, List.of(
@@ -562,10 +562,10 @@ class VerdictXmlWriterTest {
     class PostconditionStandingsElement {
 
         @Test
-        @DisplayName("a verdict with standings is written as verdict-1.8 and validates against the XSD")
+        @DisplayName("a verdict with standings is written as verdict-1.10 and validates against the XSD")
         void standingsValidateAgainstSchema14() throws Exception {
             String xml = writeToString(verdictWithStandings());
-            assertThat(xml).contains("version=\"1.8\"");
+            assertThat(xml).contains("version=\"1.10\"");
             assertThat(xml).contains("<postcondition-standings>");
             assertThat(xml).contains("optional-slack=\"2\"");
             assertThat(xml).contains(
@@ -601,7 +601,7 @@ class VerdictXmlWriterTest {
         void noStandingsNoVersionStep() throws Exception {
             String xml = writeToString(minimalVerdict(true, PUnitVerdict.PASS));
             assertThat(xml).doesNotContain("postcondition-standings");
-            assertThat(xml).contains("version=\"1.8\"");
+            assertThat(xml).contains("version=\"1.10\"");
         }
     }
 
@@ -610,7 +610,7 @@ class VerdictXmlWriterTest {
     class SchemaValidation {
 
         @Test
-        @DisplayName("minimal verdict validates against verdict-1.8 XSD")
+        @DisplayName("minimal verdict validates against verdict-1.10 XSD")
         void minimalVerdictValidatesAgainstXsd() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
@@ -620,7 +620,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("full verdict validates against verdict-1.8 XSD")
+        @DisplayName("full verdict validates against verdict-1.10 XSD")
         void fullVerdictValidatesAgainstXsd() throws Exception {
             ProbabilisticTestVerdict verdict = fullVerdict();
 
@@ -652,7 +652,7 @@ class VerdictXmlWriterTest {
             Element root = doc.getDocumentElement();
             Element perCriterion = firstElement(doc, "per-criterion");
 
-            assertThat(root.getAttribute("version")).isEqualTo("1.8");
+            assertThat(root.getAttribute("version")).isEqualTo("1.10");
             NodeList rows = perCriterion.getElementsByTagNameNS(
                     VerdictXmlWriter.NAMESPACE, "criterion");
             assertThat(rows.getLength()).isEqualTo(1);
@@ -780,21 +780,21 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("absent per-criterion: no <per-criterion> element, version is 1.8")
+        @DisplayName("absent per-criterion: no <per-criterion> element, version is 1.10")
         void absentPerCriterionStaysAt10() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
             Document doc = writeAndParse(verdict);
             Element root = doc.getDocumentElement();
 
-            assertThat(root.getAttribute("version")).isEqualTo("1.8");
+            assertThat(root.getAttribute("version")).isEqualTo("1.10");
             assertThat(root.getElementsByTagNameNS(
                     VerdictXmlWriter.NAMESPACE, "per-criterion").getLength())
                     .isZero();
         }
 
         @Test
-        @DisplayName("emitter output validates against verdict-1.8 schema")
+        @DisplayName("emitter output validates against verdict-1.10 schema")
         void validatesAgainst12Schema() throws Exception {
             org.mavai.punit.verdict.PerCriterionStructure pc =
                     new org.mavai.punit.verdict.PerCriterionStructure(
@@ -817,7 +817,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("a verdict without per-criterion rows validates against verdict-1.8")
+        @DisplayName("a verdict without per-criterion rows validates against verdict-1.10")
         void absentPerCriterionValidatesAgainst12Schema() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
@@ -1137,7 +1137,7 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.8.xsd")) {
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
             assertThat(xsdStream).as("XSD resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
@@ -1147,8 +1147,8 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema14(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.8.xsd")) {
-            assertThat(xsdStream).as("XSD 1.8 resource must be available").isNotNull();
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
+            assertThat(xsdStream).as("XSD 1.10 resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
             validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
@@ -1177,8 +1177,8 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema12(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.8.xsd")) {
-            assertThat(xsdStream).as("XSD 1.8 resource must be available").isNotNull();
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
+            assertThat(xsdStream).as("XSD 1.10 resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
             validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
