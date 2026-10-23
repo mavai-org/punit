@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Verdict records are verdict-1.10** (`methodology-version="1.7.1"`),
   additive over 1.8: a row or latency evaluation may name the two
   SMOKE rules. `verdict-1.10.xsd` is bundled in `punit-report`.
+- **The Gradle plugin resolves `org.mavai:mavai:0.24.0`** for
+  `punitReport`, which reads verdict-1.10 and words a SMOKE PASS as no
+  evidence of falling short. A build that pins `punit { mavaiVersion }`
+  keeps its own choice.
 
 ## [0.15.1] - 2026-10-18
 
