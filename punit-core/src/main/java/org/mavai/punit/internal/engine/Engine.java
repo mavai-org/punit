@@ -222,23 +222,29 @@ public final class Engine {
             this.tracker = tracker;
             this.plannedSamples = plannedSamples;
             this.earlyTermination = earlyTermination;
-            // Cached once: required-successes = k_min, the smallest success
-            // count the criterion's exact binomial test accepts at the
-            // planned size (companion §3.6) — the same rule the criterion
-            // applies at evaluate time, so neither short-circuit can
-            // disagree with the eventual verdict: success-guaranteed fires
-            // only on a count the criterion will pass; failure-inevitable
-            // fires when even all-remaining-pass stays below it.
-            // plannedSamples + 1 (never guaranteed; failure inevitable from
-            // the outset) when no count of this size can pass. Zero when no
-            // context is supplied (measure / explore / optimize / empirical
-            // / opt-out paths).
+            // Cached once: required-successes = the required-pass of the
+            // rule the intent selects, at the planned size — k_min of
+            // compliance/exact-binomial under VERIFICATION (companion
+            // §3.6), the largest failing count plus one of
+            // compliance/smoke-exact-binomial under SMOKE (§5.7.3). It is
+            // the same rule the criterion applies at evaluate time, so
+            // neither short-circuit can disagree with the eventual
+            // verdict: success-guaranteed fires only on a count the
+            // criterion will pass; failure-inevitable fires when even
+            // all-remaining-pass stays below it. plannedSamples + 1
+            // (never guaranteed; failure inevitable from the outset) when
+            // no count of this size can pass, which only the VERIFICATION
+            // rule admits. Zero when no context is supplied (measure /
+            // explore / optimize / empirical / opt-out paths).
             if (earlyTermination.isPresent()) {
                 EarlyTerminationContext ctx = earlyTermination.get();
+                org.mavai.punit.statistics.DecisionRule rule =
+                        org.mavai.punit.statistics.DecisionRule.compliance(
+                                ctx.intent() == org.mavai.punit.api.TestIntent.SMOKE);
                 this.requiredSuccesses = ctx.minPassRate() <= 0.0
                         ? 0
                         : org.mavai.punit.statistics.ComplianceRule
-                                .minimumPassingCount(ctx.minPassRate(), plannedSamples,
+                                .requiredPass(rule, ctx.minPassRate(), plannedSamples,
                                         org.mavai.punit.statistics.Methodology
                                                 .alphaFromConfidence(ctx.confidence()))
                                 .orElse(plannedSamples + 1);

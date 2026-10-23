@@ -27,7 +27,6 @@ import org.mavai.outcome.Outcome;
 import org.mavai.punit.api.NoFactors;
 import org.mavai.punit.api.PercentileKey;
 import org.mavai.punit.api.Sampling;
-import org.mavai.punit.api.TestIntent;
 import org.mavai.punit.api.ServiceContract;
 import org.mavai.punit.api.TokenTracker;
 import org.mavai.punit.api.criterion.Criteria;
@@ -132,14 +131,14 @@ class VerdictRecordPipelineTest {
         String xml = record("record-typical");
         assertValidRoundTrip(xml);
         assertThat(xml)
-                .contains("methodology-version=\"1.6.0\"")
+                .contains("methodology-version=\"1.7.1\"")
                 .contains("decision-rule=\"compliance/exact-binomial\"")
                 .contains("value=\"PASS\"");
-        // required-pass is k_min, the count the compliance rule decided
-        // with, at the row's own total (the run may stop early).
+        // required-pass is k_min at the planned size: the count the
+        // compliance rule decided with, and the one early termination
+        // read when it stopped the run at success guaranteed.
         Map<String, String> row = criterionRow(xml, "accuracy");
-        OptionalInt kMin = ComplianceRule.minimumPassingCount(
-                0.9, Integer.parseInt(row.get("total")), alphaOf(xml));
+        OptionalInt kMin = ComplianceRule.minimumPassingCount(0.9, 60, alphaOf(xml));
         assertThat(kMin).isPresent();
         assertThat(row).containsEntry("required-pass", Integer.toString(kMin.getAsInt()));
         assertRequiredPassConsistent(row);
@@ -270,29 +269,6 @@ class VerdictRecordPipelineTest {
                 192, 200, Integer.parseInt(row.get("total")), alphaOf(xml));
         assertThat(row).containsEntry("required-pass", Integer.toString(cutoff));
         assertRequiredPassConsistent(row);
-    }
-
-    @Test
-    @Order(8)
-    @DisplayName("a compliance design too small for any count to pass omits required-pass")
-    void noCountCanPass() throws Exception {
-        // 5 samples cannot show a 0.99 requirement at any usual alpha.
-        assertThat(ComplianceRule.minimumPassingCount(0.99, 5, 0.05)).isEmpty();
-        catchThrowable(() -> PUnit.testing(scripted("record-too-small", 5, 5,
-                        Criteria.meeting().<Boolean>passRate(0.99).name("accuracy")
-                                .satisfies("output is true", out -> Outcome.ok(out))))
-                .intent(TestIntent.SMOKE)
-                .assertPasses());
-
-        String xml = record("record-too-small");
-        assertValidRoundTrip(xml);
-        Map<String, String> row = criterionRow(xml, "accuracy");
-        assertThat(ComplianceRule.minimumPassingCount(
-                0.99, Integer.parseInt(row.get("total")), alphaOf(xml))).isEmpty();
-        assertThat(row)
-                .containsEntry("decision-rule", "compliance/exact-binomial")
-                .doesNotContainKey("required-pass");
-        assertThat(row.get("verdict")).isNotEqualTo("PASS");
     }
 
     /** Runs {@code body} with {@code punit.advisory} set to {@code setting}. */

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Breaking: SMOKE intent had no effect on a declared requirement
+  (regression in v0.10.0 to v0.15.1).** Under SMOKE an undersized
+  normative test could only FAIL, and stopped after its first sample.
+  SMOKE now decides a declared requirement by
+  `compliance/smoke-exact-binomial` (and an explicit latency requirement
+  by `latency/smoke-compliance-exact-binomial`): FAIL only on evidence
+  of falling short (methodology 1.7.1, mavai-R v0.15.0). VERIFICATION
+  verdicts are unchanged, but an early-stopped VERIFICATION record now
+  reports `k_min` at its planned size.
+
 ## [0.15.1] - 2026-10-18
 
 ### Fixed

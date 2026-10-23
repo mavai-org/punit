@@ -131,6 +131,57 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("SMOKE intent on a declared requirement")
+    class SmokeIntent {
+
+        private ProbabilisticTestVerdict runCapturing(Runnable run) {
+            java.util.List<ProbabilisticTestVerdict> records = new java.util.ArrayList<>();
+            VerdictSinkBus.replaceAll(records::add);
+            try {
+                run.run();
+            } finally {
+                VerdictSinkBus.reset();
+            }
+            assertThat(records).hasSize(1);
+            return records.get(0);
+        }
+
+        @Test
+        @DisplayName("an always-passing service runs past the first sample and PASSes at success-guaranteed")
+        void smokePassesByItsOwnRule() {
+            // 0.99, policy, alpha 0.05, 100 samples: VERIFICATION would
+            // refuse (PASS needs 299); SMOKE's required-pass is 97.
+            ProbabilisticTestVerdict verdict = runCapturing(() ->
+                    PUnit.declared("smoke-guards-a-policy-requirement").samples(100).assertPasses());
+
+            assertThat(verdict.execution().intent()).isEqualTo(org.mavai.punit.api.TestIntent.SMOKE);
+            assertThat(verdict.termination().reason())
+                    .isEqualTo(org.mavai.punit.verdict.TerminationReason.SUCCESS_GUARANTEED);
+            assertThat(verdict.execution().samplesExecuted()).isEqualTo(97);
+            assertThat(verdict.punitVerdict().name()).isEqualTo("PASS");
+            var row = verdict.perCriterion().orElseThrow().criteria().get(0);
+            assertThat(row.decisionRule().orElseThrow().id())
+                    .isEqualTo("compliance/smoke-exact-binomial");
+            assertThat(row.requiredPass()).hasValue(97);
+        }
+
+        @Test
+        @DisplayName("a failing service FAILs at the fourth miss")
+        void smokeFailsOnEvidenceOfShortfall() {
+            ProbabilisticTestVerdict verdict = runCapturing(() ->
+                    assertThatThrownBy(() -> PUnit.declared("smoke-catches-a-policy-shortfall")
+                            .samples(100).assertPasses())
+                            .isInstanceOf(AssertionFailedError.class)
+                            .hasMessageContaining("compliance/smoke-exact-binomial"));
+
+            assertThat(verdict.termination().reason())
+                    .isEqualTo(org.mavai.punit.verdict.TerminationReason.IMPOSSIBILITY);
+            assertThat(verdict.execution().samplesExecuted()).isEqualTo(4);
+            assertThat(verdict.punitVerdict().name()).isEqualTo("FAIL");
+        }
+    }
+
+    @Nested
     @DisplayName("per-dimension assertions")
     class PerDimensionAssertions {
 

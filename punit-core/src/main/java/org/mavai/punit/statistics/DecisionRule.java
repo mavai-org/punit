@@ -22,14 +22,27 @@ import java.util.Optional;
  *   <li>{@link #LATENCY_COMPLIANCE_EXACT_BINOMIAL} — an explicit latency
  *       requirement: the exact binomial test on the count of latencies
  *       within the threshold (companion §12.3.4).</li>
+ *   <li>{@link #COMPLIANCE_SMOKE_EXACT_BINOMIAL} — normative compliance
+ *       under SMOKE intent: the burden of proof reversed, FAIL iff the
+ *       binomial lower tail at the requirement is at most alpha
+ *       (companion §5.7.3).</li>
+ *   <li>{@link #LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL} — an explicit
+ *       latency requirement under SMOKE intent: the same reversed rule on
+ *       the count of latencies within the threshold (companion §12.3.4).</li>
  * </ul>
+ *
+ * <p>Intent selects between the two compliance rules of each kind
+ * ({@link #compliance(boolean)}, {@link #latencyCompliance(boolean)});
+ * empirical (regression) criteria are decided alike under either intent.
  */
 public enum DecisionRule {
 
     REGRESSION_FISHER("regression/fisher", Direction.REGRESSION),
     COMPLIANCE_EXACT_BINOMIAL("compliance/exact-binomial", Direction.COMPLIANCE),
     LATENCY_PRECEDENCE("latency/precedence", Direction.REGRESSION),
-    LATENCY_COMPLIANCE_EXACT_BINOMIAL("latency/compliance-exact-binomial", Direction.COMPLIANCE);
+    LATENCY_COMPLIANCE_EXACT_BINOMIAL("latency/compliance-exact-binomial", Direction.COMPLIANCE),
+    COMPLIANCE_SMOKE_EXACT_BINOMIAL("compliance/smoke-exact-binomial", Direction.NONE),
+    LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL("latency/smoke-compliance-exact-binomial", Direction.NONE);
 
     /**
      * The error event a rule's alpha bounds, which decides the Type-I
@@ -39,7 +52,13 @@ public enum DecisionRule {
         /** A false claim of compliance. */
         COMPLIANCE,
         /** A false degradation signal. */
-        REGRESSION
+        REGRESSION,
+        /**
+         * Neither envelope: a SMOKE rule's alpha bounds a false FAIL of a
+         * service that meets its requirement, and its PASS claims no
+         * compliance (companion §1.4.6).
+         */
+        NONE
     }
 
     private final String id;
@@ -55,14 +74,32 @@ public enum DecisionRule {
         return id;
     }
 
-    /** The rule's version; every rule is at version 1 under methodology 1.6.0. */
+    /** The rule's version; every rule is at version 1 under methodology 1.7.1. */
     public int version() {
         return 1;
     }
 
-    /** The envelope direction the rule's decisions enter. */
+    /** The envelope direction the rule's decisions enter; {@link Direction#NONE} for neither. */
     public Direction direction() {
         return direction;
+    }
+
+    /**
+     * The pass-rate compliance rule an intent selects:
+     * {@link #COMPLIANCE_SMOKE_EXACT_BINOMIAL} under SMOKE, else
+     * {@link #COMPLIANCE_EXACT_BINOMIAL}.
+     */
+    public static DecisionRule compliance(boolean smoke) {
+        return smoke ? COMPLIANCE_SMOKE_EXACT_BINOMIAL : COMPLIANCE_EXACT_BINOMIAL;
+    }
+
+    /**
+     * The explicit-latency rule an intent selects:
+     * {@link #LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL} under SMOKE, else
+     * {@link #LATENCY_COMPLIANCE_EXACT_BINOMIAL}.
+     */
+    public static DecisionRule latencyCompliance(boolean smoke) {
+        return smoke ? LATENCY_SMOKE_COMPLIANCE_EXACT_BINOMIAL : LATENCY_COMPLIANCE_EXACT_BINOMIAL;
     }
 
     /** The rule with the given identifier, if there is one. */
