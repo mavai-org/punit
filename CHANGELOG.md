@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `punitReport`, which reads verdict-1.10 and words a SMOKE PASS as no
   evidence of falling short. A build that pins `punit { mavaiVersion }`
   keeps its own choice.
+- The user guide's test-intent section and glossary state how SMOKE
+  decides a declared requirement.
 
 ## [0.15.1] - 2026-10-18
 
