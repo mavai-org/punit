@@ -11,7 +11,8 @@ package org.mavai.punit.statistics;
  *
  * <p>Under VERIFICATION intent an infeasible design is refused before it
  * runs ({@link ConfigurationError#COMPLIANCE_INFEASIBLE}); under SMOKE it
- * runs and reports that a pass is not possible at this size.
+ * runs, is decided by {@code compliance/smoke-exact-binomial}, and reports
+ * that this size cannot demonstrate compliance.
  *
  * @see ComplianceRule#minimumFeasibleSamples(double, double)
  */

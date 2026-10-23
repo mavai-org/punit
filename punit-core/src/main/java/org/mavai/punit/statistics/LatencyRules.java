@@ -28,6 +28,10 @@ import org.apache.commons.numbers.gamma.LogGamma;
  *       baseline latency at that rank.</li>
  * </ul>
  *
+ * <p>Under SMOKE intent an explicit threshold is decided by
+ * {@code latency/smoke-compliance-exact-binomial}: the same count, with
+ * the burden of proof reversed (§5.7.3, §12.3.4).
+ *
  * <p>Both decisions are made after the run on the actual number of
  * successful latencies. Before the run the same searches on the
  * <em>expected</em> number give warnings and planning figures (§12.5.3),
@@ -273,14 +277,30 @@ public final class LatencyRules {
     // ── latency/compliance-exact-binomial ───────────────────────────
 
     /**
-     * Decides an explicit latency requirement on the successful latencies:
-     * {@code Y} counts those at or below the threshold (a latency equal
-     * to it counts as within), and the verdict is PASS iff
-     * {@code Y ≥ y_min}; INCONCLUSIVE when no count of this many latencies
-     * can pass.
+     * Decides an explicit latency requirement on the successful latencies
+     * under VERIFICATION intent, by {@code latency/compliance-exact-binomial}.
      */
     public static LatencyCompliance evaluateCompliance(
             double[] latencies, double thresholdMs, double percentile, double alpha) {
+        return evaluateCompliance(latencies, thresholdMs, percentile, alpha, false);
+    }
+
+    /**
+     * Decides an explicit latency requirement on the successful latencies:
+     * {@code Y} counts those at or below the threshold (a latency equal
+     * to it counts as within). Under VERIFICATION
+     * ({@code latency/compliance-exact-binomial}) the verdict is PASS iff
+     * {@code Y ≥ y_min}, INCONCLUSIVE when no count of this many latencies
+     * can pass. Under SMOKE ({@code latency/smoke-compliance-exact-binomial},
+     * companion §12.3.4) the burden of proof is reversed over the same
+     * count: PASS iff {@code Y ≥ required-within}, the largest failing
+     * count plus one; it decides at any number of successful latencies
+     * from one upward, and is INCONCLUSIVE with none.
+     *
+     * @param smoke whether the test runs under SMOKE intent
+     */
+    public static LatencyCompliance evaluateCompliance(
+            double[] latencies, double thresholdMs, double percentile, double alpha, boolean smoke) {
         Objects.requireNonNull(latencies, "latencies");
         percent(percentile);
         if (!(alpha > 0.0 && alpha < 1.0)) {
@@ -299,17 +319,42 @@ public final class LatencyRules {
         OptionalDouble observed = n > 0
                 ? OptionalDouble.of(LatencyStatistics.nearestRankPercentile(latencies, percentile))
                 : OptionalDouble.empty();
-        RuleVerdict verdict = yMin.isEmpty()
-                ? RuleVerdict.INCONCLUSIVE
-                : within >= yMin.getAsInt() ? RuleVerdict.PASS : RuleVerdict.FAIL;
+        DecisionRule rule = DecisionRule.latencyCompliance(smoke);
+        OptionalInt required;
+        RuleVerdict verdict;
+        OptionalDouble pValue;
+        OptionalDouble falseCompliance = OptionalDouble.empty();
+        OptionalDouble falseNonCompliance = OptionalDouble.empty();
+        if (n == 0) {
+            required = OptionalInt.empty();
+            verdict = RuleVerdict.INCONCLUSIVE;
+            pValue = OptionalDouble.empty();
+        } else if (smoke) {
+            ComplianceRule.SmokeDecision d = ComplianceRule.decideSmoke(within, n, percentile, alpha);
+            required = OptionalInt.of(d.requiredPass());
+            verdict = d.verdict();
+            pValue = OptionalDouble.of(d.pValue());
+            falseNonCompliance = OptionalDouble.of(d.falseNonCompliance());
+        } else if (yMin.isEmpty()) {
+            required = OptionalInt.empty();
+            verdict = RuleVerdict.INCONCLUSIVE;
+            pValue = OptionalDouble.empty();
+        } else {
+            required = yMin;
+            verdict = within >= yMin.getAsInt() ? RuleVerdict.PASS : RuleVerdict.FAIL;
+            pValue = OptionalDouble.of(ComplianceRule.complianceP(within, n, percentile));
+            falseCompliance = OptionalDouble.of(ComplianceRule.falseCompliance(percentile, n, yMin));
+        }
         return new LatencyCompliance(
+                rule,
                 n,
                 within,
                 yMin,
+                required,
                 verdict,
-                yMin.isEmpty()
-                        ? OptionalDouble.empty()
-                        : OptionalDouble.of(ComplianceRule.falseCompliance(percentile, n, yMin)),
+                pValue,
+                falseCompliance,
+                falseNonCompliance,
                 n > 0
                         ? OptionalDouble.of(ComplianceRule.clopperPearsonLower(within, n, alpha))
                         : OptionalDouble.empty(),
@@ -383,29 +428,48 @@ public final class LatencyRules {
 
     /**
      * An explicit latency requirement decided under
-     * {@code latency/compliance-exact-binomial}.
+     * {@code latency/compliance-exact-binomial} (VERIFICATION) or
+     * {@code latency/smoke-compliance-exact-binomial} (SMOKE).
      *
+     * @param decisionRule           the rule the intent selected
      * @param testSamples            the number of successful latencies {@code n_s}
      * @param withinThreshold        {@code Y}, the latencies at or below the threshold
-     * @param minimumWithin          {@code y_min}; empty when no count can pass
-     * @param verdict                PASS iff {@code Y ≥ y_min}; INCONCLUSIVE
-     *                               when no count can pass
-     * @param falseCompliance        {@code P_p(Y ≥ y_min)}; empty when no count can pass
+     * @param minimumWithin          {@code y_min} of {@code latency/compliance-exact-binomial},
+     *                               whatever the intent; empty when no count can pass
+     * @param requiredWithin         the deciding rule's binding count: {@code y_min}
+     *                               under VERIFICATION, the largest failing count plus
+     *                               one under SMOKE; empty when the rule cannot decide
+     * @param verdict                PASS iff {@code Y ≥ requiredWithin}; INCONCLUSIVE
+     *                               when the rule cannot decide
+     * @param pValue                 the deciding rule's one-sided p-value at {@code p}
+     * @param falseCompliance        {@code P_p(Y ≥ y_min)} under VERIFICATION
+     * @param falseNonCompliance     {@code P_p(Y < requiredWithin)} under SMOKE
      * @param clopperPearsonLower    the one-sided lower bound on {@code F(τ)}
      * @param observedPercentileMs   the raw nearest-rank percentile
      * @param rawPercentilePass      the raw comparison {@code Q(p) ≤ τ}; decides nothing
      */
     public record LatencyCompliance(
+            DecisionRule decisionRule,
             int testSamples,
             int withinThreshold,
             OptionalInt minimumWithin,
+            OptionalInt requiredWithin,
             RuleVerdict verdict,
+            OptionalDouble pValue,
             OptionalDouble falseCompliance,
+            OptionalDouble falseNonCompliance,
             OptionalDouble clopperPearsonLower,
             OptionalDouble observedPercentileMs,
             Optional<Boolean> rawPercentilePass) {
 
-        /** Whether any count of the successful latencies could pass. */
+        public LatencyCompliance {
+            Objects.requireNonNull(decisionRule, "decisionRule");
+        }
+
+        /**
+         * Whether any count of the successful latencies could demonstrate
+         * the requirement under {@code latency/compliance-exact-binomial}.
+         */
         public boolean passPossible() {
             return minimumWithin.isPresent();
         }

@@ -40,7 +40,8 @@ public final class ConsoleVerdictSink implements VerdictSink {
         Termination term = verdict.termination();
         boolean passed = verdict.junitPassed();
 
-        String title = "VERDICT: " + (passed ? "PASS" : "FAIL");
+        String title = "VERDICT: " + (passed ? "PASS" : "FAIL")
+                + (exec.intent() == org.mavai.punit.api.TestIntent.SMOKE ? " (SMOKE)" : "");
         String testName = verdict.identity().className() + "." + verdict.identity().methodName();
 
         StringBuilder sb = new StringBuilder();

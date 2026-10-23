@@ -199,17 +199,21 @@ final class ConformanceCatalog {
             List<String> errors = ProductionPath.errors(result);
             assertOracle(recorder, s, c, "configuration_error", errors);
             if (!errors.isEmpty()) {
-                for (String field : List.of("k_min", "pass_possible", "verdict")) {
+                for (String field : List.of("decision_rule", "k_min", "pass_possible",
+                        "required_pass", "verdict")) {
                     assertOracle(recorder, s, c, field, null);
                 }
                 return;
             }
             Map<?, ?> d = ProductionPath.decision(result, "c");
-            assertThat(d.get("decisionRule")).isEqualTo(DecisionRule.COMPLIANCE_EXACT_BINOMIAL.id());
+            assertOracle(recorder, s, c, "decision_rule", d.get("decisionRule"));
             assertOracle(recorder, s, c, "k_min", d.get("kMin"));
             assertOracle(recorder, s, c, "pass_possible", d.get("passPossible"));
+            assertOracle(recorder, s, c, "required_pass", d.get("requiredPass"));
             assertOracle(recorder, s, c, "verdict", result.verdict().name());
+            assertOracle(recorder, s, c, "p_value", d.get("pValue"), tol);
             assertOracle(recorder, s, c, "false_compliance", d.get("falseCompliance"), tol);
+            assertOracle(recorder, s, c, "false_non_compliance", d.get("falseNonCompliance"), tol);
             assertOracle(recorder, s, c, "clopper_pearson_lower", d.get("clopperPearsonLower"), tol);
         });
     }
@@ -475,8 +479,8 @@ final class ConformanceCatalog {
                     in.get("planned_samples").asInt(), intent, Optional.empty());
             assertOracle(recorder, s, c, "configuration_error", errors);
             if (!errors.isEmpty()) {
-                for (String field : List.of("test_samples", "within_threshold", "y_min",
-                        "pass_possible", "verdict")) {
+                for (String field : List.of("decision_rule", "test_samples", "within_threshold",
+                        "y_min", "pass_possible", "required_within", "verdict")) {
                     assertOracle(recorder, s, c, field, null);
                 }
                 return;
@@ -486,14 +490,16 @@ final class ConformanceCatalog {
                     ProductionPath.explicit(p, threshold, alpha), latencies, null, intent);
             String k = ProductionPath.key(p).detailKey();
             Map<String, Object> d = r.detail();
-            assertThat(d.get("decisionRule." + k))
-                    .isEqualTo(DecisionRule.LATENCY_COMPLIANCE_EXACT_BINOMIAL.id());
+            assertOracle(recorder, s, c, "decision_rule", d.get("decisionRule." + k));
             assertOracle(recorder, s, c, "test_samples", d.get("successfulSamples"));
             assertOracle(recorder, s, c, "within_threshold", d.get("withinThreshold." + k));
-            assertOracle(recorder, s, c, "y_min", d.get("requiredWithin." + k));
-            assertOracle(recorder, s, c, "pass_possible", d.containsKey("requiredWithin." + k));
+            assertOracle(recorder, s, c, "y_min", d.get("minimumWithin." + k));
+            assertOracle(recorder, s, c, "pass_possible", d.containsKey("minimumWithin." + k));
+            assertOracle(recorder, s, c, "required_within", d.get("requiredWithin." + k));
             assertOracle(recorder, s, c, "verdict", d.get("verdict." + k));
+            assertOracle(recorder, s, c, "p_value", d.get("pValue." + k), tol);
             assertOracle(recorder, s, c, "false_compliance", d.get("falseCompliance." + k), tol);
+            assertOracle(recorder, s, c, "false_non_compliance", d.get("falseNonCompliance." + k), tol);
             assertOracle(recorder, s, c, "clopper_pearson_lower", d.get("clopperPearsonLower." + k), tol);
             assertOracle(recorder, s, c, "observed_percentile_ms", d.get("observed." + k), tol);
             assertOracle(recorder, s, c, "raw_percentile_pass", d.get("rawPercentilePass." + k));

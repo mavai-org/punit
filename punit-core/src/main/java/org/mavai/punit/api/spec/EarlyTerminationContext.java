@@ -1,5 +1,7 @@
 package org.mavai.punit.api.spec;
 
+import org.mavai.punit.api.TestIntent;
+
 /**
  * Engine-visible context for statistical early termination of a
  * probabilistic test's sample loop.
@@ -17,9 +19,9 @@ package org.mavai.punit.api.spec;
  * @param confidence  the confidence of the criterion's exact binomial test
  *                    (Statistical Companion §3.6). The engine derives the
  *                    required success count from it — the smallest passing
- *                    count {@code k_min} at the planned sample size — so a
- *                    short-circuited run reaches exactly the verdict the
- *                    full run would.
+ *                    count the intent's rule decides with at the planned
+ *                    sample size — so a short-circuited run reaches
+ *                    exactly the verdict the full run would.
  * @param successStopAllowed whether a guaranteed success may end the run
  *                    early. False when a required latency constraint is
  *                    decided after the run on the successful latencies it
@@ -27,18 +29,30 @@ package org.mavai.punit.api.spec;
  *                    starve that decision of samples. A failure that has
  *                    become inevitable still ends the run, since the test
  *                    verdict is FAIL whatever the latency dimension decides.
+ * @param intent      the test's intent, which selects the rule the
+ *                    required success count is derived under:
+ *                    {@code compliance/exact-binomial} under VERIFICATION,
+ *                    {@code compliance/smoke-exact-binomial} under SMOKE
+ *                    (Statistical Companion §5.7.3)
  */
 public record EarlyTerminationContext(
         double minPassRate,
         double confidence,
-        boolean successStopAllowed) {
+        boolean successStopAllowed,
+        TestIntent intent) {
 
-    /** A context in which both kinds of early termination are allowed. */
+    /** A context in which both kinds of early termination are allowed, under VERIFICATION. */
     public EarlyTerminationContext(double minPassRate, double confidence) {
         this(minPassRate, confidence, true);
     }
 
+    /** A context under VERIFICATION. */
+    public EarlyTerminationContext(double minPassRate, double confidence, boolean successStopAllowed) {
+        this(minPassRate, confidence, successStopAllowed, TestIntent.VERIFICATION);
+    }
+
     public EarlyTerminationContext {
+        java.util.Objects.requireNonNull(intent, "intent");
         if (Double.isNaN(minPassRate) || minPassRate < 0.0 || minPassRate > 1.0) {
             throw new IllegalArgumentException(
                     "minPassRate must be in [0, 1], got: " + minPassRate);
