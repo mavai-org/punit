@@ -51,18 +51,6 @@ class StatisticalRenderingPipelineTest {
         }
 
         @Test
-        @DisplayName("renderStatisticalAnalysisHtml wraps labels in tooltip spans")
-        void renderStatisticalAnalysisHtml_wrapsLabelsInTooltips() {
-            String html = VerdictTextRenderer.renderStatisticalAnalysisHtml(verdict);
-
-            assertThat(html).contains("<span class=\"tip\" data-tip=");
-            assertThat(html).contains("SE(p\u0302):");
-            assertThat(html).contains("Wilson lower bound:");
-            // Values should not be inside spans
-            assertThat(html).contains("</span>");
-        }
-
-        @Test
         @DisplayName("SE is derived from observed rate p̂, not threshold π₀")
         void seIsDerivedFromObservedRate() {
             // SE(p̂) = √(0.96 × 0.04 / 100) = 0.0196, NOT √(0.9374 × 0.0626 / 100) = 0.0242

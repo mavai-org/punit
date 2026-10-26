@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- `VerdictTextRenderer.renderStatisticalAnalysisHtml`, the last HTML
+  punit produced itself. It was left over from the former HTML report
+  and nothing called it; every punit report page is drawn by
+  mavai-report through `punitReport`.
+
 ## [0.16.0] - 2026-10-23
 
 ### Fixed
