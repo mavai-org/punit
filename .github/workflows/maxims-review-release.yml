@@ -101,23 +101,33 @@ jobs:
           # allowed here is refused without failing the step. The shallow
           # checkout cannot diff against the base, so the persona reads the PR
           # through gh and posts its section the same way.
+          # A review of any length is written to a file and posted with
+          # --body-file: an inline --body "$(...)" does not match the allowed
+          # gh pr comment pattern and is refused.
           claude_args: >-
-            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
+            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Write"
           prompt: |
             Read .qa-source/plan/qa/punit/maxims-review-${{ matrix.persona }}.md and
             follow it exactly. The maxims are in
             .qa-source/.claude-submodules/punit-MAXIMS.md. Review the diff of
             PR #${{ github.event.pull_request.number || github.event.inputs.pr }}
             through this persona's lens only, and post one advisory review section
-            headed with the persona name. Do not print the maxims or persona files.
+            headed with the persona name, as one PR comment.
+            Write it to .maxims-review.md with the Write tool, then post it with
+            gh pr comment ${{ github.event.pull_request.number || github.event.inputs.pr }} --body-file .maxims-review.md
+            Read the diff with gh pr diff alone; if its output is saved to a file,
+            read that file with the Read tool. Use no other shell command.
+            Do not print the maxims or persona files.
 
-      # A refused tool leaves the step green and the review unposted. Name any
-      # refusals in the log — tool and command only; the full execution output
-      # holds the private QA source and is never uploaded.
-      - name: Report refused tools
+      # A refused tool leaves the review step green and the review unposted, so
+      # any refusal fails the job here. Each is named in the log — tool and
+      # command only; the full execution output holds the private QA source and
+      # is never uploaded.
+      - name: Fail on refused tools
         if: always()
         run: |
           out="$RUNNER_TEMP/claude-execution-output.json"
           [ -f "$out" ] || { echo "no execution output"; exit 0; }
-          jq -r '.[] | select(.type == "result") | .permission_denials[]?
-                 | "refused: \(.tool_name) \(.tool_input.command // "" | .[0:120])"' "$out"
+          refused=$(jq -r '.[] | select(.type == "result") | .permission_denials[]?
+                 | "refused: \(.tool_name) \(.tool_input.command // "" | .[0:120])"' "$out")
+          [ -z "$refused" ] || { echo "$refused"; exit 1; }
