@@ -35,8 +35,8 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.Termination;
  *
  * <p>Provides three rendering levels:
  * <ul>
- *   <li>{@link #renderSummary} — compact pass/fail line for HTML report Level 2</li>
- *   <li>{@link #renderStatisticalAnalysis} — statistical details for HTML report Level 3</li>
+ *   <li>{@link #renderSummary} — compact pass/fail line (Level 2)</li>
+ *   <li>{@link #renderStatisticalAnalysis} — statistical details (Level 3)</li>
  *   <li>{@link #renderForReporter} — verbose box-drawn output for transparent stats console</li>
  * </ul>
  */
@@ -68,7 +68,7 @@ public final class VerdictTextRenderer {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // STATIC METHODS — HTML report (compact)
+    // STATIC METHODS — compact
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -199,70 +199,6 @@ public final class VerdictTextRenderer {
         return profile.entrySet().stream()
                 .map(e -> e.getKey() + "=" + e.getValue())
                 .collect(java.util.stream.Collectors.joining(", "));
-    }
-
-    // ── Tooltips for HTML report ────────────────────────────────────────
-
-    private static final Map<String, String> TOOLTIPS = Map.ofEntries(
-            Map.entry("Baseline spec:", "The experiment spec from which the threshold was derived"),
-            Map.entry("Baseline samples:", "Number of samples in the baseline experiment"),
-            Map.entry("Derived threshold:", "Minimum pass rate derived from the baseline"),
-            Map.entry("Confidence level:", "Probability that the CI method captures the true rate"),
-            Map.entry("SE(p\u0302):", "Standard error of the observed proportion — measures sampling noise in p\u0302"),
-            Map.entry("Wilson lower bound:", "One-sided Wilson lower bound on the true pass rate — descriptive; it decides nothing"),
-            Map.entry("Decision rule:", "The versioned rule that decided the verdict (Statistical Companion 1.7.1)"),
-            Map.entry("Size at p\u0302_b:", "The rule's false-alarm probability were the common rate the baseline's observed rate — a property of the procedure, not of this run"),
-            Map.entry("Design power:", "Power at the design alternative rate with the baseline and the test both yet to be drawn"),
-            Map.entry("Resolved power:", "Power at the design alternative rate of this test, whose cutoff the observed baseline fixed"),
-            Map.entry("Detectable drop:", "The smallest drop detected with 80% design power"),
-            Map.entry("Threshold derivation:", "Method used to derive the threshold from baseline data"),
-            Map.entry("Latency assertions:", "Per-percentile latency checks against configured thresholds"),
-            Map.entry("Covariate misalignments:", "Test conditions that differ from the baseline — may reduce comparability")
-    );
-
-    /**
-     * Renders the statistical analysis as HTML with tooltip spans on labels.
-     *
-     * <p>Each label that matches a known statistical term is wrapped in a
-     * {@code <span class="tip" data-tip="...">} element. A CSS {@code :hover::after}
-     * rule renders the tooltip — no JavaScript required. Only the label is styled,
-     * not the full line. The returned string is already HTML-safe — do not escape it.
-     */
-    public static String renderStatisticalAnalysisHtml(ProbabilisticTestVerdict verdict) {
-        String plain = renderStatisticalAnalysis(verdict);
-        StringBuilder html = new StringBuilder();
-        for (String line : plain.split("\n", -1)) {
-            String trimmed = line.trim();
-            boolean matched = false;
-            for (Map.Entry<String, String> entry : TOOLTIPS.entrySet()) {
-                if (trimmed.startsWith(entry.getKey())) {
-                    int labelStart = line.indexOf(entry.getKey());
-                    int labelEnd = labelStart + entry.getKey().length();
-                    html.append(escapeHtml(line.substring(0, labelStart)))
-                        .append("<span class=\"tip\" data-tip=\"")
-                        .append(escapeAttr(entry.getValue()))
-                        .append("\">")
-                        .append(escapeHtml(entry.getKey()))
-                        .append("</span>")
-                        .append(escapeHtml(line.substring(labelEnd)))
-                        .append("\n");
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                html.append(escapeHtml(line)).append("\n");
-            }
-        }
-        return html.toString();
-    }
-
-    private static String escapeHtml(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
-
-    private static String escapeAttr(String text) {
-        return escapeHtml(text).replace("\"", "&quot;");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -781,7 +717,7 @@ public final class VerdictTextRenderer {
      * <p>Budget exhaustion reasons are enriched with sample counts so the reader can
      * distinguish resource starvation from genuine underperformance at a glance.
      * This is the single formatting path for all termination messages across
-     * both summary (HTML report) and console rendering.
+     * both summary and console rendering.
      *
      * @param reason the termination reason
      * @param samplesExecuted the number of samples that were executed
