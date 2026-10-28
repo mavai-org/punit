@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Conformance cases are fetched at mavai-R v0.16.0 (`mavaiRTag`), which
+  removes the per-criterion denominator policy (withdrawn since
+  Statistical Companion 1.3.1) from its informational suites. No suite
+  punit runs changes.
+
 ### Removed
 
 - `VerdictTextRenderer.renderStatisticalAnalysisHtml`, the last HTML
