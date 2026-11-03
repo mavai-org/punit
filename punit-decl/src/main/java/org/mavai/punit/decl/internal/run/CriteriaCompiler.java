@@ -102,22 +102,33 @@ final class CriteriaCompiler {
     }
 
     private Decl<String> compileCriterion(CriterionDeclaration criterion) {
-        CriterionDecl<String> decl = criterion.threshold() != null
-                ? Criteria.meeting().<String>passRate(criterion.threshold())
-                : Criteria.empirical().passRate();
-        decl = decl.name(criterion.name());
-        Double tolerate = tolerateOverrides.containsKey(criterion.name())
-                ? tolerateOverrides.get(criterion.name())
-                : criterion.tolerate();
-        if (tolerate != null) {
-            decl = decl.tolerating(tolerate);
-            if (power != null) {
-                decl = decl.atPower(power);
-            }
+        CriterionDecl<String> decl;
+        if (criterion.zeroFailures()) {
+            // Zero-failures criteria (amendment 2026-11-03): the
+            // observational form — no threshold, no confidence, no risk
+            // claim, so neither a tolerate override nor the contract-level
+            // confidence applies (the posture machinery would reject them).
+            decl = Criteria.meeting().<String>zeroFailures();
+        } else if (criterion.threshold() != null) {
+            decl = Criteria.meeting().<String>passRate(criterion.threshold());
+        } else {
+            decl = Criteria.empirical().passRate();
         }
-        Double confidence = effectiveConfidence(criterion);
-        if (confidence != null) {
-            decl = decl.atConfidence(confidence);
+        decl = decl.name(criterion.name());
+        if (!criterion.zeroFailures()) {
+            Double tolerate = tolerateOverrides.containsKey(criterion.name())
+                    ? tolerateOverrides.get(criterion.name())
+                    : criterion.tolerate();
+            if (tolerate != null) {
+                decl = decl.tolerating(tolerate);
+                if (power != null) {
+                    decl = decl.atPower(power);
+                }
+            }
+            Double confidence = effectiveConfidence(criterion);
+            if (confidence != null) {
+                decl = decl.atConfidence(confidence);
+            }
         }
         if (criterion.contractRef() != null) {
             decl = criterion.thresholdOrigin() != null

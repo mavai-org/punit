@@ -61,14 +61,16 @@ public final class Materialiser {
         }
         List<CriterionDeclaration> criteria = declaration.criteria();
         if (criteria.size() == 1) {
-            out.append("        return ").append(criterionSource(criteria.get(0), "                "))
-                    .append(";\n");
+            out.append("        return ")
+                    .append(terminated(criterionSource(criteria.get(0), "                "), ";"))
+                    .append("\n");
         } else {
             out.append("        return Criteria.<String>of(\n");
             for (int i = 0; i < criteria.size(); i++) {
+                String source = criterionSource(criteria.get(i), "                        ");
                 out.append("                ")
-                        .append(criterionSource(criteria.get(i), "                        "));
-                out.append(i < criteria.size() - 1 ? ",\n" : "\n");
+                        .append(i < criteria.size() - 1 ? terminated(source, ",") : source)
+                        .append("\n");
             }
             out.append("        );\n");
         }
@@ -76,14 +78,30 @@ public final class Materialiser {
         return out.toString();
     }
 
+    /**
+     * Appends a terminator ({@code ,} or {@code ;}) to an emitted chain,
+     * placing it before a trailing {@code // TODO} comment on the chain's
+     * last line, where it would otherwise be commented out.
+     */
+    static String terminated(String source, String terminator) {
+        int lineStart = source.lastIndexOf('\n') + 1;
+        int comment = source.indexOf(" // ", lineStart);
+        if (comment < 0) {
+            return source + terminator;
+        }
+        return source.substring(0, comment) + terminator + source.substring(comment);
+    }
+
     private static String criterionSource(CriterionDeclaration criterion, String indent) {
         StringBuilder out = new StringBuilder();
         // The explicit witness pins the chain's subject type — chained
         // generic calls are not poly expressions, so inference cannot
         // reach back from the enclosing of(...).
-        out.append(criterion.threshold() != null
-                ? "meeting().<String>passRate(" + criterion.threshold() + ")"
-                : "empirical().<String>passRate()");
+        out.append(criterion.zeroFailures()
+                ? "meeting().<String>zeroFailures()"
+                : criterion.threshold() != null
+                        ? "meeting().<String>passRate(" + criterion.threshold() + ")"
+                        : "empirical().<String>passRate()");
         if (criterion.name() != null) {
             out.append("\n").append(indent).append(".name(\"")
                     .append(escape(criterion.name())).append("\")");

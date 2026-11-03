@@ -87,7 +87,7 @@ final class RiskClaims {
         }
 
         List<CriterionDeclaration> empirical = declaration.criteria().stream()
-                .filter(criterion -> criterion.threshold() == null)
+                .filter(CriterionDeclaration::empirical)
                 .toList();
         Map<String, Double> merged = new LinkedHashMap<>();
         for (CriterionDeclaration criterion : declaration.criteria()) {
@@ -119,6 +119,12 @@ final class RiskClaims {
                         ".tolerating(\"" + override.getKey() + "\", ...) targets a criterion "
                                 + "with a declared `threshold:` — a stipulated bar has no "
                                 + "baseline claim to protect");
+            }
+            if (criterion.zeroFailures()) {
+                throw new ContractConfigurationException(
+                        ".tolerating(\"" + override.getKey() + "\", ...) targets a "
+                                + "zero-failures criterion — an observational criterion has no "
+                                + "baseline risk claim to protect");
             }
             merged.put(override.getKey(), override.getValue());
         }

@@ -36,6 +36,7 @@ final class CriteriaParser {
                 "tolerate",
                 "confidence",
                 "optional-slack",
+                "zero-failures",
                 "postconditions"));
         // Every form has a single-form spelling directly on the entry.
         for (PostconditionForm form : PostconditionForm.values()) {
@@ -99,6 +100,37 @@ final class CriteriaParser {
                 throw fail(where + ": `confidence:` must be a number in (0, 1)");
             }
             confidence = ((Number) confidenceValue).doubleValue();
+        }
+
+        boolean zeroFailures = false;
+        if (data.containsKey("zero-failures")) {
+            Object zeroFailuresValue = data.get("zero-failures");
+            if (!(zeroFailuresValue instanceof Boolean declared)) {
+                throw fail(where + ": `zero-failures:` takes a boolean — `true` declares the "
+                        + "observational zero-failures criterion; got "
+                        + Yaml.display(zeroFailuresValue));
+            }
+            zeroFailures = declared;
+        }
+        if (zeroFailures) {
+            // Zero-failures criteria (amendment 2026-11-03): an
+            // observational criterion has no rate to require, no risk
+            // claim to protect and no confidence level to set.
+            if (threshold != null) {
+                throw fail(where + ": `zero-failures: true` beside `threshold:` — a "
+                        + "zero-failures criterion has no rate to require; drop one of the two "
+                        + "keys");
+            }
+            if (tolerate != null) {
+                throw fail(where + ": `zero-failures: true` beside `tolerate:` — a "
+                        + "zero-failures criterion has no baseline risk claim to protect; drop "
+                        + "one of the two keys");
+            }
+            if (confidence != null) {
+                throw fail(where + ": `zero-failures: true` beside `confidence:` — a "
+                        + "zero-failures criterion has no confidence level to set; drop one of "
+                        + "the two keys");
+            }
         }
 
         String origin = null;
@@ -177,7 +209,7 @@ final class CriteriaParser {
             name = declared;
         }
 
-        return new CriterionDeclaration(
-                name, forms, threshold, origin, contractRef, tolerate, confidence, optionalSlack);
+        return new CriterionDeclaration(name, forms, threshold, origin, contractRef, tolerate,
+                confidence, optionalSlack, zeroFailures);
     }
 }

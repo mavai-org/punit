@@ -21,6 +21,11 @@ import java.util.List;
  *     rate the operator accepts — or {@code null}
  * @param confidence the empirical criterion's own confidence level,
  *     overriding the contract default, or {@code null}
+ * @param optionalSlack the optional-check failure budget, or {@code null}
+ * @param zeroFailures {@code true} for the observational zero-failures
+ *     form ({@code zero-failures: true}, amendment 2026-11-03): no
+ *     threshold, no confidence, no risk claim; judged PASS iff no trial
+ *     failed
  */
 public record CriterionDeclaration(
         String name,
@@ -30,12 +35,29 @@ public record CriterionDeclaration(
         String contractRef,
         Double tolerate,
         Double confidence,
-        org.mavai.punit.api.criterion.OptionalSlack optionalSlack) {
+        org.mavai.punit.api.criterion.OptionalSlack optionalSlack,
+        boolean zeroFailures) {
 
     /** A criterion with no optional-check failure budget declared. */
     public CriterionDeclaration(String name, List<FormDeclaration> forms, Double threshold,
             String thresholdOrigin, String contractRef, Double tolerate, Double confidence) {
         this(name, forms, threshold, thresholdOrigin, contractRef, tolerate, confidence, null);
+    }
+
+    /** A rate-bearing (normative or empirical) criterion. */
+    public CriterionDeclaration(String name, List<FormDeclaration> forms, Double threshold,
+            String thresholdOrigin, String contractRef, Double tolerate, Double confidence,
+            org.mavai.punit.api.criterion.OptionalSlack optionalSlack) {
+        this(name, forms, threshold, thresholdOrigin, contractRef, tolerate, confidence,
+                optionalSlack, false);
+    }
+
+    /**
+     * An empirical criterion: no declared threshold and not the
+     * zero-failures form — its bar comes from a measured baseline.
+     */
+    public boolean empirical() {
+        return threshold == null && !zeroFailures;
     }
 
     public CriterionDeclaration {

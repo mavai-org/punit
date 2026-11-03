@@ -1,0 +1,10 @@
+format: mavai-contract/1
+contract: greeting-never-dismisses
+service: greeting-service
+criteria:
+  - name: never-dismisses
+    zero-failures: true
+    threshold-origin: policy
+    contract-ref: "Courtesy Policy §1"
+    not-equals: "go away"
+inputs: ["Alice", "Bob"]

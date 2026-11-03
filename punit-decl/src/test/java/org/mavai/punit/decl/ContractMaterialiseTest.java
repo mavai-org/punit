@@ -41,6 +41,9 @@ class ContractMaterialiseTest {
                   - name: never-rude
                     threshold: 0.99
                     not-equals: "go away"
+                  - name: never-leaks-a-card
+                    zero-failures: true
+                    not-equals: "4111 1111 1111 1111"
                 inputs: ["a dozen eggs", "two bottles of milk"]
                 """);
         return contract;
@@ -58,6 +61,8 @@ class ContractMaterialiseTest {
                 .contains(".name(\"baskets-parse-and-mention-eggs\")")
                 .contains(".optionalSlack(1)")
                 .contains("meeting().<String>passRate(0.99)")
+                .contains("meeting().<String>zeroFailures()")
+                .contains(".name(\"never-leaks-a-card\")")
                 .contains(".optional()")
                 .contains("JSONPath/XPath");
         // Graduation transfers ownership: the reader's internals never leak.
@@ -67,8 +72,31 @@ class ContractMaterialiseTest {
     @Test
     @DisplayName("the emitted source compiles cleanly against punit's authoring surface")
     void emissionCompiles(@TempDir Path directory) throws IOException {
-        String source = ContractMaterialise.run(writeContract(directory));
-        String className = ContractMaterialise.className("basket-builder-returns-valid-baskets");
+        assertCompiles(directory, ContractMaterialise.run(writeContract(directory)),
+                "basket-builder-returns-valid-baskets");
+    }
+
+    @Test
+    @DisplayName("a lone zero-failures criterion whose last check carries a TODO still compiles")
+    void loneCriterionWithTrailingTodoCompiles(@TempDir Path directory) throws IOException {
+        Path contract = directory.resolve("contract.yaml");
+        Files.writeString(contract, """
+                format: mavai-contract/1
+                contract: greeting-never-dismisses
+                service: greeting-service
+                criteria:
+                  - name: never-dismisses
+                    zero-failures: true
+                    not-equals: "go away"
+                inputs: ["Alice"]
+                """);
+        String source = ContractMaterialise.run(contract);
+        assertThat(source).contains("meeting().<String>zeroFailures()");
+        assertCompiles(directory, source, "greeting-never-dismisses");
+    }
+
+    private static void assertCompiles(Path directory, String source, String contractName) {
+        String className = ContractMaterialise.className(contractName);
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         JavaFileObject unit = new SimpleJavaFileObject(
@@ -85,7 +113,7 @@ class ContractMaterialiseTest {
                         "-classpath", System.getProperty("java.class.path")),
                 null, List.of(unit)).call();
         assertThat(compiled)
-                .as("emitted source compiles: " + diagnostics.getDiagnostics())
+                .as("emitted source compiles: " + diagnostics.getDiagnostics() + "\n" + source)
                 .isTrue();
     }
 }

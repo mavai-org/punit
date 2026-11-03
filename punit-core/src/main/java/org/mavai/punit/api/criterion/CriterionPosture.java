@@ -32,9 +32,13 @@ import org.mavai.punit.api.ThresholdOrigin;
  *       baseline at evaluate time; the {@code origin} is
  *       {@link ThresholdOrigin#EMPIRICAL}.</li>
  *   <li>{@link Kind#ZERO_FAILURES} — explicit zero-failures via
- *       {@code .zeroFailures(origin)}. Threshold is implicitly 1.0;
- *       the run classifies SMOKE per the methodology rule
- *       (zero-failures is not statistically verifiable).
+ *       {@code .zeroFailures(origin)}. An observational criterion:
+ *       PASS iff no sample failed, INCONCLUSIVE with no samples, no
+ *       threshold, confidence level or decision rule (Statistical
+ *       Companion §1.4.5). It takes no part in the configuration
+ *       refusals — {@code COMPLIANCE_INFEASIBLE} applies only to a
+ *       declared requirement — so it runs under the test's declared
+ *       intent and is judged by observation whatever that intent.
  *       Composition with {@code .atConfidence(...)} is rejected at
  *       build time.</li>
  *   <li>{@link Kind#IMPLICIT_ZERO_FAILURES} — no posture method

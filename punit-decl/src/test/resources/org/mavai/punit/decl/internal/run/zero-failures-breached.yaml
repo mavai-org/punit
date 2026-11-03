@@ -1,0 +1,8 @@
+format: mavai-contract/1
+contract: greeting-must-never-greet-bob
+service: greeting-service
+criteria:
+  - name: never-greets-bob
+    zero-failures: true
+    not-equals: "hello Bob!"
+inputs: ["Alice", "Bob"]

@@ -47,6 +47,108 @@ class ContractParserTest {
     }
 
     @Nested
+    @DisplayName("zero-failures criteria (amendment 2026-11-03)")
+    class ZeroFailures {
+
+        private static final String ZERO = """
+                format: mavai-contract/1
+                contract: greeting-never-insults
+                service: greeting-service
+                criteria:
+                  - name: never-insults
+                    zero-failures: true
+                    not-equals: "go away"
+                inputs: ["Alice"]
+                """;
+
+        @Test
+        @DisplayName("the bare form parses as the observational criterion — no threshold, no claim")
+        void bareFormParses() {
+            CriterionDeclaration criterion = ContractParser.parse(ZERO).criteria().get(0);
+            assertThat(criterion.zeroFailures()).isTrue();
+            assertThat(criterion.threshold()).isNull();
+            assertThat(criterion.tolerate()).isNull();
+            assertThat(criterion.confidence()).isNull();
+            assertThat(criterion.empirical()).isFalse();
+        }
+
+        @Test
+        @DisplayName("provenance and partial credit are allowed beside it")
+        void provenanceAndSlackParse() {
+            CriterionDeclaration criterion = ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: advice-respects-the-safety-policy
+                    service: health-advisor
+                    criteria:
+                      - name: no-prohibited-advice
+                        zero-failures: true
+                        threshold-origin: policy
+                        contract-ref: "Clinical Safety Policy v3 §2"
+                        optional-slack: 1
+                        postconditions:
+                          - not-equals: "self-harm"
+                          - contains: "not medical advice"
+                            optional: true
+                    inputs: ["a headache"]
+                    """).criteria().get(0);
+            assertThat(criterion.zeroFailures()).isTrue();
+            assertThat(criterion.thresholdOrigin()).isEqualTo("policy");
+            assertThat(criterion.contractRef()).contains("Safety Policy");
+            assertThat(criterion.optionalSlack()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("zero-failures: false means the criterion without the amendment")
+        void falseMeansNoAmendment() {
+            CriterionDeclaration criterion = ContractParser.parse(
+                    MINIMAL.replace("threshold: 0.95", "threshold: 0.95\n    zero-failures: false"))
+                    .criteria().get(0);
+            assertThat(criterion.zeroFailures()).isFalse();
+            assertThat(criterion.threshold()).isEqualTo(0.95);
+        }
+
+        @Test
+        @DisplayName("an absent key leaves an unthresholded criterion empirical — no implicit default")
+        void absentKeyStaysEmpirical() {
+            CriterionDeclaration criterion = ContractParser.parse(
+                    MINIMAL.replace("  - threshold: 0.95\n", "  - name: measured\n"))
+                    .criteria().get(0);
+            assertThat(criterion.zeroFailures()).isFalse();
+            assertThat(criterion.empirical()).isTrue();
+        }
+
+        @Test
+        @DisplayName("beside threshold: it is refused — no rate to require")
+        void refusedBesideThreshold() {
+            assertRefused(ZERO.replace("zero-failures: true", "zero-failures: true\n    threshold: 0.95"),
+                    "a zero-failures criterion has no rate to require");
+        }
+
+        @Test
+        @DisplayName("beside tolerate: it is refused — no baseline risk claim")
+        void refusedBesideTolerate() {
+            assertRefused(ZERO.replace("zero-failures: true", "zero-failures: true\n    tolerate: 0.9"),
+                    "no baseline risk claim to protect");
+        }
+
+        @Test
+        @DisplayName("beside a per-criterion confidence: it is refused — no confidence level")
+        void refusedBesideConfidence() {
+            assertRefused(ZERO.replace("zero-failures: true", "zero-failures: true\n    confidence: 0.99"),
+                    "no confidence level to set");
+        }
+
+        @Test
+        @DisplayName("a non-boolean value is refused — 1 and the string \"true\" are not true")
+        void nonBooleanRefused() {
+            assertRefused(ZERO.replace("zero-failures: true", "zero-failures: 1"),
+                    "`zero-failures:` takes a boolean");
+            assertRefused(ZERO.replace("zero-failures: true", "zero-failures: \"true\""),
+                    "`zero-failures:` takes a boolean");
+        }
+    }
+
+    @Nested
     @DisplayName("partial credit")
     class PartialCredit {
 

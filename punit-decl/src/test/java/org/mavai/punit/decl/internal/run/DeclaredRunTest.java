@@ -183,6 +183,104 @@ class DeclaredRunTest {
     }
 
     @Nested
+    @DisplayName("zero-failures criteria (amendment 2026-11-03)")
+    class ZeroFailures {
+
+        private ProbabilisticTestVerdict runCapturing(Runnable run) {
+            java.util.List<ProbabilisticTestVerdict> records = new java.util.ArrayList<>();
+            VerdictSinkBus.replaceAll(records::add);
+            try {
+                run.run();
+            } finally {
+                VerdictSinkBus.reset();
+            }
+            assertThat(records).hasSize(1);
+            return records.get(0);
+        }
+
+        @Test
+        @DisplayName("no failure observed: PASS, judged by observation with no decision rule")
+        void passesWithNoFailure() {
+            ProbabilisticTestVerdict verdict = runCapturing(() ->
+                    PUnit.declared("greeting-never-dismisses").samples(10).assertPasses());
+            assertThat(verdict.punitVerdict().name()).isEqualTo("PASS");
+            assertThat(verdict.execution().intent())
+                    .isEqualTo(org.mavai.punit.api.TestIntent.VERIFICATION);
+            var row = verdict.perCriterion().orElseThrow().criteria().get(0);
+            assertThat(row.decisionRule()).isEmpty();
+            assertThat(row.requiredPass()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("one failed trial: FAIL, with the failure counted and no rate claimed")
+        void failsOnOneFailure() {
+            ProbabilisticTestVerdict verdict = runCapturing(() ->
+                    assertThatThrownBy(() -> PUnit.declared("greeting-must-never-greet-bob")
+                            .samples(10).assertPasses())
+                            .isInstanceOf(AssertionFailedError.class)
+                            .hasMessageContaining("never-greets-bob"));
+            assertThat(verdict.punitVerdict().name()).isEqualTo("FAIL");
+            var row = verdict.perCriterion().orElseThrow().criteria().get(0);
+            assertThat(row.fail()).isGreaterThanOrEqualTo(1);
+            assertThat(row.decisionRule()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a zero-failures-only test without an explicit sample count is refused")
+        void zeroFailuresOnlyNeedsAnExplicitCount() {
+            assertThatThrownBy(() -> PUnit.declared("greeting-never-dismisses").assertPasses())
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("zero failures in N trials bounds nothing")
+                    .hasMessageContaining(".samples(N)")
+                    .hasMessageContaining("-Dpunit.samples.greeting-never-dismisses");
+        }
+
+        @Test
+        @DisplayName("smoke intent does not lend a zero-failures-only test a default count")
+        void smokeIntentDoesNotSizeIt() {
+            assertThatThrownBy(() -> PUnit.declared("smoke-never-dismisses").assertPasses())
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("zero failures in N trials bounds nothing");
+            assertThatCode(() -> PUnit.declared("smoke-never-dismisses").samples(5).assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a mixed contract sizes from its thresholded criterion; the contract confidence skips the zero-failures one")
+        void mixedContractSizesFromItsThreshold() {
+            var declaration = org.mavai.punit.decl.internal.parser.ContractParser.parse("""
+                    format: mavai-contract/1
+                    contract: greeting-polite-and-never-dismissive
+                    service: greeting-service
+                    confidence: 0.95
+                    criteria:
+                      - name: greets-politely
+                        threshold: 0.9
+                        contains: "hello"
+                      - name: never-dismisses
+                        zero-failures: true
+                        not-equals: "go away"
+                    inputs: ["Alice", "Bob"]
+                    """);
+            Sizing.Sized sized = Sizing.resolve(declaration, null);
+            assertThat(sized.samples()).isEqualTo(29);
+            assertThat(sized.provenance()).contains("greets-politely");
+            assertThatCode(() ->
+                    PUnit.declared("greeting-polite-and-never-dismissive").assertPasses())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a tolerate override naming a zero-failures criterion is refused")
+        void tolerateOverrideRefused() {
+            assertThatThrownBy(() -> PUnit.declared("greeting-never-dismisses")
+                    .tolerating("never-dismisses", 0.9).assertPasses())
+                    .isInstanceOf(ContractConfigurationException.class)
+                    .hasMessageContaining("zero-failures criterion");
+        }
+    }
+
+    @Nested
     @DisplayName("per-dimension assertions")
     class PerDimensionAssertions {
 
