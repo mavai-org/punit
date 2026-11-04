@@ -95,6 +95,27 @@ class ContractMaterialiseTest {
         assertCompiles(directory, source, "greeting-never-dismisses");
     }
 
+    @Test
+    @DisplayName("a check whose text contains // keeps its terminator outside the string literal")
+    void slashesInCheckTextDoNotMisplaceTheTerminator(@TempDir Path directory) throws IOException {
+        Path contract = directory.resolve("contract.yaml");
+        Files.writeString(contract, """
+                format: mavai-contract/1
+                contract: links-are-absolute
+                service: link-service
+                criteria:
+                  - name: never-relative
+                    zero-failures: true
+                    not-equals: "a // b"
+                  - name: has-scheme
+                    threshold: 0.9
+                    contains: "https"
+                inputs: ["Alice"]
+                """);
+        String source = ContractMaterialise.run(contract);
+        assertCompiles(directory, source, "links-are-absolute");
+    }
+
     private static void assertCompiles(Path directory, String source, String contractName) {
         String className = ContractMaterialise.className(contractName);
 

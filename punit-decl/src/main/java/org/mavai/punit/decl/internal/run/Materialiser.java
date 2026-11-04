@@ -81,15 +81,40 @@ public final class Materialiser {
     /**
      * Appends a terminator ({@code ,} or {@code ;}) to an emitted chain,
      * placing it before a trailing {@code // TODO} comment on the chain's
-     * last line, where it would otherwise be commented out.
+     * last line, where it would otherwise be commented out. The comment is
+     * found lexically, outside string literals, so a check whose text
+     * contains {@code //} keeps its terminator outside the literal.
      */
     static String terminated(String source, String terminator) {
         int lineStart = source.lastIndexOf('\n') + 1;
-        int comment = source.indexOf(" // ", lineStart);
+        int comment = commentStart(source, lineStart);
         if (comment < 0) {
             return source + terminator;
         }
+        while (comment > lineStart && source.charAt(comment - 1) == ' ') {
+            comment--;
+        }
         return source.substring(0, comment) + terminator + source.substring(comment);
+    }
+
+    /** The index of the first {@code //} outside a string literal, or -1. */
+    private static int commentStart(String source, int from) {
+        boolean inString = false;
+        for (int i = from; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (inString) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '/' && i + 1 < source.length() && source.charAt(i + 1) == '/') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static String criterionSource(CriterionDeclaration criterion, String indent) {
