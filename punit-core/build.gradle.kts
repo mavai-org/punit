@@ -159,12 +159,69 @@ val fetchConformanceData by tasks.registering {
     }
 }
 
+// The exploration-stem conformance case travels in the interchange archive of
+// the same mavai-R release (interchange-<tag>.zip, naming-explore-stem.yaml),
+// not in the cases archive; it is extracted to /interchange/ on the test
+// classpath. Local override, as for the cases:
+// -PconformanceInterchangeDir=/path/to/mavai-R/inst/interchange
+val interchangeResourcesDir = layout.buildDirectory.dir("generated/conformance-interchange")
+
+val fetchInterchangeCases by tasks.registering {
+    description = "Fetches the pinned mavai-R interchange derivation cases"
+    group = "verification"
+
+    outputs.dir(interchangeResourcesDir)
+    outputs.upToDateWhen { false }
+
+    val interchangeDirOverride = providers.gradleProperty("conformanceInterchangeDir")
+
+    doLast {
+        val destDir = interchangeResourcesDir.get().asFile.resolve("interchange")
+        if (destDir.exists()) destDir.deleteRecursively()
+        destDir.mkdirs()
+        val overrideDir = interchangeDirOverride.orNull
+        if (overrideDir != null) {
+            val srcDir = file(overrideDir)
+            require(srcDir.isDirectory) {
+                "conformanceInterchangeDir does not resolve to a directory: $srcDir"
+            }
+            copy {
+                from(srcDir) { include("naming-*.yaml") }
+                into(destDir)
+            }
+            logger.lifecycle("Using local mavai-R interchange cases: $srcDir")
+            return@doLast
+        }
+        val tag = mavaiRTag.get()
+        require(tag.matches(Regex("^v\\d+\\.\\d+\\.\\d+$"))) {
+            "mavaiRTag must name a mavai-R release tag (vX.Y.Z), got '$tag'"
+        }
+        val cacheZip = layout.buildDirectory
+            .file("conformance-cache/interchange-$tag.zip").get().asFile
+        if (!cacheZip.exists()) {
+            cacheZip.parentFile.mkdirs()
+            val assetUrl = URI(
+                "https://github.com/mavai-org/mavai-R/releases/download/$tag/interchange-$tag.zip"
+            ).toURL()
+            assetUrl.openStream().use { input ->
+                cacheZip.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+        copy {
+            from(zipTree(cacheZip)) { include("naming-*.yaml") }
+            into(destDir)
+        }
+        logger.lifecycle("Fetched mavai-R interchange cases: $tag")
+    }
+}
+
 sourceSets.test {
     resources.srcDir(conformanceResourcesDir)
+    resources.srcDir(interchangeResourcesDir)
 }
 
 tasks.named<ProcessResources>("processTestResources") {
-    dependsOn(fetchConformanceData)
+    dependsOn(fetchConformanceData, fetchInterchangeCases)
 }
 
 // ---------------------------------------------------------------------------------

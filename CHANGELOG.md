@@ -30,10 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   work, reported and counted on every run, and failing the build the
   day they start to pass.
 
-- Conformance cases are fetched at mavai-R v0.16.0 (`mavaiRTag`), which
+- Conformance cases are fetched at mavai-R v0.16.2 (`mavaiRTag`). v0.16.0
   removes the per-criterion denominator policy (withdrawn since
-  Statistical Companion 1.3.1) from its informational suites. No suite
-  punit runs changes.
+  Statistical Companion 1.3.1) from its informational suites, and no suite
+  punit runs changes. v0.16.2 adds the exploration-stem conformance case
+  (`naming-explore-stem.yaml`, in the interchange archive), which punit-core
+  now fetches and asserts (`ExploreStemConformanceTest`); a local checkout
+  can stand in with `-PconformanceInterchangeDir=…/mavai-R/inst/interchange`.
 
 ### Removed
 
