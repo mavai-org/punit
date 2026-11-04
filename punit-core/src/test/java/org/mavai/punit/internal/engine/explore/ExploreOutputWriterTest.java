@@ -240,6 +240,47 @@ class ExploreOutputWriterTest {
     }
 
     @Test
+    @DisplayName("filenameFor bounds a stem from many factors to a file-system-safe length, keeping configurations distinct")
+    void filenameForBoundsLongStems() {
+        record CompositeFactors(String advisorModel, String advisorSystemPrompt, double advisorTemperature,
+                                int advisorMaxTokens, String guardrail, String guardrailModel,
+                                String guardrailSystemPrompt, double guardrailTemperature,
+                                int guardrailMaxTokens, String guardrailResponseSchema) {}
+        String prompt = "You check a reply that a health advice app is about to send to a patient.";
+        String schema = "{type=object, required=[harmful, reason], additionalProperties=false}";
+        ExploreOutputWriter writer = new ExploreOutputWriter();
+        String normal = writer.filenameFor(FactorBundle.of(new CompositeFactors(
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 200, "llm",
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 120, schema)));
+        String weaker = writer.filenameFor(FactorBundle.of(new CompositeFactors(
+                "karakun-Ministral-3-14B-Instruct-2512", prompt, 0.7, 200, "llm",
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 120, schema)));
+
+        assertThat((normal + ".yaml").getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(255);
+        assertThat(normal).startsWith("advisorModel-karakun-Mistral-Small-4-").matches(".*-[0-9a-f]{8}");
+        assertThat(weaker).isNotEqualTo(normal);
+        String lateDifference = writer.filenameFor(FactorBundle.of(new CompositeFactors(
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 200, "llm",
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 120, schema.replace("false", "true"))));
+        assertThat(lateDifference).isNotEqualTo(normal);
+        assertThat(writer.filenameFor(FactorBundle.of(new CompositeFactors(
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 200, "llm",
+                "karakun-Mistral-Small-4-119B-2603", prompt, 0.7, 120, schema)))).isEqualTo(normal);
+    }
+
+    @Test
+    @DisplayName("bounded counts UTF-8 bytes and never splits a character")
+    void boundedCountsBytes() {
+        String stem = "prompt-" + "é".repeat(150);
+        String bounded = ExploreOutputWriter.bounded(stem);
+        assertThat(bounded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(ExploreOutputWriter.MAX_STEM_BYTES);
+        assertThat(bounded).matches("prompt-é+-[0-9a-f]{8}");
+        assertThat(ExploreOutputWriter.bounded("model-gpt-4o")).isEqualTo("model-gpt-4o");
+    }
+
+    @Test
     @DisplayName("ExploreEmitter keys the sink by serviceContractId/{sweptKeys}/{stem}.yaml")
     void emitterCapturesOnePerConfig() {
         Sampling<LlmFactors, String, Integer> sampling = Sampling

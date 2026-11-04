@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Explore artefact file names are bounded to 200 UTF-8 bytes. Values were
+  already truncated one by one, but a configuration with many factors (a
+  composite service declared with ten settings) still produced a name over
+  the common 255-byte limit, and the run failed with "File name too long"
+  after spending all its samples. A longer stem now keeps a readable prefix
+  and ends in an 8-character SHA-256 hash of the whole stem, so distinct
+  configurations keep distinct names. The artefact's `configuration` carries
+  the same bounded stem (EX05 whole-stem bound, explore format amendment
+  2026-11-04). Names within the bound are unchanged.
+
 - Materialisation no longer emits a separating comma or closing semicolon
   inside a criterion's trailing `// TODO` comment, which left the emitted
   source uncompilable when a check carrying a TODO ended a criterion
