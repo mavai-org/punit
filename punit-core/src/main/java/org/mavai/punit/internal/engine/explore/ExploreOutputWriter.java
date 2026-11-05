@@ -50,6 +50,19 @@ public final class ExploreOutputWriter {
     /** Truncated prefix length when the value exceeds {@link #MAX_RAW_LENGTH}. */
     private static final int TRUNCATED_PREFIX_LENGTH = 24;
 
+    /**
+     * Maximum length of a whole stem, in UTF-8 bytes. Common file systems
+     * cap a file name at 255 bytes; the bound leaves room for the
+     * {@code .yaml} extension with margin. Per-value truncation alone
+     * doesn't bound a stem: a factor record with many entries (a
+     * composite service's configuration) exceeds the cap even when every
+     * value is short.
+     */
+    static final int MAX_STEM_BYTES = 200;
+
+    /** Hex characters of the whole-stem hash appended to a bounded stem. */
+    private static final int STEM_HASH_LENGTH = 8;
+
     /** Stem used when the factor record is empty (no components). */
     private static final String EMPTY_BUNDLE_STEM = "no-factors";
 
@@ -127,7 +140,10 @@ public final class ExploreOutputWriter {
      * suffixed with a 4-char SHA-256 hash if the value is long.
      * Segments are joined with {@code _}; the whole result is
      * sanitised (non-alphanumeric/{@code .-_} replaced with
-     * {@code _}, runs of {@code _} collapsed).
+     * {@code _}, runs of {@code _} collapsed). A stem longer than
+     * {@value #MAX_STEM_BYTES} UTF-8 bytes keeps a readable prefix and
+     * ends in an 8-char SHA-256 hash of the whole stem, so distinct
+     * configurations keep distinct file names.
      */
     public String filenameFor(FactorBundle factorBundle) {
         if (factorBundle.isEmpty()) {
@@ -142,7 +158,32 @@ public final class ExploreOutputWriter {
             first = false;
             stem.append(e.name()).append('-').append(canonicalValueForFilename(e.value()));
         }
-        return sanitise(stem.toString());
+        return bounded(sanitise(stem.toString()));
+    }
+
+    /** The stem itself if within {@link #MAX_STEM_BYTES}, else a prefix plus a hash of the whole stem. */
+    static String bounded(String stem) {
+        if (utf8Length(stem) <= MAX_STEM_BYTES) {
+            return stem;
+        }
+        int budget = MAX_STEM_BYTES - STEM_HASH_LENGTH - 1;
+        StringBuilder prefix = new StringBuilder();
+        int bytes = 0;
+        for (int i = 0; i < stem.length(); ) {
+            int codePoint = stem.codePointAt(i);
+            int size = utf8Length(new String(Character.toChars(codePoint)));
+            if (bytes + size > budget) {
+                break;
+            }
+            prefix.appendCodePoint(codePoint);
+            bytes += size;
+            i += Character.charCount(codePoint);
+        }
+        return prefix + "-" + sha256HexPrefix(stem, STEM_HASH_LENGTH);
+    }
+
+    private static int utf8Length(String text) {
+        return text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
     }
 
     /**
