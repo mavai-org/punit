@@ -53,7 +53,10 @@ import org.snakeyaml.engine.v2.api.LoadSettings;
  *
  * <p>Selective assertion fails the build: the run records every case it
  * asserted and diffs that against the manifest's full obligation, and
- * the diff mechanism is itself exercised by mutation.
+ * the diff mechanism is itself exercised by mutation. A case this reader
+ * does not yet meet may be a declared exemption ({@link #EXEMPTIONS}):
+ * named with its amendment and owning bundle, asserted inverted, and
+ * reported and counted on every run — never a silent omission.
  */
 // mavai-ref: JVI-YM9A27C — do not remove (resolves in mavai-orchestrator)
 @DisplayName("Declarative-format conformance (published corpus)")
@@ -151,6 +154,11 @@ class FormatConformanceTest {
             Map.entry("set-of-min-present-malformed", "a bare fraction is never guessed at"),
             Map.entry("set-of-lists-overlap", "in both `required:` and `optional:`"),
             Map.entry("set-of-min-present-bounds", "the `optional:` list's distinct size"),
+            Map.entry("zero-failures-with-threshold",
+                    "a zero-failures criterion has no rate to require"),
+            Map.entry("zero-failures-with-tolerate", "no baseline risk claim to protect"),
+            Map.entry("zero-failures-with-confidence", "no confidence level to set"),
+            Map.entry("zero-failures-not-boolean", "`zero-failures:` takes a boolean"),
             // ── mavai-services/1 ──────────────────────────────────
             Map.entry("services-format-identifier", "`format:` must be 'mavai-services/1'"),
             Map.entry("services-block-missing", "`services:` must be a non-empty mapping"),
@@ -190,15 +198,46 @@ class FormatConformanceTest {
             Map.entry("services-roots-reference-undeclared", "references an undeclared root"));
 
     /**
-     * The known-unmet ledger — corpus obligations this reader does not
-     * yet meet, each tied to the directive that will retire it. A
-     * ledger case is asserted <em>inverted</em>: the day the reader
-     * starts meeting the obligation, its test fails and the entry must
-     * be removed — the ledger only shrinks, truthfully. Never add an
-     * entry without a directive reference. Empty since the named-path-
-     * anchors twin landed.
+     * A declared exemption (the family's format-conformance rule on
+     * declared exemptions, 2026-11-03): one corpus case this reader does not yet meet,
+     * naming its category ({@code (loads)} for a must-load case), the
+     * format amendment it belongs to, the open bundle that owes it, and
+     * the date it was declared.
      */
-    private static final Map<String, String> KNOWN_UNMET = Map.of();
+    record Exemption(String category, String amendment, String bundle, String declared) {}
+
+    /**
+     * The declared exemptions — corpus obligations this reader does not
+     * yet meet. An exempted case is asserted <em>inverted</em>: the day
+     * the reader starts meeting it, its test fails and the entry must be
+     * removed, so the list only shrinks, truthfully. Exemptions are
+     * reported and counted on every run ({@link #exemptionReport}),
+     * never silent; any failure not declared here fails the build; and a
+     * reader with exemptions does not claim full conformance at its pin.
+     * Never add an entry without its owning bundle.
+     */
+    static final Map<String, Exemption> EXEMPTIONS = Map.ofEntries(
+            Map.entry("services-run-controls.yaml", new Exemption("(loads)", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("services-run-controls-bare.yaml", new Exemption("(loads)", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("services-run-controls-pacing.yaml", new Exemption("(loads)", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("services-run-controls-budget.yaml", new Exemption("(loads)", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("pacing-empty.yaml", new Exemption("pacing-empty", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("pacing-rate-not-positive.yaml", new Exemption("pacing-rate-not-positive", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("pacing-unknown-key.yaml", new Exemption("pacing-unknown-key", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-limit-missing.yaml", new Exemption("budget-limit-missing", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-limit-not-positive.yaml", new Exemption("budget-limit-not-positive", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-on-exhausted-vocabulary.yaml", new Exemption("budget-on-exhausted-vocabulary", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-unknown-key.yaml", new Exemption("budget-unknown-key", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-in-configuration.yaml", new Exemption("budget-in-configuration", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-in-exploration.yaml", new Exemption("budget-in-exploration", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("budget-in-optimization-initial.yaml", new Exemption("budget-in-optimization-initial", "mavai-services/1 run controls (amendment 2026-10-13)", "work/2026-10-13-punit-declarative-resource-controls", "2026-11-03")),
+            Map.entry("stepper-linear-sweep-zero-step.yaml", new Exemption("stepper-linear-sweep-zero-step", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-refining-grid-bounds.yaml", new Exemption("stepper-refining-grid-bounds", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-refining-grid-min-step.yaml", new Exemption("stepper-refining-grid-min-step", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-config-unknown-key.yaml", new Exemption("stepper-config-unknown-key", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-refining-grid-prefer.yaml", new Exemption("stepper-refining-grid-prefer", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-refining-grid-objective.yaml", new Exemption("stepper-refining-grid-objective", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")),
+            Map.entry("stepper-refining-grid-scorer.yaml", new Exemption("stepper-refining-grid-scorer", "mavai-services/1 built-in steppers (amendment 2026-10-13)", "work/2026-10-13-punit-numeric-steppers", "2026-11-03")));
 
     // ── The drive ─────────────────────────────────────────────────
 
@@ -227,11 +266,15 @@ class FormatConformanceTest {
         }
     }
 
-    /** One case's binding obligations, or its truthfully-inverted ledger entry. */
+    /** One case's binding obligations, or its truthfully-inverted declared exemption. */
     private static void assertCase(Map<String, Object> entry) {
+        assertCase(entry, EXEMPTIONS);
+    }
+
+    private static void assertCase(Map<String, Object> entry, Map<String, Exemption> exemptions) {
         String file = (String) entry.get("file");
-        String pending = KNOWN_UNMET.get(file);
-        if (pending == null) {
+        Exemption exemption = exemptions.get(file);
+        if (exemption == null) {
             meetObligation(entry);
             return;
         }
@@ -240,8 +283,31 @@ class FormatConformanceTest {
         } catch (AssertionError expectedlyUnmet) {
             return;
         }
-        fail(file + ": obligation now met — remove the entry from the known-unmet "
-                + "ledger (" + pending + ")");
+        fail(file + ": obligation now met — remove its declared exemption ("
+                + exemption.amendment() + ", owed by " + exemption.bundle() + ")");
+    }
+
+    /**
+     * The exemption report every conformance run prints: the count of
+     * asserted obligations, the count of declared exemptions, and each
+     * exemption named with its category, amendment, owning bundle and
+     * date — the declared-exemptions rule's "reported and counted".
+     */
+    static String exemptionReport(Map<String, Exemption> exemptions) {
+        StringBuilder report = new StringBuilder("[PUNIT] format conformance: ")
+                .append(ENTRIES.size() - exemptions.size()).append(" obligations met, ")
+                .append(exemptions.size()).append(" declared exemptions");
+        if (!exemptions.isEmpty()) {
+            report.append(" — not full conformance at this pin");
+        }
+        exemptions.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> report.append("\n  exempt ").append(e.getKey())
+                        .append(" [").append(e.getValue().category()).append("] ")
+                        .append(e.getValue().amendment()).append(", owed by ")
+                        .append(e.getValue().bundle()).append(", declared ")
+                        .append(e.getValue().declared()));
+        return report.toString();
     }
 
     /** One case's binding obligations: the outcome, and the category's refusal. */
@@ -288,6 +354,58 @@ class FormatConformanceTest {
             asserted.add(entry.getKey());
         }
         diffAgainstObligations(asserted);
+        System.out.println(exemptionReport(EXEMPTIONS));
+    }
+
+    @Test
+    @DisplayName("every declared exemption names a manifest case and its owning bundle")
+    void everyExemptionIsWellFormed() {
+        assertThat(ENTRIES.keySet()).containsAll(EXEMPTIONS.keySet());
+        for (Map.Entry<String, Exemption> e : EXEMPTIONS.entrySet()) {
+            Map<String, Object> entry = ENTRIES.get(e.getKey());
+            String expected = "loads".equals(entry.get("outcome"))
+                    ? "(loads)" : (String) entry.get("category");
+            assertThat(e.getValue().category()).as(e.getKey()).isEqualTo(expected);
+            assertThat(e.getValue().bundle()).as(e.getKey()).startsWith("work/");
+            assertThat(e.getValue().amendment()).as(e.getKey()).isNotBlank();
+            assertThat(e.getValue().declared()).as(e.getKey()).matches("\\d{4}-\\d{2}-\\d{2}");
+        }
+    }
+
+    @Test
+    @DisplayName("declared exemptions are reported and counted — never silent")
+    void exemptionsAreReported() {
+        String report = exemptionReport(EXEMPTIONS);
+        assertThat(report).contains(EXEMPTIONS.size() + " declared exemptions");
+        for (Map.Entry<String, Exemption> e : EXEMPTIONS.entrySet()) {
+            assertThat(report).contains("exempt " + e.getKey())
+                    .contains(e.getValue().bundle());
+        }
+        if (!EXEMPTIONS.isEmpty()) {
+            assertThat(report).contains("not full conformance at this pin");
+        }
+    }
+
+    @Test
+    @DisplayName("an undeclared failure fails the build — the exemption list, mutation-tested")
+    void undeclaredFailureFailsTheBuild() {
+        if (EXEMPTIONS.isEmpty()) {
+            return;
+        }
+        String withdrawn = EXEMPTIONS.keySet().stream().sorted().findFirst().orElseThrow();
+        Map<String, Exemption> mutilated = new LinkedHashMap<>(EXEMPTIONS);
+        mutilated.remove(withdrawn);
+        // Withdrawn from the list, the unmet case is asserted directly and
+        // fails — on its outcome, or on its category's missing mapping.
+        assertThatThrownBy(() -> assertCase(ENTRIES.get(withdrawn), mutilated))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    @DisplayName("no zero-failures case is exempted — the amendment this pin brings is met")
+    void zeroFailuresCasesAreAsserted() {
+        assertThat(EXEMPTIONS.keySet()).noneMatch(file -> file.contains("zero-failures"));
+        assertThat(ENTRIES.keySet()).filteredOn(file -> file.contains("zero-failures")).hasSize(8);
     }
 
     @Test
@@ -328,15 +446,15 @@ class FormatConformanceTest {
         for (Map<String, Object> entry : ENTRIES.values()) {
             if ("refused".equals(entry.get("outcome"))) {
                 exercised.add((String) entry.get("category"));
-                if (!KNOWN_UNMET.containsKey((String) entry.get("file"))) {
+                if (!EXEMPTIONS.containsKey((String) entry.get("file"))) {
                     met.add((String) entry.get("category"));
                 }
             }
         }
         assertThat(exercised).isEqualTo(manifestCategories);
-        // A category whose every case sits on the known-unmet ledger has
-        // no message yet — its mapping arrives with the directive that
-        // retires the ledger entries.
+        // A category whose every case is a declared exemption has no
+        // message yet — its mapping arrives with the bundle that retires
+        // the exemptions.
         assertThat(CATEGORY_MESSAGES.keySet()).isEqualTo(met);
     }
 

@@ -1,0 +1,9 @@
+format: mavai-contract/1
+contract: smoke-never-dismisses
+service: greeting-service
+intent: smoke
+criteria:
+  - name: never-dismisses
+    zero-failures: true
+    not-equals: "go away"
+inputs: ["Alice"]

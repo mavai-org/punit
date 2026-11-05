@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Zero-failures criteria in declarative contracts (`mavai-contract/1`
+  amendment 2026-11-03): `zero-failures: true` on a criterion compiles
+  to `Criteria.meeting().zeroFailures()` — an observational criterion,
+  PASS iff no trial failed, with no threshold, confidence or decision
+  rule. It is refused beside `threshold:`, `tolerate:` or a
+  per-criterion `confidence:`, and for a non-boolean value; it takes no
+  part in sizing, so a test whose criteria are all zero-failures
+  criteria needs an explicit `.samples(N)` or
+  `-Dpunit.samples.<contract>=N`. Materialisation emits the
+  `zeroFailures()` call.
+
 ### Changed
+
+- The declarative-format corpus is fetched at mavai-R v0.16.1
+  (`mavaiRFormatsTag`), which carries the zero-failures cases. The
+  mavai-services/1 run-controls and built-in-stepper cases (mavai-R
+  0.13.0), not yet implemented by punit-decl, are declared exemptions
+  in the format-conformance test: named with their amendment and owning
+  work, reported and counted on every run, and failing the build the
+  day they start to pass.
 
 - Conformance cases are fetched at mavai-R v0.16.0 (`mavaiRTag`), which
   removes the per-criterion denominator policy (withdrawn since
@@ -20,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   punit produced itself. It was left over from the former HTML report
   and nothing called it; every punit report page is drawn by
   mavai-report through `punitReport`.
+
+### Fixed
+
+- Materialisation no longer emits a separating comma or closing semicolon
+  inside a criterion's trailing `// TODO` comment, which left the emitted
+  source uncompilable when a check carrying a TODO ended a criterion
+  that was not the last, or the only one.
 
 ## [0.16.0] - 2026-10-23
 

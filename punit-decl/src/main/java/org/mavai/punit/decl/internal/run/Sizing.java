@@ -42,6 +42,18 @@ final class Sizing {
             }
             return new Sized(builderSamples, "set via .samples(" + builderSamples + ")");
         }
+        if (declaration.criteria().stream().allMatch(CriterionDeclaration::zeroFailures)) {
+            // Zero-failures criteria take no part in sizing (amendment
+            // 2026-11-03, MAVAI-CONTRACT-FORMAT §II.4): with no other
+            // criterion there is no claim to derive N from, and no
+            // verb default either — zero failures in N trials bounds
+            // nothing, so N is the developer's choice, whatever the intent.
+            throw new ContractConfigurationException(
+                    "nothing sizes this test: every criterion is a `zero-failures: true` "
+                            + "criterion, and zero failures in N trials bounds nothing, so the "
+                            + "number of trials is yours to choose — size the run explicitly "
+                            + "with .samples(N) or -D" + property + "=N");
+        }
         if (declaration.intent() == DeclaredIntent.SMOKE) {
             return new Sized(SMOKE_DEFAULT, "smoke-intent default (" + SMOKE_DEFAULT + ")");
         }

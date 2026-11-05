@@ -61,14 +61,16 @@ public final class Materialiser {
         }
         List<CriterionDeclaration> criteria = declaration.criteria();
         if (criteria.size() == 1) {
-            out.append("        return ").append(criterionSource(criteria.get(0), "                "))
-                    .append(";\n");
+            out.append("        return ")
+                    .append(terminated(criterionSource(criteria.get(0), "                "), ";"))
+                    .append("\n");
         } else {
             out.append("        return Criteria.<String>of(\n");
             for (int i = 0; i < criteria.size(); i++) {
+                String source = criterionSource(criteria.get(i), "                        ");
                 out.append("                ")
-                        .append(criterionSource(criteria.get(i), "                        "));
-                out.append(i < criteria.size() - 1 ? ",\n" : "\n");
+                        .append(i < criteria.size() - 1 ? terminated(source, ",") : source)
+                        .append("\n");
             }
             out.append("        );\n");
         }
@@ -76,14 +78,55 @@ public final class Materialiser {
         return out.toString();
     }
 
+    /**
+     * Appends a terminator ({@code ,} or {@code ;}) to an emitted chain,
+     * placing it before a trailing {@code // TODO} comment on the chain's
+     * last line, where it would otherwise be commented out. The comment is
+     * found lexically, outside string literals, so a check whose text
+     * contains {@code //} keeps its terminator outside the literal.
+     */
+    static String terminated(String source, String terminator) {
+        int lineStart = source.lastIndexOf('\n') + 1;
+        int comment = commentStart(source, lineStart);
+        if (comment < 0) {
+            return source + terminator;
+        }
+        while (comment > lineStart && source.charAt(comment - 1) == ' ') {
+            comment--;
+        }
+        return source.substring(0, comment) + terminator + source.substring(comment);
+    }
+
+    /** The index of the first {@code //} outside a string literal, or -1. */
+    private static int commentStart(String source, int from) {
+        boolean inString = false;
+        for (int i = from; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (inString) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '/' && i + 1 < source.length() && source.charAt(i + 1) == '/') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private static String criterionSource(CriterionDeclaration criterion, String indent) {
         StringBuilder out = new StringBuilder();
         // The explicit witness pins the chain's subject type — chained
         // generic calls are not poly expressions, so inference cannot
         // reach back from the enclosing of(...).
-        out.append(criterion.threshold() != null
-                ? "meeting().<String>passRate(" + criterion.threshold() + ")"
-                : "empirical().<String>passRate()");
+        out.append(criterion.zeroFailures()
+                ? "meeting().<String>zeroFailures()"
+                : criterion.threshold() != null
+                        ? "meeting().<String>passRate(" + criterion.threshold() + ")"
+                        : "empirical().<String>passRate()");
         if (criterion.name() != null) {
             out.append("\n").append(indent).append(".name(\"")
                     .append(escape(criterion.name())).append("\")");

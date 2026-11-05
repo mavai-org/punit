@@ -1,0 +1,12 @@
+format: mavai-contract/1
+contract: greeting-polite-and-never-dismissive
+service: greeting-service
+confidence: 0.95
+criteria:
+  - name: greets-politely
+    threshold: 0.9
+    contains: "hello"
+  - name: never-dismisses
+    zero-failures: true
+    not-equals: "go away"
+inputs: ["Alice", "Bob"]
