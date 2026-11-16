@@ -1,10 +1,12 @@
 package org.mavai.punit.internal.reporting;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.mavai.punit.api.covariate.CovariateAlignment;
 import org.mavai.punit.api.covariate.CovariateProfile;
@@ -21,6 +23,7 @@ import org.mavai.punit.api.PercentileKey;
 import org.mavai.punit.api.spec.ConfigurationRefusal;
 import org.mavai.punit.api.spec.PercentileLatency;
 import org.mavai.punit.api.spec.VerdictComposition;
+import org.mavai.punit.internal.engine.criteria.PassRate;
 import org.mavai.punit.statistics.DecisionRule;
 import org.mavai.punit.statistics.Methodology;
 
@@ -91,7 +94,8 @@ public final class TransparentStatsRenderer {
             renderCriterion(sb, entry);
         }
 
-        renderPerCriterionEvaluation(sb, result.perCriterionEvaluation());
+        renderPerCriterionEvaluation(sb, result.perCriterionEvaluation(),
+                observationalCriteria(result.criterionResults()));
 
         renderPostconditionFailures(sb, result.failuresByPostcondition());
 
@@ -256,6 +260,10 @@ public final class TransparentStatsRenderer {
             sb.append(label("False compliance:", formatRate(d.get("falseCompliance"))));
             sb.append(label("Clopper–Pearson:", formatRate(d.get("clopperPearsonLower"))
                     + " (one-sided lower bound; reported, decides nothing)"));
+        } else if (PassRate.OBSERVATIONAL.equals(d.get(PassRate.CRITERION_MODE_KEY))) {
+            // A zero-failures criterion estimates no rate: state the counts.
+            sb.append(label("Observed:", failuresOutcome(d.get("successes"), d.get("total"))));
+            sb.append(label("Rule:", "zero failures (origin: " + d.get("origin") + ")"));
         } else {
             sb.append(label("Observed:", String.format(Locale.ROOT, "%s of %s (%s)",
                     d.get("successes"), d.get("total"), formatRate(d.get("observed")))));
@@ -327,6 +335,33 @@ public final class TransparentStatsRenderer {
     }
 
     /**
+     * The ids of the criteria judged by observation (zero failures),
+     * read from the pass-rate evaluator's per-criterion decisions.
+     */
+    private static Set<String> observationalCriteria(List<EvaluatedCriterion> evaluated) {
+        Set<String> out = new HashSet<>();
+        for (EvaluatedCriterion entry : evaluated) {
+            if (entry.result().detail().get("decisionsByCriterion") instanceof Map<?, ?> ds) {
+                ds.forEach((id, decision) -> {
+                    if (decision instanceof Map<?, ?> d
+                            && PassRate.OBSERVATIONAL.equals(d.get(PassRate.CRITERION_MODE_KEY))) {
+                        out.add(String.valueOf(id));
+                    }
+                });
+            }
+        }
+        return out;
+    }
+
+    /** "f failures in n samples (zero failures required)": counts, never a rate. */
+    private static String failuresOutcome(Object successes, Object total) {
+        long n = ((Number) total).longValue();
+        long f = n - ((Number) successes).longValue();
+        return String.format(Locale.ROOT, "%d failure%s in %d samples (zero failures required)",
+                f, f == 1 ? "" : "s", n);
+    }
+
+    /**
      * Snapshot the result's evaluated-criteria details as an
      * ordered name → detail map. Useful for tests and tooling that
      * want the structured numbers without re-parsing the rendered
@@ -385,7 +420,8 @@ public final class TransparentStatsRenderer {
      */
     private static void renderPerCriterionEvaluation(
             StringBuilder sb,
-            PerCriterionEvaluation evaluation) {
+            PerCriterionEvaluation evaluation,
+            Set<String> observational) {
         List<PerCriterionVerdict> rows = evaluation.perCriterionVerdicts();
         if (rows.isEmpty()) {
             return;
@@ -405,8 +441,12 @@ public final class TransparentStatsRenderer {
                     "pass=%d, fail=%d (condition=%d, transform=%d), total=%d",
                     c.pass(), c.fail(), c.conditionFail(), c.transformFail(),
                     c.total())));
-            sb.append(label("Observed rate:", observedStr));
-            sb.append(label("Threshold:", thresholdStr));
+            if (observational.contains(row.criterionId())) {
+                sb.append(label("Failures:", failuresOutcome(c.pass(), c.total())));
+            } else {
+                sb.append(label("Observed rate:", observedStr));
+                sb.append(label("Threshold:", thresholdStr));
+            }
         }
         sb.append(label("Composite:", evaluation.compositeVerdict().toString()));
         sb.append('\n');

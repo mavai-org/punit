@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The verbose statistical breakdown states counts for a zero-failures
+  criterion**: its analysis block and its per-criterion row read
+  "1 failure in 200 samples (zero failures required)", with no observed
+  rate and no threshold.
+- **The verdict XML reader reads the `<statistics>` threshold back** as the
+  minimum pass rate; it read 0, so a mixed record read and re-written
+  stated threshold 0.
+
 ## [0.16.2] - 2026-11-16
 
 ### Changed

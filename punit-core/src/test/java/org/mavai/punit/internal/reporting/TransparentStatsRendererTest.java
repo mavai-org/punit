@@ -22,6 +22,7 @@ import org.mavai.punit.api.spec.PerCriterionEvaluation;
 import org.mavai.punit.api.spec.PerCriterionVerdict;
 import org.mavai.punit.api.spec.ProbabilisticTestResult;
 import org.mavai.punit.api.spec.Verdict;
+import org.mavai.punit.internal.engine.criteria.PassRate;
 
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -451,6 +452,46 @@ class TransparentStatsRendererTest {
                     .contains("0.8500")
                     .contains("Composite:")
                     .contains("PASS");
+        }
+
+        @Test
+        @DisplayName("a zero-failures row states its failures and samples, never a rate or threshold")
+        void zeroFailuresRowStatesCounts() {
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("observed", 199.0 / 200.0);
+            decision.put("successes", 199);
+            decision.put("total", 200);
+            decision.put("origin", ThresholdOrigin.POLICY.name());
+            decision.put(PassRate.CRITERION_MODE_KEY, PassRate.OBSERVATIONAL);
+            PerCriterionEvaluation eval = new PerCriterionEvaluation(
+                    List.of(new PerCriterionVerdict(
+                            "c",
+                            Verdict.FAIL,
+                            new CriterionSampleCounts("c", 199, 1, 0, 0),
+                            199.0 / 200.0,
+                            Double.NaN)),
+                    Verdict.FAIL);
+            ProbabilisticTestResult r = new ProbabilisticTestResult(
+                    Verdict.FAIL,
+                    FactorBundle.empty(),
+                    List.of(passRate(Verdict.FAIL, decision)),
+                    TestIntent.VERIFICATION,
+                    List.of(),
+                    CovariateAlignment.none(),
+                    Optional.empty(),
+                    Map.of(),
+                    EngineRunSummary.empty(),
+                    eval);
+
+            String rendered = TransparentStatsRenderer.render("zero-failures.test", r);
+
+            assertThat(rendered)
+                    .contains("1 failure in 200 samples (zero failures required)")
+                    .contains("zero failures (origin: POLICY)")
+                    .doesNotContain("Observed rate:")
+                    .doesNotContain("Threshold:")
+                    .doesNotContain("0.9950")
+                    .doesNotContain("99.5");
         }
 
         @Test
