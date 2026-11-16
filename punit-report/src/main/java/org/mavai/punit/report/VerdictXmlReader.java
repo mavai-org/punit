@@ -74,7 +74,14 @@ public final class VerdictXmlReader {
                 .orElse("");
 
         TestIdentity identity = readIdentity(firstElement(root, "identity"));
-        ExecutionSummary execution = readExecution(firstElement(root, "execution"));
+        // The minimum pass rate is stated as <statistics>' threshold; a record
+        // without <statistics> (refused, or every criterion observational)
+        // states none.
+        double minPassRate = optionalElement(root, "statistics")
+                .flatMap(s -> optionalAttribute(s, "threshold"))
+                .map(Double::parseDouble)
+                .orElse(0.0);
+        ExecutionSummary execution = readExecution(firstElement(root, "execution"), minPassRate);
         Optional<FunctionalDimension> functional = optionalElement(root, "functional")
                 .map(this::readFunctional);
         Optional<LatencyDimension> latency = optionalElement(root, "latency")
@@ -248,7 +255,7 @@ public final class VerdictXmlReader {
         return new TestIdentity(className, methodName, Optional.of(serviceContractId));
     }
 
-    private ExecutionSummary readExecution(Element el) {
+    private ExecutionSummary readExecution(Element el, double minPassRate) {
         int plannedSamples = Integer.parseInt(el.getAttribute("planned-samples"));
         int samplesExecuted = Integer.parseInt(el.getAttribute("samples-executed"));
         int successes = Integer.parseInt(el.getAttribute("successes"));
@@ -262,7 +269,7 @@ public final class VerdictXmlReader {
                 ? (double) successes / samplesExecuted : 0.0;
         return new ExecutionSummary(
                 plannedSamples, samplesExecuted, successes, failures,
-                0.0, // min-pass-rate not in the verdict-XML standard, filled from statistics threshold
+                minPassRate,
                 observedPassRate,
                 elapsedMs, Optional.empty(), intent, confidence,
                 new ServiceContractAttributes(warmup)

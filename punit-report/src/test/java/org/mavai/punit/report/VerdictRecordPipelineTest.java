@@ -258,6 +258,31 @@ class VerdictRecordPipelineTest {
         }
     }
 
+    @Test
+    @DisplayName("the published mixed example's <statistics> threshold reads back and re-writes unchanged")
+    void publishedMixedExampleKeepsItsThreshold() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(
+                "/published-interchange/verdict-1.11-mixed.xml")) {
+            assertThat(in).as("published mixed example").isNotNull();
+            String xml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(
+                    new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            assertThat(read.execution().minPassRate()).isEqualTo(0.95);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            new VerdictXmlWriter().write(read, out);
+            String rewritten = out.toString(StandardCharsets.UTF_8);
+            assertThat(Double.parseDouble(statisticsThreshold(rewritten)))
+                    .isEqualTo(Double.parseDouble(statisticsThreshold(xml)));
+        }
+    }
+
+    private static String statisticsThreshold(String xml) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<statistics [^>]*\\bthreshold=\"([^\"]*)\"").matcher(xml);
+        assertThat(m.find()).as("<statistics threshold> in " + xml).isTrue();
+        return m.group(1);
+    }
+
     static Stream<String> publishedZeroFailuresExamples() {
         return Stream.of("zero-failures-pass", "zero-failures-fail", "mixed");
     }
