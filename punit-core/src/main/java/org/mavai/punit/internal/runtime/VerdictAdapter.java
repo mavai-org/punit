@@ -30,6 +30,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict;
 import org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder;
 import org.mavai.punit.verdict.RunMetadata;
 import org.mavai.punit.verdict.TokenMode;
+import org.mavai.punit.internal.engine.criteria.PassRate;
 import org.mavai.punit.internal.engine.emit.LatencySection;
 import org.mavai.punit.verdict.TerminationReason;
 import org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder.LatencyInput;
@@ -56,7 +57,11 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder.MisalignmentInput
  *       observed pass rate is computed from successes/total. The
  *       threshold is lifted from the first {@code PassRate}
  *       criterion's detail map (key {@code "threshold"}); falls back
- *       to 0.0 when no such criterion exists.</li>
+ *       to 0.0 when no such criterion exists. It is drawn from
+ *       inferential criteria only: a test whose criteria are all
+ *       observational (zero-failures) has none (NaN), and beside an
+ *       observational criterion it is the first inferential
+ *       criterion's.</li>
  *   <li><b>Functional dimension</b> — from
  *       {@code engineSummary.successes()} / {@code .failures()}.</li>
  *   <li><b>Latency</b> — from {@code engineSummary.latencyResult()},
@@ -134,8 +139,19 @@ public final class VerdictAdapter {
             return adaptRefused(result, engine, b);
         }
 
+        // Per-criterion structural decomposition: the per-criterion verdict
+        // rows and the composite over them. The
+        // in-memory PerCriterionEvaluation translates row-for-row into
+        // the persistence-layer PerCriterionStructure. Empty
+        // evaluations leave the field absent.
+        Map<String, Map<?, ?>> decisions = decisionsByCriterion(result.criterionResults());
+        org.mavai.punit.verdict.PerCriterionStructure perCriterion = translatePerCriterion(
+                result.perCriterionEvaluation(), decisions,
+                result.composition().flatMap(VerdictComposition::functionalMode)
+                        .orElse(EnforcementMode.ENFORCED));
+
         // Execution
-        double threshold = scanDoubleDetail(result.criterionResults(), "threshold").orElse(0.0);
+        double threshold = testThreshold(perCriterion, result.criterionResults());
         double observed = engine.samplesExecuted() == 0
                 ? 0.0
                 : (double) engine.successes() / (double) engine.samplesExecuted();
@@ -218,15 +234,7 @@ public final class VerdictAdapter {
         // field is only meaningful inside the JUnit context).
         b.junitPassed(true);
 
-        // Per-criterion structural decomposition: the per-criterion verdict
-        // rows and the composite over them. The
-        // in-memory PerCriterionEvaluation translates row-for-row into
-        // the persistence-layer PerCriterionStructure. Empty
-        // evaluations leave the field absent.
-        Map<String, Map<?, ?>> decisions = decisionsByCriterion(result.criterionResults());
-        b.perCriterion(translatePerCriterion(result.perCriterionEvaluation(), decisions,
-                result.composition().flatMap(VerdictComposition::functionalMode)
-                        .orElse(EnforcementMode.ENFORCED)));
+        b.perCriterion(perCriterion);
 
         // The decision behind the verdict: the rule, what triggered a
         // FAIL or an INCONCLUSIVE, the envelopes; and what the deciding
@@ -278,6 +286,11 @@ public final class VerdictAdapter {
                 evaluation.perCriterionVerdicts().size());
         for (var v : evaluation.perCriterionVerdicts()) {
             var counts = v.counts();
+            if (observational(decisions.get(v.criterionId()))) {
+                rows.add(org.mavai.punit.verdict.CriterionRow.observational(
+                        v.criterionId(), v.verdict(), counts.pass(), counts.fail(), 0));
+                continue;
+            }
             rows.add(new org.mavai.punit.verdict.CriterionRow(
                     v.criterionId(),
                     v.verdict(),
@@ -296,6 +309,31 @@ public final class VerdictAdapter {
         }
         return new org.mavai.punit.verdict.PerCriterionStructure(
                 rows, evaluation.compositeVerdict(), mode);
+    }
+
+    /** Whether the criterion's decision artefacts name it observational (zero-failures). */
+    private static boolean observational(Map<?, ?> decision) {
+        return decision != null
+                && PassRate.OBSERVATIONAL.equals(decision.get(PassRate.CRITERION_MODE_KEY));
+    }
+
+    /**
+     * The test-level threshold, drawn from inferential criteria only
+     * (Statistical Companion §1.4.5): NaN — no threshold — when every
+     * criterion is observational; the first inferential criterion's when
+     * an observational criterion sits beside it; otherwise the
+     * evaluation's own, or 0.0 when none was resolved.
+     */
+    private static double testThreshold(
+            org.mavai.punit.verdict.PerCriterionStructure perCriterion,
+            List<EvaluatedCriterion> evaluated) {
+        if (perCriterion != null && perCriterion.hasObservationalCriterion()) {
+            return perCriterion.firstInferential()
+                    .map(org.mavai.punit.verdict.CriterionRow::threshold)
+                    .filter(t -> !Double.isNaN(t))
+                    .orElse(perCriterion.hasInferentialCriterion() ? 0.0 : Double.NaN);
+        }
+        return scanDoubleDetail(evaluated, "threshold").orElse(0.0);
     }
 
     /** Each methodology criterion's decision artefacts, from the pass-rate evaluation. */
@@ -419,15 +457,20 @@ public final class VerdictAdapter {
                 .map(VerdictComposition::functionalEnforced).orElse(true);
         boolean latencyBinds = result.composition()
                 .map(VerdictComposition::latencyEnforced).orElse(true);
+        // A criterion decided by observation is decided by no rule, so no
+        // single rule decided a functional dimension that carries one.
+        boolean decidedByObservation = false;
         if (functionalBinds) {
             for (var v : result.perCriterionEvaluation().perCriterionVerdicts()) {
-                ruleOf(decisions.get(v.criterionId()), "decisionRule").ifPresent(rules::add);
+                Map<?, ?> d = decisions.get(v.criterionId());
+                decidedByObservation |= observational(d);
+                ruleOf(d, "decisionRule").ifPresent(rules::add);
             }
         }
         if (latencyBinds) {
             evaluations.forEach(e -> rules.add(e.decisionRule()));
         }
-        Optional<DecisionRule> single = rules.size() == 1
+        Optional<DecisionRule> single = rules.size() == 1 && !decidedByObservation
                 ? Optional.of(rules.iterator().next()) : Optional.empty();
         return result.composition()
                 .map(c -> new TestDecision(List.of(), Optional.empty(), single, c.triggering(),

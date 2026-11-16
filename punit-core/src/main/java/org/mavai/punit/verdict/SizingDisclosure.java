@@ -23,8 +23,9 @@ import org.mavai.punit.statistics.StatisticalDefaults;
  * renderer formats already-computed values.
  *
  * <p>The approach entry (with the parameters the run declared) is present
- * on every verdict. The downsizing pair — the detectable rate at the run's
- * size and the estimated savings versus a baseline-sized run — is present
+ * on every verdict with an inferential criterion. The downsizing pair —
+ * the detectable rate at the run's size and the estimated savings versus a
+ * baseline-sized run — is present
  * iff the run was sized below the resolved baseline's own sampling size;
  * the token half of the savings is present iff the run recorded token
  * costs. The entry vocabulary is shared across the framework family, and
@@ -68,6 +69,13 @@ final class SizingDisclosure {
      * is made at the declared power when the run carried one, else at
      * the framework default.
      *
+     * <p>A test whose criteria are all observational (zero-failures) states
+     * its declared sample count only: no approach and no minimum pass rate.
+     * The approaches size inferential claims, and an observational
+     * criterion makes none — its samples are chances to catch a failure,
+     * not a claim about a rate (Statistical Companion §1.4.5).
+     *
+     * @param inferential whether any criterion is inferential
      * @param thresholdOrigin where the run's threshold came from; may be null
      * @param toleratedRate the declared worst tolerable rate, or null
      * @param declaredMde the declared minimum detectable effect, or null
@@ -85,6 +93,7 @@ final class SizingDisclosure {
      * @return the entries, in stable insertion order
      */
     static Map<String, String> entries(
+            boolean inferential,
             ThresholdOrigin thresholdOrigin,
             Double toleratedRate,
             Double declaredMde,
@@ -98,6 +107,10 @@ final class SizingDisclosure {
             long elapsedMs,
             long tokensConsumed) {
         Map<String, String> entries = new LinkedHashMap<>();
+        if (!inferential) {
+            entries.put(DECLARED_SAMPLES_KEY, Integer.toString(plannedSamples));
+            return entries;
+        }
 
         // The count the run was *sized* at. The record's planned count is
         // the author's declared floor; a computed requirement (the silent

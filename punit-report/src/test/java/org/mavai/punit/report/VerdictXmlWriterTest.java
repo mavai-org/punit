@@ -59,7 +59,7 @@ class VerdictXmlWriterTest {
             Element root = doc.getDocumentElement();
 
             assertThat(root.getLocalName()).isEqualTo("verdict-record");
-            assertThat(root.getAttribute("version")).isEqualTo("1.10");
+            assertThat(root.getAttribute("version")).isEqualTo("1.11");
             assertThat(root.hasAttribute("generator")).isTrue();
             assertThat(root.getAttribute("generator")).startsWith("punit");
         }
@@ -181,7 +181,7 @@ class VerdictXmlWriterTest {
 
             assertThat(lat.getAttribute("successful-samples")).isEqualTo("90");
             // A descriptive latency dimension carries no verdict, so no
-            // mode; verdict-1.10 has no violation counts.
+            // mode; verdict-1.11 has no violation counts.
             assertThat(lat.hasAttribute("verdict")).isFalse();
             assertThat(lat.hasAttribute("mode")).isFalse();
             assertThat(lat.hasAttribute("strict-violations")).isFalse();
@@ -544,7 +544,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("verdict with postcondition failures validates against verdict-1.10 XSD")
+        @DisplayName("verdict with postcondition failures validates against verdict-1.11 XSD")
         void validatesAgainstXsd() throws Exception {
             LinkedHashMap<String, FailureCount> hist = new LinkedHashMap<>();
             hist.put("Response not empty", new FailureCount(3, List.of(
@@ -562,10 +562,10 @@ class VerdictXmlWriterTest {
     class PostconditionStandingsElement {
 
         @Test
-        @DisplayName("a verdict with standings is written as verdict-1.10 and validates against the XSD")
+        @DisplayName("a verdict with standings is written as verdict-1.11 and validates against the XSD")
         void standingsValidateAgainstSchema14() throws Exception {
             String xml = writeToString(verdictWithStandings());
-            assertThat(xml).contains("version=\"1.10\"");
+            assertThat(xml).contains("version=\"1.11\"");
             assertThat(xml).contains("<postcondition-standings>");
             assertThat(xml).contains("optional-slack=\"2\"");
             assertThat(xml).contains(
@@ -601,7 +601,7 @@ class VerdictXmlWriterTest {
         void noStandingsNoVersionStep() throws Exception {
             String xml = writeToString(minimalVerdict(true, PUnitVerdict.PASS));
             assertThat(xml).doesNotContain("postcondition-standings");
-            assertThat(xml).contains("version=\"1.10\"");
+            assertThat(xml).contains("version=\"1.11\"");
         }
     }
 
@@ -610,7 +610,7 @@ class VerdictXmlWriterTest {
     class SchemaValidation {
 
         @Test
-        @DisplayName("minimal verdict validates against verdict-1.10 XSD")
+        @DisplayName("minimal verdict validates against verdict-1.11 XSD")
         void minimalVerdictValidatesAgainstXsd() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
@@ -620,7 +620,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("full verdict validates against verdict-1.10 XSD")
+        @DisplayName("full verdict validates against verdict-1.11 XSD")
         void fullVerdictValidatesAgainstXsd() throws Exception {
             ProbabilisticTestVerdict verdict = fullVerdict();
 
@@ -652,7 +652,7 @@ class VerdictXmlWriterTest {
             Element root = doc.getDocumentElement();
             Element perCriterion = firstElement(doc, "per-criterion");
 
-            assertThat(root.getAttribute("version")).isEqualTo("1.10");
+            assertThat(root.getAttribute("version")).isEqualTo("1.11");
             NodeList rows = perCriterion.getElementsByTagNameNS(
                     VerdictXmlWriter.NAMESPACE, "criterion");
             assertThat(rows.getLength()).isEqualTo(1);
@@ -780,21 +780,21 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("absent per-criterion: no <per-criterion> element, version is 1.10")
+        @DisplayName("absent per-criterion: no <per-criterion> element, version is 1.11")
         void absentPerCriterionStaysAt10() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
             Document doc = writeAndParse(verdict);
             Element root = doc.getDocumentElement();
 
-            assertThat(root.getAttribute("version")).isEqualTo("1.10");
+            assertThat(root.getAttribute("version")).isEqualTo("1.11");
             assertThat(root.getElementsByTagNameNS(
                     VerdictXmlWriter.NAMESPACE, "per-criterion").getLength())
                     .isZero();
         }
 
         @Test
-        @DisplayName("emitter output validates against verdict-1.10 schema")
+        @DisplayName("emitter output validates against verdict-1.11 schema")
         void validatesAgainst12Schema() throws Exception {
             org.mavai.punit.verdict.PerCriterionStructure pc =
                     new org.mavai.punit.verdict.PerCriterionStructure(
@@ -817,7 +817,7 @@ class VerdictXmlWriterTest {
         }
 
         @Test
-        @DisplayName("a verdict without per-criterion rows validates against verdict-1.10")
+        @DisplayName("a verdict without per-criterion rows validates against verdict-1.11")
         void absentPerCriterionValidatesAgainst12Schema() throws Exception {
             ProbabilisticTestVerdict verdict = minimalVerdict(true, PUnitVerdict.PASS);
 
@@ -1098,6 +1098,169 @@ class VerdictXmlWriterTest {
         );
     }
 
+    @Nested
+    @DisplayName("zero-failures criteria")
+    class ZeroFailuresCriteria {
+
+        /**
+         * A verdict built as a run builds it: one observational row, its
+         * failure count {@code failures} of {@code samples}, no threshold.
+         */
+        private ProbabilisticTestVerdict zeroFailures(int samples, int failures) {
+            org.mavai.punit.api.spec.Verdict v = failures == 0
+                    ? org.mavai.punit.api.spec.Verdict.PASS
+                    : org.mavai.punit.api.spec.Verdict.FAIL;
+            return new org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder()
+                    .identity("HarmfulAdviceTest", "harmfulAdviceIsRejected", "harmful-advice")
+                    .execution(samples, samples, samples - failures, failures,
+                            Double.NaN, (double) (samples - failures) / samples, 1000L)
+                    .intent(TestIntent.VERIFICATION, 0.95)
+                    .functionalDimension(samples - failures, failures)
+                    .provenance(org.mavai.punit.api.ThresholdOrigin.POLICY, "harmful-advice", null)
+                    .perCriterion(new org.mavai.punit.verdict.PerCriterionStructure(
+                            List.of(org.mavai.punit.verdict.CriterionRow.observational(
+                                    "harmful-advice-is-rejected", v,
+                                    samples - failures, failures, 0)),
+                            v))
+                    .criterionVerdict(v)
+                    .junitPassed(true)
+                    .build();
+        }
+
+        /**
+         * A compliance criterion (196 of 200 against 0.95, k_min 196) beside a
+         * zero-failures criterion that saw failures the compliance one did not.
+         */
+        private ProbabilisticTestVerdict mixed() {
+            var exact = java.util.Optional.of(DecisionRule.COMPLIANCE_EXACT_BINOMIAL);
+            return new org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder()
+                    .identity("AdviceTest", "consultAdvice", "consult-advice")
+                    .execution(200, 200, 194, 6, 0.95, 0.97, 1000L)
+                    .intent(TestIntent.VERIFICATION, 0.95)
+                    .functionalDimension(194, 6)
+                    .provenance(org.mavai.punit.api.ThresholdOrigin.POLICY, "consult-advice", null)
+                    .perCriterion(new org.mavai.punit.verdict.PerCriterionStructure(
+                            List.of(
+                                    new org.mavai.punit.verdict.CriterionRow(
+                                            "well-formed", org.mavai.punit.api.spec.Verdict.PASS,
+                                            196, 4, 0, 0.98, 0.95, exact,
+                                            java.util.OptionalInt.of(196)),
+                                    org.mavai.punit.verdict.CriterionRow.observational(
+                                            "no-harmful-advice",
+                                            org.mavai.punit.api.spec.Verdict.FAIL, 198, 2, 0)),
+                            org.mavai.punit.api.spec.Verdict.FAIL))
+                    .criterionVerdict(org.mavai.punit.api.spec.Verdict.FAIL)
+                    .junitPassed(true)
+                    .build();
+        }
+
+        private Map<String, String> environment(Document doc) {
+            Map<String, String> entries = new LinkedHashMap<>();
+            NodeList nodes = doc.getElementsByTagNameNS(VerdictXmlWriter.NAMESPACE, "entry");
+            for (int i = 0; i < nodes.getLength(); i++) {
+                Element e = (Element) nodes.item(i);
+                entries.put(e.getAttribute("key"), e.getAttribute("value"));
+            }
+            return entries;
+        }
+
+        @Test
+        @DisplayName("a passing record states the mode and the counts alone, and has no statistics")
+        void passingRecord() throws Exception {
+            ProbabilisticTestVerdict verdict = zeroFailures(300, 0);
+            String xml = writeToString(verdict);
+            validateAgainstSchema(xml);
+
+            Document doc = writeAndParse(verdict);
+            assertThat(doc.getDocumentElement().getAttribute("version")).isEqualTo("1.11");
+            Element row = firstElement(doc, "per-criterion");
+            row = (Element) row.getElementsByTagNameNS(VerdictXmlWriter.NAMESPACE, "criterion").item(0);
+            assertThat(row.getAttribute("mode")).isEqualTo("observational");
+            assertThat(row.getAttribute("pass")).isEqualTo("300");
+            assertThat(row.getAttribute("fail")).isEqualTo("0");
+            for (String absent : List.of("observed-rate", "threshold", "decision-rule",
+                    "decision-rule-version", "required-pass")) {
+                assertThat(row.hasAttribute(absent)).as(absent).isFalse();
+            }
+            assertThat(doc.getElementsByTagNameNS(VerdictXmlWriter.NAMESPACE, "statistics")
+                    .getLength()).isZero();
+            assertThat(xml).doesNotContain("threshold=");
+            assertThat(environment(doc))
+                    .containsEntry("sizing-declared-samples", "300")
+                    .doesNotContainKey("sizing-approach")
+                    .doesNotContainKey("sizing-declared-min-pass-rate");
+            assertThat(verdict.verdictReason()).isEqualTo("no failure in 300 samples");
+        }
+
+        @Test
+        @DisplayName("a failing record is never an inferential row at threshold 1")
+        void failingRecord() throws Exception {
+            ProbabilisticTestVerdict verdict = zeroFailures(3000, 11);
+            String xml = writeToString(verdict);
+            validateAgainstSchema(xml);
+
+            assertThat(xml)
+                    .contains("mode=\"observational\"")
+                    .contains("fail=\"11\"")
+                    .doesNotContain("threshold=")
+                    .doesNotContain("threshold-first")
+                    .doesNotContain("sizing-declared-min-pass-rate")
+                    .doesNotContain("<statistics");
+            assertThat(verdict.statistics().caveats()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an observational row reads back as observational and re-writes unchanged")
+        void roundTrips() throws Exception {
+            String xml = writeToString(zeroFailures(3000, 11));
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(
+                    new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+
+            assertThat(read.perCriterion().orElseThrow().criteria())
+                    .singleElement()
+                    .satisfies(row -> {
+                        assertThat(row.mode())
+                                .isEqualTo(org.mavai.punit.verdict.CriterionMode.OBSERVATIONAL);
+                        assertThat(row.fail()).isEqualTo(11);
+                    });
+            String rewritten = writeToString(read);
+            validateAgainstSchema(rewritten);
+            assertThat(rewritten).contains("mode=\"observational\"").doesNotContain("<statistics");
+        }
+
+        @Test
+        @DisplayName("a mixed record keeps the inferential criterion's statistics, drawn from its own counts")
+        void mixedRecord() throws Exception {
+            ProbabilisticTestVerdict verdict = mixed();
+            String xml = writeToString(verdict);
+            validateAgainstSchema(xml);
+
+            Document doc = writeAndParse(verdict);
+            NodeList rows = firstElement(doc, "per-criterion")
+                    .getElementsByTagNameNS(VerdictXmlWriter.NAMESPACE, "criterion");
+            Element inferential = (Element) rows.item(0);
+            Element observational = (Element) rows.item(1);
+            assertThat(inferential.hasAttribute("mode")).isFalse();
+            assertThat(inferential.getAttribute("threshold")).isEqualTo("0.95");
+            assertThat(inferential.getAttribute("required-pass")).isEqualTo("196");
+            assertThat(observational.getAttribute("mode")).isEqualTo("observational");
+            assertThat(observational.hasAttribute("threshold")).isFalse();
+
+            Element statistics = firstElement(doc, "statistics");
+            assertThat(statistics.getAttribute("threshold")).isEqualTo("0.9500");
+            // Wilson and standard error of the inferential criterion's 196 of
+            // 200, not of the run's 194 joint passes.
+            var estimator = new org.mavai.punit.statistics.BinomialProportionEstimator();
+            assertThat(Double.parseDouble(statistics.getAttribute("standard-error")))
+                    .isEqualTo(estimator.standardError(196, 200));
+            assertThat(Double.parseDouble(statistics.getAttribute("wilson-lower")))
+                    .isEqualTo(estimator.lowerBound(196, 200, 0.95));
+            assertThat(environment(doc))
+                    .containsEntry("sizing-approach", "threshold-first")
+                    .containsEntry("sizing-declared-min-pass-rate", "0.95");
+        }
+    }
+
     private Document writeAndParse(ProbabilisticTestVerdict verdict) throws Exception {
         String xml = writeToString(verdict);
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -1137,7 +1300,7 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.11.xsd")) {
             assertThat(xsdStream).as("XSD resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
@@ -1147,8 +1310,8 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema14(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
-            assertThat(xsdStream).as("XSD 1.10 resource must be available").isNotNull();
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.11.xsd")) {
+            assertThat(xsdStream).as("XSD 1.11 resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
             validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
@@ -1177,8 +1340,8 @@ class VerdictXmlWriterTest {
 
     private void validateAgainstSchema12(String xml) throws Exception {
         SchemaFactory schemaFactory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.10.xsd")) {
-            assertThat(xsdStream).as("XSD 1.10 resource must be available").isNotNull();
+        try (InputStream xsdStream = getClass().getResourceAsStream("/org/mavai/punit/report/verdict-1.11.xsd")) {
+            assertThat(xsdStream).as("XSD 1.11 resource must be available").isNotNull();
             Schema schema = schemaFactory.newSchema(new StreamSource(xsdStream));
             Validator validator = schema.newValidator();
             validator.validate(new StreamSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));

@@ -64,6 +64,17 @@ public record ProbabilisticTestVerdict(
     }
 
     /**
+     * Whether the test makes a rate claim: true unless every criterion it
+     * carries is observational (zero-failures). A test with no inferential
+     * criterion has no threshold, no statistics summary and no sizing
+     * approach (Statistical Companion §1.4.5). A verdict without the
+     * per-criterion decomposition is inferential.
+     */
+    public boolean hasInferentialCriterion() {
+        return perCriterion.map(PerCriterionStructure::hasInferentialCriterion).orElse(true);
+    }
+
+    /**
      * Constructor for the shape that predates the decision behind the
      * verdict; defaults it to {@link TestDecision#NONE}.
      */
@@ -214,7 +225,10 @@ public record ProbabilisticTestVerdict(
      * @param samplesExecuted the number of samples actually executed
      * @param successes the number of successful samples
      * @param failures the number of failed samples
-     * @param minPassRate the minimum pass rate threshold (p₀)
+     * @param minPassRate the minimum pass rate threshold (p₀), drawn from
+     *                    inferential criteria only; {@link Double#NaN} when
+     *                    every criterion is observational (zero-failures),
+     *                    which claims no rate (Statistical Companion §1.4.5)
      * @param observedPassRate the observed pass rate (p̂)
      * @param elapsedMs wall-clock time in milliseconds
      * @param appliedMultiplier sample multiplier, if one was applied

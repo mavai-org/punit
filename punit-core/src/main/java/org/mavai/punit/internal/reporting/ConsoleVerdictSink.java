@@ -49,7 +49,17 @@ public final class ConsoleVerdictSink implements VerdictSink {
 
         boolean isBudgetExhausted = term.reason().isBudgetExhaustion();
 
-        if (passed) {
+        if (!verdict.hasInferentialCriterion()) {
+            // Zero-failures criteria claim no rate: the outcome is the
+            // failure count, never a pass rate against a required one.
+            if (isBudgetExhausted) {
+                sb.append(PUnitReporter.labelValueLn("Samples executed:",
+                        String.format("%d of %d (budget exhausted)",
+                                exec.samplesExecuted(), exec.plannedSamples())));
+            }
+            sb.append(PUnitReporter.labelValueLn("Failures:",
+                    VerdictTextRenderer.zeroFailuresOutcome(exec)));
+        } else if (passed) {
             sb.append(PUnitReporter.labelValueLn("Observed pass rate:",
                     String.format("%s (%d/%d) >= required: %s",
                             RateFormat.format(exec.observedPassRate()),

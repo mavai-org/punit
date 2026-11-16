@@ -2145,15 +2145,18 @@ to the published **mavai verdict schema**:
 
 - Namespace: `http://mavai.org/verdict/1.0`
 - Root: `<verdict-record>`
-- Schema: punit writes verdict-1.10 records; the `verdict-1.x.xsd`
+- Schema: punit writes verdict-1.11 records; the `verdict-1.x.xsd`
   revisions bundled in `punit-report` are vendored from the published
   mavai schema releases.
 
 The schema covers identity, verdict, criterion results with their
 versioned decision rules, the methodology version, the latency
 dimension's verdict and per-constraint evaluations, whether each
-dimension was enforced or advisory, the configuration-error list of a
-refused test, postcondition
+dimension was enforced or advisory, each criterion's mode (a
+zero-failures criterion is observational: its row states its counts
+alone, with no threshold or rule, and a test whose criteria are all
+zero-failures carries no statistics summary), the configuration-error
+list of a refused test, postcondition
 standings, sample counts, latency percentiles, baseline expiration,
 environment metadata, contract reference, and correlation id. Because
 the format is versioned and schema-checked, tools downstream of your

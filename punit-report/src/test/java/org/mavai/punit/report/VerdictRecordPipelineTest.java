@@ -54,19 +54,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * verdict-1.10 records through the full production pipeline
+ * verdict-1.11 records through the full production pipeline
  * ({@code PUnit.testing(...)} → verdict adapter → XML sink), each
- * validated against the published verdict-1.10 schema and round-tripped
+ * validated against the published verdict-1.11 schema and round-tripped
  * through {@link VerdictXmlReader} and {@link VerdictXmlWriter}: a
  * typical single-criterion record, a two-criterion record, a record
  * whose latency constraint is saturated, and refused records. The
  * published worked examples are read and re-written the same way.
  */
-@DisplayName("verdict-1.10 records through the production pipeline")
+@DisplayName("verdict-1.11 records through the production pipeline")
 @TestMethodOrder(OrderAnnotation.class)
 class VerdictRecordPipelineTest {
 
-    private static final Path DIR = Path.of("build/verdict-1.10-records");
+    private static final Path DIR = Path.of("build/verdict-1.11-records");
 
     /** The XML sink is discovered once per JVM and keeps the report
      *  directory it first resolved, so every pipeline test in this module
@@ -169,6 +169,97 @@ class VerdictRecordPipelineTest {
                             Integer.parseInt(row.get("total")), alpha).getAsInt()));
             assertRequiredPassConsistent(row);
         }
+    }
+
+    /** A postcondition that fails on its {@code n}th evaluation only. */
+    private static Outcome<Boolean> failsOn(AtomicInteger seen, int n, Boolean out) {
+        return seen.incrementAndGet() == n ? Outcome.fail("record", "harmful") : Outcome.ok(out);
+    }
+
+    @Test
+    @Order(2)
+    @DisplayName("a zero-failures record states the criterion observational, with no threshold or statistics")
+    void zeroFailures() throws Exception {
+        AtomicInteger seen = new AtomicInteger();
+        Throwable thrown = catchThrowable(() -> PUnit.testing(sampling("record-zero-failures", 60,
+                        Criteria.meeting().<Boolean>zeroFailures().name("no-harm")
+                                .satisfies("no harmful advice", out -> failsOn(seen, 3, out)),
+                        null))
+                .assertPasses());
+        assertThat(thrown).isInstanceOf(AssertionError.class);
+
+        String xml = record("record-zero-failures");
+        assertValidRoundTrip(xml);
+        // A failure on the third sample does not stop the run: all 60 ran.
+        assertThat(xml).contains("samples-executed=\"60\"");
+        assertThat(criterionRow(xml, "no-harm"))
+                .containsEntry("mode", "observational")
+                .containsEntry("fail", "1")
+                .doesNotContainKeys("observed-rate", "threshold", "decision-rule",
+                        "decision-rule-version", "required-pass");
+        assertThat(xml)
+                .doesNotContain("<statistics")
+                .doesNotContain("threshold=")
+                .doesNotContain("sizing-approach")
+                .doesNotContain("sizing-declared-min-pass-rate")
+                .contains("key=\"sizing-declared-samples\" value=\"60\"");
+    }
+
+    @Test
+    @Order(2)
+    @DisplayName("a mixed record describes the inferential criterion only, and names no single rule")
+    void mixed() throws Exception {
+        AtomicInteger seen = new AtomicInteger();
+        Throwable thrown = catchThrowable(() -> PUnit.testing(sampling("record-mixed", 60,
+                        Criteria.of(
+                                Criteria.meeting().<Boolean>passRate(0.9).name("accuracy")
+                                        .satisfies("output is true", out -> Outcome.ok(out)),
+                                Criteria.meeting().<Boolean>zeroFailures().name("no-harm")
+                                        .satisfies("no harmful advice", out -> failsOn(seen, 3, out))),
+                        null))
+                .assertPasses());
+        assertThat(thrown).isInstanceOf(AssertionError.class);
+
+        String xml = record("record-mixed");
+        assertValidRoundTrip(xml);
+        Map<String, String> accuracy = criterionRow(xml, "accuracy");
+        assertThat(accuracy)
+                .doesNotContainKey("mode")
+                .containsEntry("threshold", "0.9")
+                .containsEntry("decision-rule", "compliance/exact-binomial");
+        assertThat(criterionRow(xml, "no-harm"))
+                .containsEntry("mode", "observational")
+                .doesNotContainKeys("threshold", "decision-rule", "required-pass");
+        assertThat(xml)
+                .contains("<statistics")
+                .containsPattern("<statistics [^>]*threshold=\"0\\.9000\"")
+                .contains("key=\"sizing-approach\" value=\"threshold-first\"")
+                .contains("key=\"sizing-declared-min-pass-rate\" value=\"0.9\"")
+                // One criterion was decided by observation: no one rule decided the test.
+                .doesNotContainPattern("<verdict [^>]*decision-rule=");
+    }
+
+    @ParameterizedTest(name = "verdict-1.11-{0}.xml")
+    @MethodSource("publishedZeroFailuresExamples")
+    @DisplayName("the published zero-failures worked examples read and re-write as valid verdict-1.11")
+    void publishedZeroFailuresExampleRoundTrips(String name) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(
+                "/published-interchange/verdict-1.11-" + name + ".xml")) {
+            assertThat(in).as("published example " + name).isNotNull();
+            String xml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            assertValidRoundTrip(xml);
+            ProbabilisticTestVerdict read = new VerdictXmlReader().read(
+                    new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            new VerdictXmlWriter().write(read, out);
+            String rewritten = out.toString(StandardCharsets.UTF_8);
+            assertThat(rewritten).contains("mode=\"observational\"");
+            assertThat(rewritten.contains("<statistics ")).isEqualTo(xml.contains("<statistics "));
+        }
+    }
+
+    static Stream<String> publishedZeroFailuresExamples() {
+        return Stream.of("zero-failures-pass", "zero-failures-fail", "mixed");
     }
 
     @Test
@@ -433,7 +524,7 @@ class VerdictRecordPipelineTest {
 
     @ParameterizedTest(name = "verdict-1.8-{0}.xml")
     @MethodSource("publishedExamples")
-    @DisplayName("the published 1.8 worked examples read and re-write as valid verdict-1.10")
+    @DisplayName("the published 1.8 worked examples read and re-write as valid verdict-1.11")
     void publishedExampleRoundTrips(String name) throws Exception {
         try (InputStream in = getClass().getResourceAsStream(
                 "/published-interchange/verdict-1.8-" + name + ".xml")) {
@@ -446,7 +537,7 @@ class VerdictRecordPipelineTest {
 
     @ParameterizedTest(name = "verdict-1.10-{0}.xml")
     @MethodSource("publishedSmokeExamples")
-    @DisplayName("the published SMOKE worked examples read and re-write as valid verdict-1.10")
+    @DisplayName("the published SMOKE worked examples read and re-write as valid verdict-1.11")
     void publishedSmokeExampleRoundTrips(String name) throws Exception {
         try (InputStream in = getClass().getResourceAsStream(
                 "/published-interchange/verdict-1.10-" + name + ".xml")) {
@@ -525,7 +616,7 @@ class VerdictRecordPipelineTest {
     private void validate(String xml) throws Exception {
         SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         try (InputStream xsd = getClass().getResourceAsStream(
-                "/org/mavai/punit/report/verdict-1.10.xsd")) {
+                "/org/mavai/punit/report/verdict-1.11.xsd")) {
             Schema schema = factory.newSchema(new StreamSource(xsd));
             schema.newValidator().validate(new StreamSource(
                     new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));

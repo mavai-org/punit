@@ -212,6 +212,34 @@ class DeclaredRunTest {
         }
 
         @Test
+        @DisplayName("the record states the criterion observational: no threshold, statistics or sizing approach")
+        void recordStatesTheCriterionObservational() {
+            ProbabilisticTestVerdict verdict = runCapturing(() ->
+                    PUnit.declared("greeting-never-dismisses").samples(10).assertPasses());
+
+            var row = verdict.perCriterion().orElseThrow().criteria().get(0);
+            assertThat(row.criterionId()).isEqualTo("never-dismisses");
+            assertThat(row.mode()).isEqualTo(org.mavai.punit.verdict.CriterionMode.OBSERVATIONAL);
+            assertThat(row.threshold()).isNaN();
+            assertThat(row.observedRate()).isNaN();
+            assertThat(row.pass()).isEqualTo(10);
+            // No inferential criterion: no test-level threshold (never 1.0,
+            // never 0.0), so the record carries no <statistics>.
+            assertThat(verdict.hasInferentialCriterion()).isFalse();
+            assertThat(verdict.execution().minPassRate()).isNaN();
+            assertThat(verdict.environmentMetadata())
+                    .containsEntry("sizing-declared-samples", "10")
+                    .doesNotContainKey("sizing-approach")
+                    .doesNotContainKey("sizing-declared-min-pass-rate");
+            // A POLICY origin with a contract reference is a compliance
+            // context, but a zero-failures criterion has no requirement a
+            // design could be too small to demonstrate.
+            assertThat(verdict.statistics().caveats()).isEmpty();
+            assertThat(verdict.decision().decisionRule()).isEmpty();
+            assertThat(verdict.verdictReason()).isEqualTo("no failure in 10 samples");
+        }
+
+        @Test
         @DisplayName("one failed trial: FAIL, with the failure counted and no rate claimed")
         void failsOnOneFailure() {
             ProbabilisticTestVerdict verdict = runCapturing(() ->

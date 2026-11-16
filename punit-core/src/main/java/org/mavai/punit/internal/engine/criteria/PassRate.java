@@ -78,6 +78,17 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
 
     private static final String NAME = "bernoulli-pass-rate";
 
+    /**
+     * The decision-artefact key naming a criterion's mode. Present, with
+     * the value {@link #OBSERVATIONAL}, on a zero-failures criterion only:
+     * an observational criterion estimates no rate and has no threshold
+     * (Statistical Companion §1.4.5); absent, the criterion is inferential.
+     */
+    public static final String CRITERION_MODE_KEY = "criterionMode";
+
+    /** The {@link #CRITERION_MODE_KEY} value of an observational criterion. */
+    public static final String OBSERVATIONAL = "observational";
+
     private enum Mode { CONTRACTUAL, EMPIRICAL_DEFAULT, EMPIRICAL_PINNED, ZERO_FAILURES }
 
     /** How one methodology criterion is decided. */
@@ -136,7 +147,9 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
      * criterion. Carries no statistical threshold; its
      * {@link #contractualTarget()} and {@link #earlyTerminationPassRate()}
      * return empty so the framework does not try to underwrite or
-     * short-circuit a non-statistical commitment.
+     * short-circuit a non-statistical commitment. It is observational
+     * (Statistical Companion §1.4.5): never an inferential criterion at a
+     * threshold of 1.
      */
     static <OT> PassRate<OT> forZeroFailures(ThresholdOrigin origin) {
         Objects.requireNonNull(origin, "origin");
@@ -144,7 +157,7 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             throw new IllegalArgumentException(
                     "forZeroFailures(EMPIRICAL) is contradictory — zero-failures is a binary commitment");
         }
-        return new PassRate<>(Mode.ZERO_FAILURES, 1.0, origin,
+        return new PassRate<>(Mode.ZERO_FAILURES, Double.NaN, origin,
                 StatisticalDefaults.DEFAULT_CONFIDENCE, false, null);
     }
 
@@ -458,7 +471,8 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
             Verdict v = total == 0 ? Verdict.INCONCLUSIVE
                     : counts.fail() == 0 ? Verdict.PASS : Verdict.FAIL;
             decision.put("origin", zfOrigin.name());
-            return Optional.of(new Judged(id, v, 1.0, decision, String.format(
+            decision.put(CRITERION_MODE_KEY, OBSERVATIONAL);
+            return Optional.of(new Judged(id, v, Double.NaN, decision, String.format(
                     "%s: zero-failures (origin=%s); failures=%d "
                             + "(of which transform/no-value=%d) over %d samples → %s",
                     id, zfOrigin, counts.fail(), counts.transformFail(), total, v)));
@@ -722,7 +736,9 @@ public final class PassRate<OT> implements Criterion<OT, PerCriterionPassRateSta
         }
         if (judged.size() == 1) {
             detail.putAll(judged.get(0).decision());
-            detail.put("threshold", judged.get(0).threshold());
+            if (!Double.isNaN(judged.get(0).threshold())) {
+                detail.put("threshold", judged.get(0).threshold());
+            }
             detail.put("failures", summary.failures());
         } else {
             detail.put("origin", (isEmpirical() ? ThresholdOrigin.EMPIRICAL : origin).name());

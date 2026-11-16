@@ -159,6 +159,40 @@ class ConsoleVerdictSinkTest {
                 .build();
     }
 
+    @Nested
+    @DisplayName("zero-failures verdict")
+    class ZeroFailuresVerdict {
+
+        @Test
+        @DisplayName("states the failure count, never a pass rate against a required one")
+        void statesTheFailureCount() {
+            String output = renderVerdict(zeroFailuresVerdict());
+
+            assertThat(output)
+                    .contains("Failures:")
+                    .contains("11 of 3000 samples (zero failures required)")
+                    .doesNotContain("required:")
+                    .doesNotContain("%")
+                    .doesNotContain("NaN");
+        }
+    }
+
+    /** A test whose one criterion is a zero-failures criterion: 11 of 3000 failed. */
+    private static ProbabilisticTestVerdict zeroFailuresVerdict() {
+        return new org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder()
+                .identity("HarmfulAdviceTest", "harmfulAdviceIsRejected", null)
+                .execution(3000, 3000, 2989, 11, Double.NaN, 2989.0 / 3000, 200)
+                .provenance(org.mavai.punit.api.ThresholdOrigin.POLICY, "harmful-advice", null)
+                .perCriterion(new org.mavai.punit.verdict.PerCriterionStructure(
+                        List.of(org.mavai.punit.verdict.CriterionRow.observational(
+                                "harmful-advice-is-rejected",
+                                org.mavai.punit.api.spec.Verdict.FAIL, 2989, 11, 0)),
+                        org.mavai.punit.api.spec.Verdict.FAIL))
+                .junitPassed(false)
+                .criterionVerdict(org.mavai.punit.api.spec.Verdict.FAIL)
+                .build();
+    }
+
     private String renderVerdict(ProbabilisticTestVerdict verdict) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         PrintStream ps = new PrintStream(baos, true, StandardCharsets.UTF_8);

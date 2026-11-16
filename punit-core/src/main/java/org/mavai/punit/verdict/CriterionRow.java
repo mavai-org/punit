@@ -5,8 +5,14 @@ import java.util.Objects;
 /**
  * One per-criterion row inside a {@link PerCriterionStructure}:
  * the criterion's identifier, its three-valued aggregate verdict,
- * the per-outcome sample counts, the observed pass-rate, and the
- * threshold the verdict was judged against.
+ * the per-outcome sample counts, the observed pass-rate, the
+ * threshold the verdict was judged against, and the criterion's mode.
+ *
+ * <p>An observational row ({@link #observational}) states its counts
+ * alone: it estimates no rate and carries no threshold, rule or required
+ * count (Statistical Companion §1.4.5, §10.2), so a zero-failures
+ * criterion cannot be represented as an inferential row at a threshold
+ * of 1.
  *
  * <p>Persistence-layer cousin of
  * {@code org.mavai.punit.api.spec.PerCriterionVerdict}; the two
@@ -41,6 +47,8 @@ import java.util.Objects;
  *                      decided with, never derived from {@code threshold}.
  *                      Empty when no rule decided the criterion or when no
  *                      count can pass (a compliance design too small)
+ * @param mode          inferential, or observational for a zero-failures
+ *                      criterion
  */
 // mavai-ref: JVI-8E4WNW5 — do not remove (resolves in mavai-orchestrator)
 public record CriterionRow(
@@ -52,7 +60,23 @@ public record CriterionRow(
         double observedRate,
         double threshold,
         java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule,
-        java.util.OptionalInt requiredPass) {
+        java.util.OptionalInt requiredPass,
+        CriterionMode mode) {
+
+    /** An inferential row. */
+    public CriterionRow(
+            String criterionId,
+            org.mavai.punit.api.spec.Verdict verdict,
+            int pass,
+            int fail,
+            int inconclusive,
+            double observedRate,
+            double threshold,
+            java.util.Optional<org.mavai.punit.statistics.DecisionRule> decisionRule,
+            java.util.OptionalInt requiredPass) {
+        this(criterionId, verdict, pass, fail, inconclusive, observedRate, threshold,
+                decisionRule, requiredPass, CriterionMode.INFERENTIAL);
+    }
 
     /** A row with its deciding rule but no stated passing count. */
     public CriterionRow(
@@ -68,7 +92,7 @@ public record CriterionRow(
                 decisionRule, java.util.OptionalInt.empty());
     }
 
-    /** A row no rule decided (zero-failures, or a gate that fired first). */
+    /** An inferential row no rule decided (a gate that fired first). */
     public CriterionRow(
             String criterionId,
             org.mavai.punit.api.spec.Verdict verdict,
@@ -90,12 +114,40 @@ public record CriterionRow(
             throw new IllegalArgumentException(
                     "requiredPass must be non-negative; got " + requiredPass.getAsInt());
         }
+        Objects.requireNonNull(mode, "mode");
+        if (mode == CriterionMode.OBSERVATIONAL
+                && (!Double.isNaN(observedRate) || !Double.isNaN(threshold)
+                        || decisionRule.isPresent() || requiredPass.isPresent())) {
+            throw new IllegalArgumentException(
+                    "an observational row states its counts alone: no observed rate, "
+                            + "threshold, decision rule or required count");
+        }
         if (pass < 0 || fail < 0 || inconclusive < 0) {
             throw new IllegalArgumentException(
                     "counts must be non-negative; got pass=" + pass
                             + ", fail=" + fail
                             + ", inconclusive=" + inconclusive);
         }
+    }
+
+    /**
+     * An observational (zero-failures) row: its verdict and counts, and
+     * nothing a rate would carry.
+     */
+    public static CriterionRow observational(
+            String criterionId,
+            org.mavai.punit.api.spec.Verdict verdict,
+            int pass,
+            int fail,
+            int inconclusive) {
+        return new CriterionRow(criterionId, verdict, pass, fail, inconclusive,
+                Double.NaN, Double.NaN, java.util.Optional.empty(),
+                java.util.OptionalInt.empty(), CriterionMode.OBSERVATIONAL);
+    }
+
+    /** Whether the criterion estimates its rate and was decided by a rule. */
+    public boolean inferential() {
+        return mode == CriterionMode.INFERENTIAL;
     }
 
     /** Sum of all per-criterion sample outcomes — the marginal denominator. */
