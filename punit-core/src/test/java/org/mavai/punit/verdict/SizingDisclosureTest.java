@@ -23,7 +23,7 @@ class SizingDisclosureTest {
     private Map<String, String> declaredEntries(
             ThresholdOrigin origin, Double tolerated, Double mde, Double power,
             int planned, Integer baselineSamples, Double baselineRate, long tokens) {
-        return SizingDisclosure.entries(
+        return SizingDisclosure.entries(true,
                 origin, tolerated, mde, power, planned, planned, 0.90, 0.95,
                 baselineSamples, baselineRate, 5000, tokens);
     }
@@ -95,6 +95,42 @@ class SizingDisclosureTest {
                     ThresholdOrigin.EMPIRICAL, 0.93, null, null, 405, 1000, 0.96, 0);
 
             assertThat(entries).containsEntry("sizing-declared-power", "0.8");
+        }
+    }
+
+    @Nested
+    @DisplayName("A test whose criteria are all zero-failures criteria")
+    class ObservationalDisclosure {
+
+        private Map<String, String> observational(ThresholdOrigin origin, Double tolerated) {
+            return SizingDisclosure.entries(false,
+                    origin, tolerated, null, null, 300, 300, Double.NaN, 0.95,
+                    null, null, 5000, 0);
+        }
+
+        @Test
+        @DisplayName("states its declared sample count only: no approach, no minimum pass rate")
+        void statesTheDeclaredSamplesOnly() {
+            assertThat(observational(ThresholdOrigin.POLICY, null))
+                    .containsExactly(Map.entry("sizing-declared-samples", "300"));
+        }
+
+        @Test
+        @DisplayName("names no approach whatever the origin or sizing declarations say")
+        void namesNoApproachWhateverIsDeclared() {
+            assertThat(observational(ThresholdOrigin.EMPIRICAL, 0.93))
+                    .containsOnlyKeys("sizing-declared-samples");
+            assertThat(observational(null, null))
+                    .containsOnlyKeys("sizing-declared-samples");
+        }
+
+        @Test
+        @DisplayName("discloses no downsizing trade, even against a larger baseline")
+        void disclosesNoDownsizing() {
+            Map<String, String> entries = SizingDisclosure.entries(false,
+                    ThresholdOrigin.POLICY, null, null, null, 100, 100, Double.NaN, 0.95,
+                    1000, 0.96, 5000, 120_000);
+            assertThat(entries).containsOnlyKeys("sizing-declared-samples");
         }
     }
 

@@ -457,11 +457,21 @@ public class ProbabilisticTestVerdictBuilder {
         Map<String, String> environment =
                 new java.util.LinkedHashMap<>(environmentMetadata);
         environment.putAll(SizingDisclosure.entries(
+                hasInferentialCriterion(),
                 thresholdOrigin, declaredToleratedRate, declaredMde, declaredPower,
                 plannedSamples, samplesExecuted, minPassRate,
                 resolvedConfidence, baselineSamples, baselineRate,
                 elapsedMs, methodTokensConsumed));
         return java.util.Collections.unmodifiableMap(environment);
+    }
+
+    /**
+     * Whether the test makes a rate claim: true unless every criterion is
+     * observational. A run without the per-criterion decomposition is
+     * inferential.
+     */
+    private boolean hasInferentialCriterion() {
+        return perCriterion.map(PerCriterionStructure::hasInferentialCriterion).orElse(true);
     }
 
     private static String newCorrelationId() {
@@ -530,12 +540,25 @@ public class ProbabilisticTestVerdictBuilder {
     private StatisticalAnalysis buildStatisticalAnalysis(CovariateStatus covariates) {
         double confidenceLevel = resolvedConfidence;
 
-        double standardError = samplesExecuted > 0
-                ? estimator.standardError(successes, samplesExecuted)
+        // Beside an observational criterion the summary describes the first
+        // inferential criterion's own counts, never a tally an observational
+        // criterion's failures entered (Statistical Companion §1.4.5).
+        int describedSuccesses = successes;
+        int describedTrials = samplesExecuted;
+        Optional<CriterionRow> described = perCriterion
+                .filter(PerCriterionStructure::hasObservationalCriterion)
+                .flatMap(PerCriterionStructure::firstInferential);
+        if (described.isPresent()) {
+            describedSuccesses = described.get().pass();
+            describedTrials = described.get().total();
+        }
+
+        double standardError = describedTrials > 0
+                ? estimator.standardError(describedSuccesses, describedTrials)
                 : 0.0;
 
-        double wilsonLower = samplesExecuted > 0
-                ? estimator.lowerBound(successes, samplesExecuted, confidenceLevel)
+        double wilsonLower = describedTrials > 0
+                ? estimator.lowerBound(describedSuccesses, describedTrials, confidenceLevel)
                 : 0.0;
 
         Optional<String> thresholdDerivation = Optional.empty();
@@ -573,6 +596,12 @@ public class ProbabilisticTestVerdictBuilder {
         if (!covariates.aligned()) {
             caveats.add("Covariate mismatch: test conditions do not match baseline conditions. "
                     + "Results may not be comparable.");
+        }
+
+        if (!hasInferentialCriterion()) {
+            // An observational criterion claims no rate: there is no
+            // requirement for a design to be too small to demonstrate.
+            return List.copyOf(caveats);
         }
 
         String originName = thresholdOrigin != null ? thresholdOrigin.name() : null;
@@ -738,6 +767,11 @@ public class ProbabilisticTestVerdictBuilder {
             if (triggered.isPresent()) {
                 return triggered.get();
             }
+        }
+        if (!hasInferentialCriterion()) {
+            return failures == 0
+                    ? String.format("no failure in %d samples", samplesExecuted)
+                    : String.format("%d of %d samples failed", failures, samplesExecuted);
         }
         String comparator = observedPassRate >= minPassRate ? ">=" : "<";
         return String.format("%s %s %s",

@@ -44,6 +44,29 @@ public record PerCriterionStructure(
         criteria = List.copyOf(criteria);
     }
 
+    /**
+     * Whether any criterion is inferential. A test whose criteria are all
+     * observational makes no rate claim: it has no threshold, no
+     * statistics and no sizing approach (Statistical Companion §1.4.5).
+     */
+    public boolean hasInferentialCriterion() {
+        return criteria.stream().anyMatch(CriterionRow::inferential);
+    }
+
+    /** Whether any criterion is observational (zero-failures). */
+    public boolean hasObservationalCriterion() {
+        return criteria.stream().anyMatch(r -> !r.inferential());
+    }
+
+    /**
+     * The first inferential criterion's row — the one a test-level
+     * statistics summary describes; empty when every criterion is
+     * observational.
+     */
+    public java.util.Optional<CriterionRow> firstInferential() {
+        return criteria.stream().filter(CriterionRow::inferential).findFirst();
+    }
+
     /** An enforced functional dimension: the default. */
     public PerCriterionStructure(List<CriterionRow> criteria, Verdict composite) {
         this(criteria, composite, EnforcementMode.ENFORCED);

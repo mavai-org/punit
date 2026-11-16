@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Verdict records are verdict-1.11**, additive over 1.10: a criterion
+  row states its mode. `verdict-1.11.xsd` (mavai-R v0.16.3) is bundled in
+  `punit-report`, and the reader reads the mode back.
+- The interchange schemas and conformance cases are fetched at mavai-R
+  v0.16.3 (`mavaiRTag`), which carries the 1.11 schema and its
+  zero-failures worked examples; punit-report reads and re-writes them.
+
+### Fixed
+
+- **A zero-failures criterion was recorded as a threshold of 1.** Its
+  verdict record wrote `threshold="1"` on the criterion row, a
+  `<statistics>` threshold of 1.0, `sizing-approach=threshold-first`
+  and `sizing-declared-min-pass-rate=1.0`, so the report page read
+  "Threshold 1" and "Minimum pass rate 100%". A zero-failures criterion
+  is observational (Statistical Companion §1.4.5): it estimates no rate
+  and has no threshold. The verdict was always judged correctly; only
+  the record misstated it. Now:
+  - the row states `mode="observational"` and its counts alone, with
+    no `observed-rate`, `threshold`, `decision-rule` or `required-pass`;
+  - a test whose criteria are all zero-failures criteria has no
+    test-level threshold (not 0 either), no `<statistics>`, and states
+    `sizing-declared-samples` only, with no sizing approach and no
+    minimum pass rate; its verdict reason reads "no failure in N
+    samples" or "F of N samples failed";
+  - beside an inferential criterion, `<statistics>` describes the first
+    inferential criterion, from its own counts and threshold, and
+    `<verdict>` names no single decision rule, since one criterion was
+    decided by observation;
+  - the undersized-compliance caveat and the SMOKE requirement caveats
+    are not applied to a test with no inferential criterion;
+  - the sentinel console and the verdict text renderer state the
+    failure count ("11 of 3000 samples (zero failures required)") in
+    place of a pass rate against a required one, and the verbose
+    explanation frames no hypothesis and shows no observed rate.
+
+  Early termination is unchanged: a zero-failures criterion never
+  stopped a run early, and a failure still does not.
+
 ## [0.16.1] - 2026-11-05
 
 ### Added

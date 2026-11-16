@@ -115,6 +115,22 @@ class EarlyTerminationIntegrationTest {
         }
     }
 
+    /**
+     * A zero-failures commitment whose service fails its second
+     * invocation only.
+     */
+    private static class ZeroFailuresFailsEarly implements ServiceContract<Factors, Integer, Boolean> {
+        private int seen = 0;
+        @Override public Criteria<Boolean> criteria() {
+            return meeting().zeroFailures();
+        }
+        @Override public Outcome<Boolean> invoke(Integer input, TokenTracker tracker) {
+            return ++seen == 2
+                    ? Outcome.fail("contract_violation", "scripted failure")
+                    : Outcome.ok(Boolean.TRUE);
+        }
+    }
+
     private static Sampling<Factors, Integer, Boolean> sampling(
             java.util.function.Function<Factors, ServiceContract<Factors, Integer, Boolean>> factory,
             int samples) {
@@ -311,5 +327,25 @@ class EarlyTerminationIntegrationTest {
         assertThat(result.engineSummary().terminationReason())
                 .isEqualTo(TerminationReason.COMPLETED);
         assertThat(result.verdict()).isEqualTo(Verdict.PASS);
+    }
+
+    // ── Zero-failures criteria ───────────────────────────────────────
+
+    @Test
+    @DisplayName("zero-failures: an early failure does not stop the run, which reaches its planned size")
+    void zeroFailuresRunsEveryPlannedSample() {
+        ProbabilisticTest spec = ProbabilisticTest
+                .testing(sampling(f -> new ZeroFailuresFailsEarly(), 100), new Factors())
+                .build();
+
+        // An observational criterion offers no pass rate to stop on, so the
+        // failure on the second sample does not end the run.
+        var result = (ProbabilisticTestResult) new Engine().run(spec);
+
+        assertThat(result.engineSummary().samplesExecuted()).isEqualTo(100);
+        assertThat(result.engineSummary().failures()).isEqualTo(1);
+        assertThat(result.engineSummary().terminationReason())
+                .isEqualTo(TerminationReason.COMPLETED);
+        assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
     }
 }

@@ -91,6 +91,39 @@ class PassRateTest {
         };
     }
 
+    // ── zero-failures — observational ──────────────────────────────
+
+    @Test
+    @DisplayName("zero-failures states no threshold and names itself observational")
+    void zeroFailuresStatesNoThreshold() {
+        PassRate<String> criterion = PassRate.forZeroFailures(ThresholdOrigin.POLICY);
+
+        CriterionResult result = criterion.evaluate(ctx(summary(99, 1), Optional.empty()));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(result.detail())
+                .doesNotContainKey("threshold")
+                .containsEntry(PassRate.CRITERION_MODE_KEY, PassRate.OBSERVATIONAL)
+                .containsEntry("origin", "POLICY");
+        @SuppressWarnings("unchecked")
+        var decisions = (java.util.Map<String, java.util.Map<String, Object>>)
+                result.detail().get("decisionsByCriterion");
+        assertThat(decisions.values()).singleElement().satisfies(d -> assertThat(d)
+                .doesNotContainKey("threshold")
+                .doesNotContainKey("decisionRule")
+                .containsEntry(PassRate.CRITERION_MODE_KEY, PassRate.OBSERVATIONAL));
+    }
+
+    @Test
+    @DisplayName("zero-failures offers early termination no pass rate to stop on")
+    void zeroFailuresOffersNoEarlyTerminationRate() {
+        PassRate<String> criterion = PassRate.forZeroFailures(ThresholdOrigin.POLICY);
+
+        assertThat(criterion.contractualTarget()).isEmpty();
+        assertThat(criterion.earlyTerminationPassRate()).isEmpty();
+        assertThat(criterion.earlyTerminationConfidence()).isEmpty();
+    }
+
     // ── meeting() — contractual ────────────────────────────────────
 
     @Test

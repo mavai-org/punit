@@ -44,6 +44,11 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.Termination;
 public final class VerdictTextRenderer {
 
     private static final int LINE_WIDTH = 78;
+
+    /** How a test whose criteria are all zero-failures criteria is decided. */
+    private static final String ZERO_FAILURES_DECISION =
+            "observation: any failed sample fails the test; no rate is estimated";
+
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
 
@@ -88,7 +93,14 @@ public final class VerdictTextRenderer {
                             serviceContractLabel.isEmpty() ? "" : " (" + serviceContractLabel + ")")));
         }
 
-        if (term.reason().isBudgetExhaustion()) {
+        if (!verdict.hasInferentialCriterion()) {
+            if (term.reason().isBudgetExhaustion()) {
+                sb.append(PUnitReporter.labelValueLn("Samples executed:",
+                        String.format("%d of %d (budget exhausted)",
+                                exec.samplesExecuted(), exec.plannedSamples())));
+            }
+            sb.append(PUnitReporter.labelValueLn("Failures:", zeroFailuresOutcome(exec)));
+        } else if (term.reason().isBudgetExhaustion()) {
             sb.append(PUnitReporter.labelValueLn("Samples executed:",
                     String.format("%d of %d (budget exhausted)",
                             exec.samplesExecuted(), exec.plannedSamples())));
@@ -151,12 +163,16 @@ public final class VerdictTextRenderer {
             sb.append("\n");
         });
 
-        sb.append(PUnitReporter.labelValueLn("Confidence level:",
-                String.format("%.1f%%", stats.confidenceLevel() * 100)));
-        sb.append(PUnitReporter.labelValueLn("SE(p\u0302):",
-                String.format("%.4f", stats.standardError())));
-        sb.append(PUnitReporter.labelValueLn("Wilson lower bound:",
-                String.format("%.4f", stats.wilsonLower())));
+        if (verdict.hasInferentialCriterion()) {
+            sb.append(PUnitReporter.labelValueLn("Confidence level:",
+                    String.format("%.1f%%", stats.confidenceLevel() * 100)));
+            sb.append(PUnitReporter.labelValueLn("SE(p\u0302):",
+                    String.format("%.4f", stats.standardError())));
+            sb.append(PUnitReporter.labelValueLn("Wilson lower bound:",
+                    String.format("%.4f", stats.wilsonLower())));
+        } else {
+            sb.append(PUnitReporter.labelValueLn("Decided by:", ZERO_FAILURES_DECISION));
+        }
 
         verdict.decision().decisionRule().ifPresent(rule ->
                 sb.append(PUnitReporter.labelValueLn("Decision rule:",
@@ -221,12 +237,17 @@ public final class VerdictTextRenderer {
         String title = "STATISTICAL ANALYSIS FOR: " + testName;
         StringBuilder sb = new StringBuilder();
 
-        if (detailLevel == TransparentStatsConfig.DetailLevel.VERBOSE) {
+        boolean inferential = verdict.hasInferentialCriterion();
+        if (inferential && detailLevel == TransparentStatsConfig.DetailLevel.VERBOSE) {
             renderHypothesisSection(sb, verdict);
         }
         renderObservedDataSection(sb, verdict);
-        renderBaselineReferenceSection(sb, verdict);
-        if (detailLevel == TransparentStatsConfig.DetailLevel.VERBOSE) {
+        if (inferential) {
+            renderBaselineReferenceSection(sb, verdict);
+        } else {
+            renderObservationalCriterionSection(sb);
+        }
+        if (inferential && detailLevel == TransparentStatsConfig.DetailLevel.VERBOSE) {
             renderInferenceSection(sb, verdict);
         }
         renderLatencyAnalysisSection(sb, verdict);
@@ -288,8 +309,13 @@ public final class VerdictTextRenderer {
         sb.append("OBSERVED DATA\n");
         sb.append(statLabel("Sample size (n):", String.valueOf(exec.samplesExecuted())));
         sb.append(statLabel("Successes (k):", String.valueOf(exec.successes())));
-        sb.append(statLabel("Observed rate (" + symbols.pHat() + "):",
-                RateFormat.format(exec.observedPassRate())));
+        if (verdict.hasInferentialCriterion()) {
+            sb.append(statLabel("Observed rate (" + symbols.pHat() + "):",
+                    RateFormat.format(exec.observedPassRate())));
+        } else {
+            // A zero-failures test estimates no rate: it observes failures.
+            sb.append(statLabel("Failures observed:", String.valueOf(exec.failures())));
+        }
         if (exec.warmup() > 0) {
             String serviceContractLabel = verdict.identity().serviceContractId().orElse("");
             sb.append(statLabel("Warmup:",
@@ -325,6 +351,17 @@ public final class VerdictTextRenderer {
                     String.format("%s (%s)", RateFormat.format(exec.minPassRate()),
                             "explicit minPassRate")));
         }
+        sb.append("\n");
+    }
+
+    /**
+     * Zero-failures criteria in place of the baseline reference: there is
+     * no threshold to reference, and no inference to show.
+     */
+    private void renderObservationalCriterionSection(StringBuilder sb) {
+        sb.append("CRITERION\n");
+        sb.append(statLabel("Mode:", "observational (zero failures)"));
+        sb.append(statLabel("Decided by:", ZERO_FAILURES_DECISION));
         sb.append("\n");
     }
 
@@ -461,9 +498,11 @@ public final class VerdictTextRenderer {
             return;
         }
 
-        sb.append("THRESHOLD PROVENANCE\n");
+        // A zero-failures criterion has an origin but no threshold.
+        boolean inferential = verdict.hasInferentialCriterion();
+        sb.append(inferential ? "THRESHOLD PROVENANCE\n" : "PROVENANCE\n");
         if (hasOrigin) {
-            sb.append(statLabel("Threshold origin:", originName));
+            sb.append(statLabel(inferential ? "Threshold origin:" : "Origin:", originName));
         }
         if (hasContract) {
             sb.append(statLabel("Contract:", prov.contractRef()));
@@ -483,6 +522,14 @@ public final class VerdictTextRenderer {
                 .map(SpecProvenance::thresholdOriginName).orElse("UNSPECIFIED");
 
         VerdictFraming framing = getVerdictFraming(originName, isSmoke);
+
+        if (!verdict.hasInferentialCriterion()) {
+            return exec.failures() == 0
+                    ? String.format("No failure was observed in %d samples. This is an "
+                            + "observation, not evidence of a pass rate.", exec.samplesExecuted())
+                    : String.format("%d of %d samples failed; a zero-failures criterion allows "
+                            + "none.", exec.failures(), exec.samplesExecuted());
+        }
 
         if (isSmoke && isNormative(originName) && verdict.statistics().baseline().isEmpty()) {
             return passed
@@ -554,6 +601,12 @@ public final class VerdictTextRenderer {
             caveats.add(msb.toString());
         }
 
+        if (!verdict.hasInferentialCriterion()) {
+            // A zero-failures test claims no rate: no caveat about a rate,
+            // a threshold or a design too small to demonstrate one applies.
+            return caveats;
+        }
+
         // Sample size caveats
         if (samples < 30) {
             caveats.add(String.format(
@@ -613,6 +666,15 @@ public final class VerdictTextRenderer {
         }
 
         return caveats;
+    }
+
+    /**
+     * The outcome of a test whose criteria are all zero-failures criteria:
+     * its failure count, never a pass rate against a required one.
+     */
+    static String zeroFailuresOutcome(ExecutionSummary exec) {
+        return String.format("%d of %d samples (zero failures required)",
+                exec.failures(), exec.samplesExecuted());
     }
 
     private static boolean isNormative(String originName) {

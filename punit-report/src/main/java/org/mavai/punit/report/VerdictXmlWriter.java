@@ -20,7 +20,7 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * interchange format.
  *
  * <p>The output conforms to the {@code http://mavai.org/verdict/1.0}
- * namespace and the {@code verdict-1.10.xsd} schema bundled with this
+ * namespace and the {@code verdict-1.11.xsd} schema bundled with this
  * module: every record states the methodology whose decision rules
  * produced it, the versioned rule on every criterion row and latency
  * evaluation, each dimension's verdict and whether it was enforced or
@@ -30,7 +30,12 @@ import org.mavai.punit.verdict.ProbabilisticTestVerdict.*;
  * normative criterion decided under SMOKE intent names
  * {@code compliance/smoke-exact-binomial} (or, for an explicit latency
  * requirement, {@code latency/smoke-compliance-exact-binomial}), whose
- * {@code required-pass} is the largest failing count plus one.
+ * {@code required-pass} is the largest failing count plus one. A
+ * zero-failures criterion is observational (§1.4.5): its row states
+ * {@code mode="observational"} and its counts alone, and a test whose
+ * criteria are all observational has no {@code <statistics>}; beside an
+ * inferential criterion, {@code <statistics>} describes the first
+ * inferential one.
  *
  * <p>PUnit-specific extensions not in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID, JUnit pass
@@ -46,7 +51,7 @@ public final class VerdictXmlWriter {
      * standard namespace.
      */
     static final String NAMESPACE = "http://mavai.org/verdict/1.0";
-    static final String VERSION = "1.10";
+    static final String VERSION = "1.11";
 
     private static final XMLOutputFactory OUTPUT_FACTORY = XMLOutputFactory.newFactory();
 
@@ -193,6 +198,11 @@ public final class VerdictXmlWriter {
             w.writeStartElement("criterion");
             w.writeAttribute("id", row.criterionId());
             w.writeAttribute("verdict", row.verdict().name());
+            if (!row.inferential()) {
+                // Inferential is the default when absent. An observational
+                // row carries no rate, threshold, rule or required count.
+                w.writeAttribute("mode", row.mode().label());
+            }
             w.writeAttribute("pass", Integer.toString(row.pass()));
             w.writeAttribute("fail", Integer.toString(row.fail()));
             w.writeAttribute("inconclusive", Integer.toString(row.inconclusive()));
@@ -328,6 +338,10 @@ public final class VerdictXmlWriter {
     }
 
     private void writeStatistics(XMLStreamWriter w, ProbabilisticTestVerdict v) throws XMLStreamException {
+        if (!v.hasInferentialCriterion()) {
+            // <statistics> describes inferential criteria only.
+            return;
+        }
         StatisticalAnalysis stats = v.statistics();
         w.writeStartElement("statistics");
         w.writeAttribute("confidence-level", formatDouble(stats.confidenceLevel()));

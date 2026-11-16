@@ -507,4 +507,66 @@ class VerdictTextRendererTest {
                 base.verdictReason()
         );
     }
+
+    @Nested
+    @DisplayName("zero-failures verdict")
+    class ZeroFailures {
+
+        @Test
+        @DisplayName("the summary states the failure count, with no required rate")
+        void summaryStatesTheFailureCount() {
+            String summary = VerdictTextRenderer.renderSummary(zeroFailuresVerdict());
+
+            assertThat(summary)
+                    .contains("11 of 3000 samples (zero failures required)")
+                    .doesNotContain("required:")
+                    .doesNotContain("NaN");
+        }
+
+        @Test
+        @DisplayName("the statistical analysis shows no standard error or Wilson bound")
+        void analysisShowsNoInference() {
+            String analysis = VerdictTextRenderer.renderStatisticalAnalysis(zeroFailuresVerdict());
+
+            assertThat(analysis)
+                    .doesNotContain("Wilson")
+                    .doesNotContain("SE(")
+                    .contains("any failed sample fails the test");
+        }
+
+        @Test
+        @DisplayName("the verbose explanation frames no hypothesis and claims no requirement")
+        void verboseFramesNoHypothesis() {
+            String body = renderer.renderForReporter(zeroFailuresVerdict()).body();
+
+            assertThat(body)
+                    .doesNotContain("HYPOTHESIS TEST")
+                    .doesNotContain("STATISTICAL INFERENCE")
+                    .doesNotContain("requirement of")
+                    .doesNotContain("min pass rate")
+                    .doesNotContain("explicit minPassRate")
+                    .doesNotContain("NaN")
+                    .doesNotContain("Observed rate")
+                    .doesNotContain("Threshold origin")
+                    .contains("Failures observed:")
+                    .contains("observational (zero failures)")
+                    .contains("11 of 3000 samples failed; a zero-failures criterion");
+        }
+    }
+
+    /** A test whose one criterion is a zero-failures criterion: 11 of 3000 failed. */
+    private static ProbabilisticTestVerdict zeroFailuresVerdict() {
+        return new org.mavai.punit.verdict.ProbabilisticTestVerdictBuilder()
+                .identity("HarmfulAdviceTest", "harmfulAdviceIsRejected", null)
+                .execution(3000, 3000, 2989, 11, Double.NaN, 2989.0 / 3000, 200)
+                .provenance(org.mavai.punit.api.ThresholdOrigin.POLICY, "harmful-advice", null)
+                .perCriterion(new org.mavai.punit.verdict.PerCriterionStructure(
+                        List.of(org.mavai.punit.verdict.CriterionRow.observational(
+                                "harmful-advice-is-rejected",
+                                org.mavai.punit.api.spec.Verdict.FAIL, 2989, 11, 0)),
+                        org.mavai.punit.api.spec.Verdict.FAIL))
+                .junitPassed(false)
+                .criterionVerdict(org.mavai.punit.api.spec.Verdict.FAIL)
+                .build();
+    }
 }

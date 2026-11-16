@@ -35,9 +35,10 @@ import org.w3c.dom.NodeList;
  * to the punit verdict model. PUnit-specific fields not present in the verdict-XML standard
  * (pacing, environment, expiration, correlation ID) receive default values.
  *
- * <p>Records punit writes are verdict-1.10; a 1.8 record reads unchanged,
- * 1.10 being additive over it (it names the two SMOKE decision rules). A
- * 1.7 record still reads: it
+ * <p>Records punit writes are verdict-1.11; 1.10 and 1.8 records read
+ * unchanged, each revision being additive over the one before (1.10 names
+ * the two SMOKE decision rules; 1.11 states a criterion's mode, a row
+ * without one being inferential). A 1.7 record still reads: it
  * states no dimension mode, so both dimensions read as enforced, which
  * is what every 1.7 punit record was; its {@code STRICT_FAIL} reads as
  * {@code FAIL}.
@@ -191,6 +192,12 @@ public final class VerdictXmlReader {
             int pass = Integer.parseInt(r.getAttribute("pass"));
             int fail = Integer.parseInt(r.getAttribute("fail"));
             int inc = Integer.parseInt(r.getAttribute("inconclusive"));
+            if (org.mavai.punit.verdict.CriterionMode.OBSERVATIONAL.label()
+                    .equals(r.getAttribute("mode"))) {
+                criteria.add(org.mavai.punit.verdict.CriterionRow.observational(
+                        r.getAttribute("id"), v, pass, fail, inc));
+                continue;
+            }
             double observed = optionalAttribute(r, "observed-rate")
                     .map(Double::parseDouble).orElse(Double.NaN);
             double threshold = optionalAttribute(r, "threshold")
